@@ -1,0 +1,31 @@
+/* ==========================================================================
+   FR-Editor — استایل ویرایشگر WYSIWYG اختصاصی (نسخهٔ ۱٫۴)
+   ========================================================================== */
+.fre-bar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;
+  border:1.5px solid #e2e9f5;border-bottom:none;border-radius:14px 14px 0 0;
+  background:linear-gradient(180deg,#f8fafd,#f4f1ff);padding:7px 8px}
+.fre-btn{min-width:34px;height:34px;border:none;border-radius:9px;background:#fff;color:#2c3a5c;
+  font-size:13.5px;font-family:inherit;cursor:pointer;transition:.15s;padding:0 8px;
+  box-shadow:0 1px 2px rgba(64,47,160,.08)}
+.fre-btn:hover{background:var(--c-primary,#1e3a6e);color:#fff}
+.fre-sep{width:1px;height:22px;background:#ddd6f5;margin:0 3px}
+.fre-pal{display:inline-flex;gap:4px;align-items:center;margin-right:4px;padding-right:8px;border-right:1px solid #ddd6f5}
+.fre-color{width:20px;height:20px;border-radius:7px;border:2px solid #fff;cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.fre-color:hover{-webkit-transform:scale(1.15);transform:scale(1.15)}
+.fre-area{min-height:220px;max-height:480px;overflow-y:auto;border:1.5px solid #e2e9f5;
+  border-radius:0 0 14px 14px;background:#fff;padding:14px 16px;font-size:14px;line-height:2.1;
+  color:var(--ink,#1c2740);outline:none;transition:border-color .15s}
+.fre-area:focus{border-color:var(--c-primary,#1e3a6e);box-shadow:0 0 0 4px rgba(30,58,110,.08)}
+.fre-area:empty::before{content:attr(data-ph);color:#b3add4}
+.fre-area h2{font-size:17.5px;margin:14px 0 8px;color:#1b3568}
+.fre-area h3{font-size:15.5px;margin:12px 0 6px;color:#1b3568}
+.fre-area p{margin:0 0 10px}
+.fre-area blockquote{margin:10px 0;padding:10px 14px;background:#eaf0f8;border-right:4px solid #1e3a6e;border-radius:10px}
+.fre-area ul,.fre-area ol{margin:0 20px 10px 0}
+.fre-area li{margin-bottom:5px}
+.fre-area a{color:#1e3a6e;text-decoration:underline}
+@media (max-width:640px){
+  .fre-area{min-height:170px;font-size:16px} /* iOS: جلوگیری از بزرگ‌نمایی خودکار هنگام تایپ */
+  .fre-btn{min-width:38px;height:38px}       /* هدف لمسی بزرگ‌تر */
+}

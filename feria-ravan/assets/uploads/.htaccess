@@ -1,0 +1,6 @@
+# پوشهٔ آپلود — بدون اجرای اسکریپت
+Options -Indexes
+<FilesMatch "\.(php|phtml|phar|cgi|pl|py|asp|aspx|sh)$">
+  Require all denied
+  Deny from all
+</FilesMatch>

@@ -1,0 +1,24 @@
+# ── Runtime / محیط اجرا ──
+feria-ravan/storage/logs/*
+feria-ravan/storage/cache/*
+feria-ravan/storage/sessions/*
+!feria-ravan/storage/logs/.gitkeep
+!feria-ravan/storage/cache/.gitkeep
+!feria-ravan/storage/sessions/.gitkeep
+
+# config.php قالب خام نصب‌کننده (با جای‌نگهدار {{...}}) عمداً نگهداشته می‌شود؛
+# ولی هر config واقعیِ تولیدشده با رمز حقیقی نباید کامیت شود:
+config.local.php
+
+# سیستم‌فایل‌ها
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*.log
+
+# خروجی‌های حجیم توسعه (در گیت نمی‌آیند)
+*.zip
+*.sql
+qa-shots/
+node_modules/

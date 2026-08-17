@@ -1,0 +1,30 @@
+# فریا روان — تنظیمات امنیتی Apache
+Options -Indexes
+ServerSignature Off
+
+# حفاظت از فایل‌های حساس
+<FilesMatch "^(config\.php|.*\.sql|.*\.log|composer\.(json|lock))$">
+  Require all denied
+  Deny from all
+</FilesMatch>
+
+# صفحه پیش‌فرض
+DirectoryIndex index.php
+
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# BEGIN FERIA
+<IfModule mod_rewrite.c>
+RewriteEngine On
+# مسیرهای زیبای هر صفحه (با نصب/بازتولید پیوندها از بخش «پیوندها» تکمیل می‌شود)
+# قوانین کلی — برای هر اسلاگ تازه:
+RewriteRule ^w/([^/]+)/?$ workshop.php?s=$1 [L,QSA]
+RewriteRule ^c/([^/]+)/?$ course.php?s=$1 [L,QSA]
+RewriteRule ^t/([^/]+)/?$ test-page.php?s=$1 [L,QSA]
+# نقشهٔ سایت
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+</IfModule>
+# END FERIA
