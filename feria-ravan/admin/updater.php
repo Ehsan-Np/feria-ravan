@@ -16,9 +16,15 @@ require_once __DIR__ . '/../includes/roles.php';
 require_once __DIR__ . '/../core/ProjectUpdater.php';
 
 $admin = require_admin();
-if (function_exists('fr_admin_can') && !fr_admin_can($admin, 'roles')) {
+$canUpdate = false;
+if (in_array($admin['role'] ?? '', ['superadmin', 'super', 'admin', 'manager'], true)) {
+    $canUpdate = true;
+} elseif (function_exists('fr_admin_can') && (fr_admin_can($admin, 'settings') || fr_admin_can($admin, 'roles'))) {
+    $canUpdate = true;
+}
+if (!$canUpdate) {
     http_response_code(403);
-    exit('دسترسی مجاز نیست — فقط مدیران ارشد سیستم می‌توانند سامانه را به‌روزرسانی کنند.');
+    exit('دسترسی مجاز نیست — فقط مدیران ارشد سیستم و دارندگان دسترسی تنظیمات می‌توانند سامانه را به‌روزرسانی کنند.');
 }
 
 $updateLog = null;
@@ -26,6 +32,7 @@ $errorMsg  = null;
 
 // پردازش فرم به‌روزرسانی
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
     csrf_guard();
     $action = (string)post('action');
     $preserveConfig = post('preserve_config') === '1';
@@ -73,6 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             $errorMsg = 'خطا در اجرای پایپ‌لاین: ' . $e->getMessage();
         }
+    }
+    } catch (Throwable $e) {
+        $errorMsg = 'خطا در پردازش به‌روزرسانی: ' . $e->getMessage();
     }
 }
 

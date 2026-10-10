@@ -217,7 +217,8 @@ function fr_permalinks_flush(): array
     $ok = @file_put_contents(FR_ROOT . '/.htaccess', $new, LOCK_EX) !== false;
 
     /* robots.txt با ارجاع نقشهٔ سایت */
-    $robots = "# فریا روان — robots.txt\nUser-agent: *\nAllow: /workshops.php\nAllow: /courses.php\nAllow: /consult.php\nAllow: /w/\nAllow: /c/\nAllow: /t/\nDisallow: /panel/\nDisallow: /admin/\nDisallow: /api/\nDisallow: /install/\n\nSitemap: " . SITE_URL . "/sitemap.xml\n";
+    $disSlug = ($pSlug !== '' && $pSlug !== 'panel') ? ("\nDisallow: /" . $pSlug . "/") : '';
+    $robots = "# فریا روان — robots.txt\nUser-agent: *\nAllow: /workshops.php\nAllow: /courses.php\nAllow: /consult.php\nAllow: /w/\nAllow: /c/\nAllow: /t/\nDisallow: /panel/{$disSlug}\nDisallow: /admin/\nDisallow: /api/\nDisallow: /install/\n\nSitemap: " . SITE_URL . "/sitemap.xml\n";
     @file_put_contents(FR_ROOT . '/robots.txt', $robots, LOCK_EX);
 
     return ['ok' => $ok, 'count' => count($rules)];

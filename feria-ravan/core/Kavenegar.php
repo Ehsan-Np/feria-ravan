@@ -85,9 +85,10 @@ final class Kavenegar
      * ارسال با پترن/الگو (VerifyLookup کاوه‌نگار)
      * توکن‌ها: token, token2, token3, token10 (مثلاً لینک) و token20
      */
-    public function sendPattern(string $mobile, string $patternCode, array $tokens, ?string $event = null): bool
+    public function sendPattern(string $mobile, string $patternCode, array $tokens, ?string $event = null, ?string $renderedText = null): bool
     {
-        if (!$this->enabled) { $this->log($mobile, $event, json_encode($tokens, JSON_UNESCAPED_UNICODE), 'disabled'); return false; }
+        $logBody = !empty($renderedText) ? $renderedText : ('الگوی کاوه‌نگار (' . $patternCode . ') — مقادیر: ' . implode(' | ', $tokens));
+        if (!$this->enabled) { $this->log($mobile, $event, $logBody, 'disabled'); return false; }
         $params = ['receptor' => en_num($mobile), 'template' => $patternCode];
         // نگاشت آرایهٔ متغیرها به token های کاوه‌نگار
         $map = ['token','token2','token3','token10','token20'];
@@ -95,7 +96,7 @@ final class Kavenegar
         foreach ($tokens as $t) { if (isset($map[$i])) $params[$map[$i++]] = (string)$t; }
         $res = $this->call('verify', 'lookup', $params);
         $ok  = ($res['return']['status'] ?? 0) === 200;
-        $this->log($mobile, $event, 'pattern:' . $patternCode, $ok ? 'sent' : 'failed',
+        $this->log($mobile, $event, $logBody, $ok ? 'sent' : 'failed',
             $ok ? (string)($res['entries'][0]['messageid'] ?? '') : null);
         return $ok;
     }
@@ -112,11 +113,12 @@ final class Kavenegar
         /* ۱٫۹: مبلغ همیشه با جداکنندهٔ هزارگان چاپ شود — فراخواننده‌ها معمولاً
            مبلغ خام (int) می‌فرستند و قالب %amount% باید خوانا رندر شود */
         $vars['amount'] = number_format((int)($vars['amount'] ?? 0));
+        $fullText = tpl_vars($tpl['body'] ?? '', $vars);
         if (!empty($tpl['use_pattern']) && $tpl['pattern_code']) {
-            // در پترن، محتوا همان توکن‌ها هستند (پارامتر tokens باید از قبل آماده شود)
-            return $this->sendPattern($mobile, $tpl['pattern_code'], $vars['_tokens'] ?? array_values($vars), $event);
+            // در پترن، محتوا همان توکن‌ها هستند و متن کامل رندرشده برای ثبت لاگ ذخیره می‌شود
+            return $this->sendPattern($mobile, $tpl['pattern_code'], $vars['_tokens'] ?? array_values($vars), $event, $fullText);
         }
-        return $this->send($mobile, tpl_vars($tpl['body'], $vars), $event);
+        return $this->send($mobile, $fullText, $event);
     }
 
     /** ارسال پیامک تست با متن دلخواه از پنل ادمین */

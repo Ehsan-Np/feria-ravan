@@ -138,6 +138,16 @@ admin_layout($adm, 'monitor', 'رصد فعالیت و امنیت');
       <tbody>
       <?php foreach ($logs as $l):
         $body = (string)($l['body'] ?? '');
+        // بازیابی متن کامل برای رکوردهای قدیمی که فقط کد الگو ثبت کرده بودند
+        if (str_starts_with($body, 'pattern:') && !empty($l['event'])) {
+            try {
+                $tplRow = DB::one('SELECT body, pattern_code FROM ' . DB::t('sms_templates') . ' WHERE event=?', [$l['event']]);
+                if ($tplRow && !empty($tplRow['body'])) {
+                    $body = "الگوی کاوه‌نگار (" . substr($body, 8) . "):
+" . $tplRow['body'];
+                }
+            } catch (Throwable $e) {}
+        }
         $charLen = mb_strlen($body);
         $parts = $charLen <= 70 ? 1 : (1 + (int)ceil(($charLen - 70) / 67));
         $evLabel = $evFa[$l['event'] ?? ''] ?? ($l['event'] ? e($l['event']) : 'عمومی / سایر');

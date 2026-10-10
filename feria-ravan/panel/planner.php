@@ -319,7 +319,7 @@ $TABS = [
       <?php else: ?>
       <p style="font-size:12.5px;line-height:2;color:var(--muted)">با نوشتن <b>نام کاربری</b> اکانت تلگرام یا بله‌ات در پروفایل، به‌صورت خودکار وصل می‌شوی و یادآورها را دریافت می‌کنی — بدون هیچ شناسهٔ عددی.</p>
       <?php endif; ?>
-      <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/panel/profile.php">⚙️ تنظیم اطلاع‌رسانی در پروفایل</a>
+      <a class="fr-btn sm ghost" href="<?= fr_panel_url("profile.php") ?>">⚙️ تنظیم اطلاع‌رسانی در پروفایل</a>
     </div>
   </div>
 </div>
@@ -669,7 +669,7 @@ $deltaData = $selectedTestId > 0 ? GrowthEngine::getDeltaComparison((int)$u['id'
     <p style="color:var(--muted);font-size:13px;max-width:440px;margin:8px auto 16px auto;line-height:2">
       برای سنجش ابعاد شخصیتی و پایش رشد رفتاری خود، ابتدا در یکی از آزمون‌های تخصصی شرکت کنید.
     </p>
-    <a href="<?= SITE_URL ?>/panel/tests.php" class="fr-btn">مشاهده و شرکت در آزمون‌ها ←</a>
+    <a href="<?= fr_panel_url("tests.php") ?>" class="fr-btn">مشاهده و شرکت در آزمون‌ها ←</a>
   </div>
 <?php elseif (!$deltaData['has_comparison']): ?>
   <div class="fr-card" style="text-align:center;padding:36px">
@@ -679,7 +679,7 @@ $deltaData = $selectedTestId > 0 ? GrowthEngine::getDeltaComparison((int)$u['id'
       شما این آزمون را یک بار انجام داده‌اید. برای محاسبهٔ دلتای رشد (&Delta;) و مقایسهٔ تغییرات شخصیتی یا رفتاری، پیشنهاد می‌شود پس از طی کردن تمرین‌های پلنر روزانه (حداقل ۲ تا ۴ هفته)، آزمون را مجدداً تکرار کنید.
     </p>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
-      <a href="<?= SITE_URL ?>/panel/test-start.php?id=<?= $selectedTestId ?>" class="fr-btn">شرکت مجدد در این آزمون (Retest)</a>
+      <a href="<?= fr_panel_url("test-start.php?id=") ?><?= $selectedTestId ?>" class="fr-btn">شرکت مجدد در این آزمون (Retest)</a>
       <a href="?t=today" class="fr-btn ghost">انجام تمرین‌های امروز</a>
     </div>
   </div>

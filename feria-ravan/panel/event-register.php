@@ -26,7 +26,7 @@ $u  = require_user();
 $id = (int)($_GET['id'] ?? 0);
 $ev = DB::one('SELECT * FROM ' . DB::t('events') . " WHERE id=? AND status='active'", [$id]);
 /* نسخهٔ ۲٫۲: بازگشت به برگهٔ تفکیک‌شدهٔ درست بر اساس نوع رویداد */
-$evHome = SITE_URL . (isset($ev['kind']) && $ev['kind'] === 'course' ? '/panel/courses.php' : '/panel/workshops.php');
+$evHome = fr_panel_url(isset($ev['kind']) && $ev['kind'] === 'course' ? 'courses.php' : 'workshops.php');
 if (!$ev) redirect(fr_panel_url('workshops.php'));
 if (!(int)$ev['reg_open']) redirect($evHome);
 

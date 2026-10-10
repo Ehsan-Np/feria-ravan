@@ -59,6 +59,9 @@ function render_header(string $title, array $opts = []): void
 <link rel="icon" type="image/svg+xml" href="<?= SITE_URL ?>/assets/img/favicon.svg">
 <meta name="csrf" content="<?= csrf_token() ?>">
 <meta name="app-url" content="<?= e(SITE_URL) ?>">
+<?php if (str_contains($_SERVER['SCRIPT_NAME'] ?? '', '/panel/') || (function_exists('fr_panel_slug') && str_contains($_SERVER['REQUEST_URI'] ?? '', '/' . fr_panel_slug()))): ?>
+<base href="<?= e(fr_panel_url()) ?>">
+<?php endif; ?>
 <title><?= e($full) ?></title>
 <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/feria.css?v=<?= FR_VERSION ?>">
 <?php foreach (($opts['css'] ?? []) as $extraCss): /* استایل‌های تکمیلی هر صفحه */ ?>

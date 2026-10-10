@@ -97,7 +97,7 @@ panel_layout($u, $pageKey);
       <p style="font-size:12.5px;color:var(--muted);margin:6px 0 0"><?= $pageDesc ?></p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="fr-btn sm ghost" href="<?= SITE_URL ?><?= $isCourse ? '/panel/workshops.php' : '/panel/courses.php' ?>">
+      <a class="fr-btn sm ghost" href="<?= fr_panel_url($isCourse ? 'workshops.php' : 'courses.php') ?>">
         <?= $isCourse ? '🛠 کارگاه‌ها' : '📚 دوره‌ها' ?></a>
       <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/<?= $pubPage ?>" target="_blank" rel="noopener">🌐 صفحهٔ عمومی</a>
     </div>

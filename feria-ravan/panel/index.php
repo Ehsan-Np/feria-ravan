@@ -123,7 +123,7 @@ $memberSt = !empty($u['created_at']) ? strtotime((string)$u['created_at']) : tim
     </div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <a class="fr-btn" href="<?= SITE_URL ?>/panel/tests.php">🧠 شروع تست روانشناسی جدید</a>
+    <a class="fr-btn" href="<?= fr_panel_url("tests.php") ?>">🧠 شروع تست روانشناسی جدید</a>
     <a class="fr-btn ghost" href="profile.php">👤 پروفایل</a>
   </div>
 </div>
@@ -172,7 +172,7 @@ $memberSt = !empty($u['created_at']) ? strtotime((string)$u['created_at']) : tim
   <h3>کارگاه‌ها و دوره‌های من</h3>
   <?php if (!$myEvents): ?>
     <p class="fr-alert info" style="margin:0">در هیچ کارگاه یا دوره‌ای ثبت‌نام ندارید؛
-      از <a href="<?= SITE_URL ?>/panel/workshops.php">لیست کارگاه‌ها 🛠</a> یا <a href="<?= SITE_URL ?>/panel/courses.php">دوره‌ها 📚</a> انتخاب کنید.</p>
+      از <a href="<?= fr_panel_url("workshops.php") ?>">لیست کارگاه‌ها 🛠</a> یا <a href="<?= fr_panel_url("courses.php") ?>">دوره‌ها 📚</a> انتخاب کنید.</p>
   <?php else: ?>
   <table class="fr-table">
     <thead><tr><th>رویداد</th><th>نوع</th><th>وضعیت</th><th>زمان برگزاری</th><th></th></tr></thead>

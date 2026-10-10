@@ -493,7 +493,7 @@ panel_layout($u, 'history');
                   <button class="fr-btn sm ok" type="submit">تکمیل پرداخت هدیه (درگاه) 💳</button>
                 </form>
               <?php else: ?>
-                <button class="fr-btn sm ghost" type="button" onclick="navigator.clipboard.writeText('<?= SITE_URL ?>/panel/dyad.php?token=<?= $dy['token'] ?>');toast('لینک دعوت کپی شد! ✅','ok')">کپی لینک دعوت</button>
+                <button class="fr-btn sm ghost" type="button" onclick="navigator.clipboard.writeText('<?= fr_panel_url('dyad.php?token=') ?><?= $dy['token'] ?>');toast('لینک دعوت کپی شد! ✅','ok')">کپی لینک دعوت</button>
                 <?php if ($isOwner && !empty($dy['partner_mobile'])): ?>
                   <form method="post" style="margin:0;display:inline">
                     <?= csrf_field() ?>
