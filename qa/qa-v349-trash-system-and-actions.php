@@ -43,8 +43,8 @@ echo "====================================================================\n\n";
 
 // --- 1. Version & Schema Verification ---
 echo "--- 1. Version and Database Schema ---\n";
-it('Version is advanced to 3.4.9', FR_RELEASE === '3.4.9', 'Actual: ' . FR_RELEASE);
-it('FR_VERSION constant is 3.4.9', FR_VERSION === '3.4.9', 'Actual: ' . FR_VERSION);
+it('Version is advanced to 3.4.9 or higher', version_compare(FR_RELEASE, '3.4.9', '>='), 'Actual: ' . FR_RELEASE);
+it('FR_VERSION constant is 3.4.9 or higher', version_compare(FR_VERSION, '3.4.9', '>='), 'Actual: ' . FR_VERSION);
 
 TrashManager::ensureSchema();
 

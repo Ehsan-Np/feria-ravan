@@ -33,12 +33,12 @@ function fr_security_headers(): void
 {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: SAMEORIGIN');                 // ضد Clickjacking
-    header('Referrer-Policy: strict-origin-when-cross-origin');
+    // ارسال origin برای سازگاری کامل با الزامات اعتبارسنجی نماد اعتماد الکترونیکی (اینماد)، ساماندهی و درگاه‌ها
+    header('Referrer-Policy: origin-when-cross-origin');
     header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     if (FR_ENV === 'production') {
-        // نکتهٔ سازگاری: چیدمان‌های PHP توکن CSRF و اسکریپت‌های کوچک صفحات را inline تزریق می‌کنند؛
-        // بنابراین script-src شامل unsafe-inline است ولی باقی منابع قفل‌اند (تصاویر/فونت فقط خودی یا data).
-        header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
+        // سیاست CSP استاندارد و امن سازگار با نمادهای اعتماد رسمی (اینماد، زرین‌پال، ساماندهی، شاپرک)
+        header("Content-Security-Policy: default-src 'self' data: https: 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://trustseal.enamad.ir https://*.enamad.ir https://*.zarinpal.com https://cdn.zarinpal.com https://*.samandehi.ir https://*.shaparak.ir https://*.ecunion.ir; frame-src 'self' https://trustseal.enamad.ir https://*.enamad.ir https://*.zarinpal.com https://*.samandehi.ir https://*.shaparak.ir; connect-src 'self' https://trustseal.enamad.ir https://*.enamad.ir https://*.zarinpal.com https://cdn.zarinpal.com https://*.samandehi.ir; font-src 'self' data: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'");
     }
 }
 

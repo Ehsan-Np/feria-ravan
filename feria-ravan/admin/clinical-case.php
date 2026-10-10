@@ -130,18 +130,39 @@ admin_layout($adm, 'consult', 'خلاصه پرونده بالینی — ' . user
     <div style="display:grid;gap:12px">
       <?php foreach ($summary['hypotheses'] as $hyp): ?>
       <div style="background:#f8fafc;border-right:4px solid #3b82f6;padding:14px;border-radius:8px">
-        <b style="color:#1d4ed8;font-size:14px;display:block;margin-bottom:6px"><?= e($hyp['title']) ?></b>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+          <b style="color:#1d4ed8;font-size:14px"><?= e($hyp['title']) ?></b>
+          <?php if (!empty($hyp['category'])): ?>
+            <span class="fr-chip info sm" style="font-size:11px"><?= e($hyp['category']) ?></span>
+          <?php endif; ?>
+        </div>
         <div style="font-size:13px;line-height:2;color:#334155"><?= e($hyp['desc']) ?></div>
       </div>
       <?php endforeach; ?>
     </div>
   </div>
 
+  <!-- منظومه مکانیسم‌های دفاعی فعال -->
+  <?php if (!empty($summary['defense_mechanisms'])): ?>
+  <div class="fr-card" style="margin-bottom:24px;background:#faf5ff;border:1px solid #e9d5ff">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:22px">🛡️</span>
+      <h3 style="margin:0;font-size:16px;color:#6b21a8">منظومهٔ مکانیسم‌های دفاعی فعال مراجع</h3>
+    </div>
+    <div style="font-size:13px;line-height:2.2;color:#581c87">
+      <div>🔹 <b>دفاع‌های اولیه و مسلط:</b> <?= e($summary['defense_mechanisms']['primary'] ?? 'عقلانی‌سازی') ?></div>
+      <?php if (!empty($summary['defense_mechanisms']['secondary'])): ?>
+      <div>🔸 <b>دفاع‌های ثانویه و موقعیتی:</b> <?= e($summary['defense_mechanisms']['secondary']) ?></div>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- مدیریت مقاومت‌های مراجع در اتاق درمان -->
   <?php if (!empty($summary['resistances'])): ?>
   <div class="fr-card" style="margin-bottom:24px">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-      <span style="font-size:22px">🛡️</span>
+      <span style="font-size:22px">⚔️</span>
       <h3 style="margin:0;font-size:16px;color:#854d0e">پیش‌بینی مقاومت‌های درمانی مراجع و راهنمای واکنش مشاور</h3>
     </div>
     <div style="display:grid;gap:12px">
@@ -152,6 +173,21 @@ admin_layout($adm, 'consult', 'خلاصه پرونده بالینی — ' . user
       </div>
       <?php endforeach; ?>
     </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- کلیدهای کاوشگرانه و پرسش‌های سقراطی جلسه اول -->
+  <?php if (!empty($summary['session_openers'])): ?>
+  <div class="fr-card" style="margin-bottom:24px;background:#f0fdfa;border:1px solid #99f6e4">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:22px">💬</span>
+      <h3 style="margin:0;font-size:16px;color:#0f766e">کلیدهای کاوشگرانه و پرسش‌های سقراطی برای جلسه ارزیابی</h3>
+    </div>
+    <ul style="margin:0;padding-right:20px;font-size:13px;line-height:2.2;color:#115e59">
+      <?php foreach ($summary['session_openers'] as $so): ?>
+        <li><?= e($so) ?></li>
+      <?php endforeach; ?>
+    </ul>
   </div>
   <?php endif; ?>
 

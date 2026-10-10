@@ -19,6 +19,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../core/Analyzer.php';
 require_once __DIR__ . '/../core/report-texts.php';
 require_once __DIR__ . '/../core/report-deep.php';
+require_once __DIR__ . '/../core/analysis-deep.php';
 require_once __DIR__ . '/../core/disc-deep.php';
 
 final class ReportBuilder
@@ -74,8 +75,8 @@ final class ReportBuilder
         };
     }
 
-    /** رندر یک بلوک تحلیل مقیاس (با اولویت: قالب مدیر ← بانک متن ← خودکار)
-     *  ۱٫۸: زنجیرهٔ انتخاب قالب — باند دقیق ← باندِ تقلیل‌یافته (very_low→low / very_high→high) ← any */
+    /** رندر یک بلوک تحلیل مقیاس (با اولویت: قالب مدیر ← تحلیل عمیق روان‌سنجی ← بانک متن ← خودکار)
+     *  ۱٫۸ و ۳٫۵: زنجیرهٔ انتخاب قالب — قالب دستی مدیر ← تحلیل تخصصی چندوجهی بانددار ← متن خودکار */
     private static function scaleBlock(array $r, array $tplMap, string $engine, string $slug,
                                        string $ctx, bool $isFull, string $bandFa, string $bandColor): void
     {
@@ -84,12 +85,27 @@ final class ReportBuilder
         $tpl = $tplMap[$code . '|' . $r['band']][0]
             ?? (isset($collapse[$r['band']]) ? ($tplMap[$code . '|' . $collapse[$r['band']]][0] ?? null) : null)
             ?? ($tplMap[$code . '|any'][0] ?? null);
-        $auto = $isFull ? fr_text_full($engine, $slug, $r['scale_code'], (string)$r['band'], $ctx)
-                        : fr_text_brief($engine, $slug, $r['scale_code'], (string)$r['band']);
-        $body = $tpl ? $tpl['body'] : ($auto ?: '<p>' . self::fallbackText($r) . '</p>');
+
+        // واکشی تحلیل تخصصی و عمیق روان‌سنجی بر مبنای باند دقیق نمره
+        $spec = function_exists('fr_get_specialized_scale_analysis')
+            ? fr_get_specialized_scale_analysis($engine, $slug, $code, (string)$r['band'], $ctx, $isFull, $r)
+            : null;
+
+        if ($tpl && !empty($tpl['body'])) {
+            $body = $tpl['body'];
+            $title = $tpl['title'] ?? ('تحلیل بُعد «' . ($r['title_fa'] ?? $code) . '»');
+        } elseif ($spec && !empty($spec['body'])) {
+            $body = $spec['body'];
+            $title = $spec['title'] ?? ('تحلیل تخصصی «' . ($r['title_fa'] ?? $code) . '» — وضعیت: ' . $bandFa);
+        } else {
+            $auto = $isFull ? fr_text_full($engine, $slug, $r['scale_code'], (string)$r['band'], $ctx)
+                            : fr_text_brief($engine, $slug, $r['scale_code'], (string)$r['band']);
+            $body = $auto ?: ('<p>' . self::fallbackText($r) . '</p>');
+            $title = 'تحلیل بُعد «' . ($r['title_fa'] ?? $code) . '»';
+        }
         ?>
     <div style="border-right:3px solid <?= e($r['color'] ?: 'var(--c-primary)') ?>;padding-right:14px;margin-bottom:22px">
-      <b style="font-size:15px"><?= e($tpl['title'] ?? ('تحلیل بُعد «' . ($r['title_fa'] ?? $r['scale_code']) . '»')) ?></b>
+      <b style="font-size:15px"><?= e($title) ?></b>
       <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
         نمره: <?= fa_num($r['percent']) ?>٪ — وضعیت: <b style="color:<?= $bandColor ?>"><?= $bandFa ?></b>
         <?php if (!empty($r['t_score'])): ?>

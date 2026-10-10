@@ -309,15 +309,19 @@ footer img.pb-brand-mark.fr-logo{height:46px}
 .pb-nl-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pb-nl-form .fr-input{width:230px;max-width:100%;direction:ltr;text-align:left;background:rgba(255,255,255,.96)}
 .pb-nl-msg{width:100%;font-size:12.5px;min-height:16px;display:block}
-/* نسخهٔ ۲٫۱: ستون چهارم — نمادهای هم‌اندازه */
+/* نسخهٔ ۲٫۱ و ۲٫۲ و ۳٫۵: ستون چهارم — نمادهای هم‌اندازه با پس‌زمینهٔ کارت سفید برای وضوح نشان‌های رسمی */
 .fb-badges{display:flex;gap:10px;flex-wrap:wrap}
-.fb-slot{width:96px;height:104px;border:1.5px dashed rgba(255,255,255,.24);border-radius:14px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);overflow:hidden;padding:6px}
+.fb-slot{width:96px;height:104px;border:1.5px dashed rgba(255,255,255,.24);border-radius:14px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);overflow:hidden;padding:6px;transition:all .2s ease}
+.fb-slot.fb-active{background:#ffffff !important;border:1px solid rgba(255,255,255,.8) !important;border-style:solid !important;box-shadow:0 4px 14px rgba(0,0,0,.22) !important}
+.fb-slot.fb-active:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.28) !important}
 .fb-slot img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
-.fb-embed{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.fb-embed{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
 .fb-embed>*{max-width:100%;max-height:100%}
 /* ۲٫۲: کدهای HTML خام نماد (مثل اینماد: a > img) در هر شکلی داخل جایگاه جا بگیرند */
-.fb-embed a{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+.fb-embed a{display:flex;align-items:center;justify-content:center;width:100%;height:100%;text-decoration:none}
 .fb-embed img{max-width:100%;max-height:88px;object-fit:contain;border:none}
+.fb-embed iframe{max-width:100%;max-height:100%;border:none}
+#zarinpal{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
 .fb-empty{font-size:.72rem;color:#8f83c2;text-align:center;line-height:1.8;display:flex;flex-direction:column;gap:4px;align-items:center}
 .fb-empty span{font-size:18px;opacity:.7}
 .pb-foot-brandcol .pb-foot-desc{color:#a89fd6;font-size:12.5px;line-height:2;margin:12px 0 0;max-width:340px}

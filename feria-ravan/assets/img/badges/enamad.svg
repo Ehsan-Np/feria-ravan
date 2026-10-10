@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180" width="160" height="180">
+  <defs>
+    <filter id="enShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+    <linearGradient id="enBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E40AF"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <!-- Card Background -->
+  <rect x="10" y="10" width="140" height="160" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2" filter="url(#enShadow)"/>
+  <!-- Circular Emblem -->
+  <circle cx="80" cy="62" r="38" fill="#EFF6FF" stroke="url(#enBlue)" stroke-width="2.5"/>
+  <!-- Enamad 'e' stylized mark -->
+  <path d="M80 34 C64 34 52 46 52 62 C52 78 64 90 80 90 C93 90 102 83 106 72 L72 72 C70 77 74 81 80 81 C84 81 88 79 90 75 L104 75 C101 84 92 92 80 92 C62 92 48 78 48 62 C48 46 62 32 80 32 C92 32 101 40 104 49 L90 49 C88 45 84 43 80 43 C74 43 70 47 72 52 L106 52 C107 43 96 34 80 34 Z" fill="url(#enBlue)"/>
+  <!-- Two Golden Stars (2-star Enamad) -->
+  <g transform="translate(56, 102) scale(0.85)">
+    <polygon points="12,1 15,9 23,9 17,14 19,22 12,17 5,22 7,14 1,9 9,9" fill="#F59E0B"/>
+    <polygon points="36,1 39,9 47,9 41,14 43,22 36,17 29,22 31,14 25,9 33,9" fill="#F59E0B"/>
+  </g>
+  <!-- Text Label -->
+  <text x="80" y="136" text-anchor="middle" font-family="Vazirmatn, Tahoma, sans-serif" font-size="10.5" font-weight="bold" fill="#1E3A8A">نماد اعتماد</text>
+  <text x="80" y="152" text-anchor="middle" font-family="Vazirmatn, Tahoma, sans-serif" font-size="8.5" fill="#475569">الکترونیکی (اینماد)</text>
+</svg>

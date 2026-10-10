@@ -1071,6 +1071,19 @@ function fr_update_pipeline(bool $force = false): void
             TrashManager::ensureSchema();
         } catch (Throwable $e) { error_log('feria: 3.4.9 trash manager migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۵٫۰: پشتیبانی و سازگاری کامل از نمادهای اعتماد الکترونیکی (اینماد، زرین‌پال، ساماندهی) ---- */
+        try {
+            // اطمینان از وجود دایرکتوری وکتورهای نماد اعتماد رسمی
+            $badgeDir = FR_ROOT . '/assets/img/badges';
+            if (!is_dir($badgeDir)) @mkdir($badgeDir, 0755, true);
+        } catch (Throwable $e) { error_log('feria: 3.5.0 trust seal badges migration: ' . $e->getMessage()); }
+
+        /* ---- ۳٫۵٫۱: موتور فرضیه‌سازی بالینی و تحلیل‌های عمیق و تخصصی روان‌سنجی ---- */
+        try {
+            require_once FR_ROOT . '/core/ClinicalAnalyzer.php';
+            require_once FR_ROOT . '/core/analysis-deep.php';
+        } catch (Throwable $e) { error_log('feria: 3.5.1 clinical psychometric engine migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

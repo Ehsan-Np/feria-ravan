@@ -98,6 +98,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
             }
         }
     }
+    // تصحیح و نرمال‌سازی هوشمند فیلدهای نمادهای فوتر (در صورت قرار دادن اشتباه کد در فیلد لینک یا تصویر)
+    for ($bi = 1; $bi <= 4; $bi++) {
+        $hk = 'footer_badge' . $bi . '_html';
+        $uk = 'footer_badge' . $bi . '_url';
+        $ik = 'footer_badge' . $bi . '_img';
+        $hVal = trim((string)($_POST[$hk] ?? ''));
+        $uVal = trim((string)($_POST[$uk] ?? ''));
+        $iVal = trim((string)($_POST[$ik] ?? ''));
+
+        if ($hVal === '') {
+            if (str_contains($uVal, '<') && (str_contains($uVal, '<a') || str_contains($uVal, '<script') || str_contains($uVal, '<img') || str_contains($uVal, '<iframe'))) {
+                DB::setSetting($hk, $uVal);
+                DB::setSetting($uk, '');
+            } elseif (str_contains($iVal, '<') && (str_contains($iVal, '<a') || str_contains($iVal, '<script') || str_contains($iVal, '<img') || str_contains($iVal, '<iframe'))) {
+                DB::setSetting($hk, $iVal);
+                DB::setSetting($ik, '');
+            }
+        }
+    }
     // همگام‌سازی و بازتولید خودکار قوانین پیوند و .htaccess در صورت تغییر نشانی پنل کاربری یا اسلاگ‌ها
     if (function_exists('fr_permalinks_flush')) {
         try { fr_permalinks_flush(); } catch (Throwable $e) {}
@@ -218,38 +237,63 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
 </div>
 
 <div class="fr-card">
-  <h3>🏅 نمادهای فوتر (۴ جایگاه هم‌اندازه <span class="chip" style="background:#eef2ff">۲٫۲</span>)</h3>
-  <p style="font-size:12.5px;color:var(--muted);margin-top:0">مثل نماد اعتماد الکترونیکی (اینماد)، نشان ملی ثبت رسانه‌های دیجیتال (ساماندهی)، درگاه پرداخت امن زرین‌پال و انجمن روان‌شناسی. برای هر جایگاه می‌توانید «تصویر + لینک» بگذارید یا «کد HTML خام» (مثل کد رسمی اینماد)؛ اگر کد HTML پر باشد، جای تصویر قرار می‌گیرد و <b>دقیقاً همان‌طور که هست</b> در فوتر چاپ می‌شود. جایگاه خالی هم در فوتر با قاب نقطه‌چین نمایش داده می‌شود تا چیدمان به‌هم نریزد.</p>
+  <h3>🏅 نمادهای فوتر (۴ جایگاه هم‌اندازه <span class="chip" style="background:#eef2ff">۳٫۵</span>)</h3>
+  <p style="font-size:12.5px;color:var(--muted);margin-top:0">پشتیبانی کامل و هوشمند از کدهای <b>اینماد (Enamad)</b>، <b>نشان ملی ساماندهی</b>، <b>درگاه پرداخت امن زرین‌پال</b> و نمادهای اختصاصی. سامانه به‌طور خودکار کدهای HTML، تگ‌های اسکریپت، لینک‌های مستقیم و الزامات امنیتی (مانند هدرهای CSP و Referrer-Policy) را اعمال می‌کند تا نمادها در تمام مرورگرها به‌درستی نمایش داده شوند.</p>
+  
   <div class="fr-grid cols-2">
-    <?php for ($bi = 1; $bi <= 4; $bi++):
+    <?php
+    $previewBadges = function_exists('fr_footer_badges') ? fr_footer_badges() : [];
+    for ($bi = 1; $bi <= 4; $bi++):
         $bimg = $s('footer_badge'.$bi.'_img'); $burl = $s('footer_badge'.$bi.'_url'); $balt = $s('footer_badge'.$bi.'_alt'); $bhtm = $s('footer_badge'.$bi.'_html');
-        $phTitle = [1=>'نماد اعتماد الکترونیک (اینماد)', 2=>'نشان ملی ثبت (ساماندهی)', 3=>'درگاه پرداخت امن زرین‌پال', 4=>'انجمن روان‌شناسی'][$bi]; ?>
-    <div class="fr-card" style="margin:0;background:#fafbfd">
+        $phTitle = [1=>'نماد اعتماد الکترونیکی (اینماد)', 2=>'نشان ملی ثبت (ساماندهی)', 3=>'درگاه پرداخت امن زرین‌پال', 4=>'انجمن روان‌شناسی'][$bi];
+        $pb = $previewBadges[$bi - 1] ?? ['has_badge'=>false,'html'=>'','img'=>'','url'=>'','alt'=>$phTitle];
+    ?>
+    <div class="fr-card" style="margin:0;background:#fafbfd;border:1px solid #e2e8f0;border-radius:12px">
       <h4 style="margin-top:0">نماد <?= fa_num($bi) ?> <small style="color:var(--muted);font-weight:400">— <?= e($phTitle) ?></small></h4>
-      <div class="fr-field"><label>عنوان/alt</label>
+      
+      <div class="fr-field"><label>عنوان / متن جایگزین (alt)</label>
         <input class="fr-input" name="footer_badge<?= $bi ?>_alt" value="<?= e($balt) ?>" maxlength="120" placeholder="<?= e($phTitle) ?>"></div>
-      <div class="fr-field"><label>تصویر (آدرس یا آپلود)</label>
-        <input class="fr-input" name="footer_badge<?= $bi ?>_img" value="<?= e($bimg) ?>" style="direction:ltr" placeholder="https://…">
-        <input type="file" name="badge<?= $bi ?>_file" accept="image/*" style="margin-top:6px;font-size:12px"></div>
-      <div class="fr-field"><label>لینک نماد (اختیاری)</label>
-        <input class="fr-input" name="footer_badge<?= $bi ?>_url" value="<?= e($burl) ?>" style="direction:ltr" placeholder="https://trustseal.enamad.ir/…"></div>
-      <div class="fr-field"><label>یا کد HTML خام نماد (اختیاری — جایگزین تصویر می‌شود)</label>
-        <textarea class="fr-input" name="footer_badge<?= $bi ?>_html" rows="4" style="direction:ltr;font-family:monospace;font-size:11px" placeholder="&lt;img …&gt; / کد رسمی اینماد &lt;a&gt;&lt;img&gt;…"><?= e($bhtm) ?></textarea>
-        <small class="hint">کد HTML <b>بدون هیچ دست‌کاری</b> ذخیره و چاپ می‌شود (همین که برای سایت اینماد لازم است).</small></div>
-      <!-- ۲٫۲: پیش‌نمایش زندهٔ همان چیزی که در فوتر رندر می‌شود (مشابه جایگاه فوتر) -->
-      <div class="fr-field" style="margin-bottom:0"><label>پیش‌نمایش ذخیره‌شدهٔ فعلی</label>
-        <div style="width:96px;height:104px;border:1.5px dashed #c3cee2;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#fff;overflow:hidden;padding:6px">
-          <?php if ($bhtm !== ''): ?>
-            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center"><?= $bhtm /* پیش‌نمایش کد خام */ ?></div>
-          <?php elseif ($bimg !== ''): ?>
-            <img src="<?= e($bimg) ?>" alt="" style="max-width:100%;max-height:88px;object-fit:contain">
-          <?php else: ?>
-            <div style="font-size:11px;color:#9aa2c7;text-align:center;line-height:1.8">＋<br>خالی است</div>
+      
+      <div class="fr-field"><label>یا کد HTML / اسکریپت رسمی نماد (پیشنهادی برای اینماد و زرین‌پال)</label>
+        <textarea class="fr-input" id="fbadge_html_<?= $bi ?>" name="footer_badge<?= $bi ?>_html" rows="4" style="direction:ltr;font-family:monospace;font-size:11px" placeholder="&lt;a referrerpolicy=&quot;origin&quot; target=&quot;_blank&quot; href=&quot;https://trustseal.enamad.ir/...&quot;&gt;&lt;img src=&quot;...&quot;&gt;&lt;/a&gt;"><?= e($bhtm) ?></textarea>
+        <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+          <?php if ($bi === 1): ?>
+          <button type="button" class="fr-btn secondary" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('fbadge_html_1').value='<a referrerpolicy=\'origin\' target=\'_blank\' href=\'https://trustseal.enamad.ir/?id=123456&Code=sample\' rel=\'noopener\' title=\'نماد اعتماد الکترونیکی\'><img referrerpolicy=\'origin\' src=\'https://trustseal.enamad.ir/logo.aspx?id=123456&Code=sample\' alt=\'نماد اعتماد الکترونیکی اینماد\' style=\'cursor:pointer\'></a>';">نمونه کد اینماد</button>
+          <?php elseif ($bi === 2): ?>
+          <button type="button" class="fr-btn secondary" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('fbadge_html_2').value='<a target=\'_blank\' href=\'https://logo.samandehi.ir/Verify.aspx?id=123456\' rel=\'noopener\'><img id=\'samandehi-badge\' src=\'<?= SITE_URL ?>/assets/img/badges/samandehi.svg\' alt=\'نشان ملی ثبت رسانه‌های دیجیتال\' style=\'cursor:pointer\'></a>';">نمونه کد ساماندهی</button>
+          <?php elseif ($bi === 3): ?>
+          <button type="button" class="fr-btn secondary" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('fbadge_html_3').value='<a href=\'https://www.zarinpal.com/trust\' target=\'_blank\' rel=\'noopener\'><img src=\'<?= SITE_URL ?>/assets/img/badges/zarinpal.svg\' alt=\'درگاه پرداخت امن زرین‌پال\'></a>';">نماد پیش‌فرض زرین‌پال</button>
+          <button type="button" class="fr-btn secondary" style="padding:2px 8px;font-size:11px" onclick="document.getElementById('fbadge_html_3').value='<script src=\'https://www.zarinpal.com/webservice/TrustCode\' type=\'text/javascript\'><\/script>';">کد TrustCode زرین‌پال</button>
           <?php endif; ?>
         </div>
-        <small class="hint">اگر این‌جا خالی/ناخوانا دیدی، لینک/کد را بررسی کن — همان چیزی می‌شود که بازدیدکننده در فوتر می‌بیند.</small></div>
+        <small class="hint">کدهای اختصاصی بدون دست‌کاری ذخیره می‌شوند؛ الزامات امنیتی (referrerpolicy="origin" و دسترسی‌های CSP) به‌صورت خودکار اعمال می‌گردد.</small></div>
+      
+      <div class="fr-field"><label>نشانی پیوند نماد (اختیاری — در صورت استفاده از تصویر)</label>
+        <input class="fr-input" name="footer_badge<?= $bi ?>_url" value="<?= e($burl) ?>" style="direction:ltr" placeholder="https://trustseal.enamad.ir/?id=...">
+        <small class="hint">اگر لینک اینماد را این‌جا قرار دهید، سامانه خودکار کد تصویری آن را می‌سازد.</small></div>
+
+      <div class="fr-field"><label>آدرس یا آپلود تصویر (اختیاری)</label>
+        <input class="fr-input" name="footer_badge<?= $bi ?>_img" value="<?= e($bimg) ?>" style="direction:ltr" placeholder="https://... یا خالی برای وکتور پیش‌فرض">
+        <input type="file" name="badge<?= $bi ?>_file" accept="image/*" style="margin-top:6px;font-size:12px"></div>
+
+      <!-- ۳٫۵: پیش‌نمایش دقیق همان چیزی که در فوتر رندر می‌شود -->
+      <div class="fr-field" style="margin-bottom:0"><label>پیش‌نمایش ذخیره‌شدهٔ فوتر</label>
+        <div style="width:104px;height:112px;border:1px solid #dcdfe6;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#ffffff;box-shadow:0 3px 10px rgba(0,0,0,0.08);overflow:hidden;padding:6px">
+          <?php if (!empty($pb['html'])): ?>
+            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center"><?= $pb['html'] ?></div>
+          <?php elseif (!empty($pb['img'])): ?>
+            <img src="<?= e($pb['img']) ?>" alt="<?= e($pb['alt']) ?>" style="max-width:100%;max-height:88px;object-fit:contain">
+          <?php else: ?>
+            <div style="font-size:11px;color:#9aa2c7;text-align:center;line-height:1.8">＋<br>جایگاه خالی</div>
+          <?php endif; ?>
+        </div>
+        <small class="hint"><?= $pb['has_badge'] ? '✅ نماد آماده نمایش در فوتر' : 'جایگاه هنوز تنظیم نشده است' ?></small></div>
     </div>
     <?php endfor; ?>
+  </div>
+  
+  <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eef2f7;display:flex;justify-content:flex-end">
+    <button type="submit" class="fr-btn" style="min-width:180px">ذخیره تغییرات فوتر و نمادها ✅</button>
   </div>
 </div>
 
@@ -457,6 +501,10 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
   </div>
   <div class="fr-alert warn" style="font-size:13px">
     آدرس کال‌بک (در پنل زرین‌پال نیازی به ثبت نیست): <code style="direction:ltr;display:inline-block"><?= SITE_URL ?>/api/zarinpal-callback.php</code>
+  </div>
+  <div class="fr-alert info" style="font-size:13px;margin-top:12px">
+    🏅 <b>نماد اعتماد زرین‌پال در فوتر:</b>
+    برای نمایش نشان رسمی زرین‌پال در فوتر سایت، به برگهٔ <a href="<?= SITE_URL ?>/admin/settings.php?tab=footer" style="font-weight:bold;text-decoration:underline">فوتر و نمادها</a> بروید. جایگاه ۳ به‌طور پیش‌فرض به درگاه پرداخت امن زرین‌پال اختصاص دارد و می‌توانید نشان وکتور یا اسکریپت TrustCode را فعال کنید.
   </div>
 </div>
 

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 180" width="160" height="180">
+  <defs>
+    <linearGradient id="zpGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFC107"/>
+      <stop offset="100%" stop-color="#FFA000"/>
+    </linearGradient>
+    <filter id="zpShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <!-- Background Shield -->
+  <path d="M80 10 C125 10 145 28 145 75 C145 125 105 158 80 170 C55 158 15 125 15 75 C15 28 35 10 80 10 Z" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2" filter="url(#zpShadow)"/>
+  <!-- Gold Shield Accent -->
+  <path d="M80 18 C118 18 135 34 135 75 C135 118 100 148 80 158 C60 148 25 118 25 75 C25 34 42 18 80 18 Z" fill="#F8FAFC" stroke="url(#zpGrad)" stroke-width="2"/>
+  <!-- ZarinPal Logo Mark -->
+  <g transform="translate(42, 38)">
+    <circle cx="38" cy="38" r="34" fill="#0A2540"/>
+    <path d="M22 28 L54 28 C56 28 57 30 56 32 L34 50 L54 50 C56 50 57 52 57 54 L57 56 C57 57 56 58 54 58 L22 58 C20 58 19 56 20 54 L42 36 L22 36 C20 36 19 34 19 32 L19 30 C19 29 20 28 22 28 Z" fill="#FFC107"/>
+  </g>
+  <!-- Text Label -->
+  <text x="80" y="128" text-anchor="middle" font-family="Vazirmatn, Tahoma, sans-serif" font-size="11" font-weight="bold" fill="#0A2540">زرین‌پال</text>
+  <text x="80" y="142" text-anchor="middle" font-family="Vazirmatn, Tahoma, sans-serif" font-size="8.5" fill="#64748B">درگاه پرداخت امن</text>
+  <!-- Verified Stars -->
+  <g transform="translate(62, 148) scale(0.7)">
+    <polygon points="10,1 12,7 18,7 13,11 15,17 10,13 5,17 7,11 2,7 8,7" fill="#FFC107"/>
+    <polygon points="26,1 28,7 34,7 29,11 31,17 26,13 21,17 23,11 18,7 24,7" fill="#FFC107"/>
+    <polygon points="42,1 44,7 50,7 45,11 47,17 42,13 37,17 39,11 34,7 40,7" fill="#FFC107"/>
+  </g>
+</svg>

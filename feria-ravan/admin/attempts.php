@@ -31,9 +31,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       JOIN ' . DB::t('users') . ' u ON u.id=a.user_id
                       WHERE a.id=?', [$attemptId]);
 
+    // محاسبه آدرس بازگشت هوشمند به صفحه و فیلتر دقیق آزمون مراجع
+    $resolveReturnUrl = function(?string $defaultView = null) use ($atRow): string {
+        $rUrl = trim((string)post('return_url'));
+        if ($rUrl !== '') {
+            if (str_starts_with($rUrl, 'attempts.php') || str_starts_with($rUrl, '/admin/attempts.php') || str_starts_with($rUrl, SITE_URL . '/admin/attempts.php')) {
+                return $rUrl;
+            }
+        }
+        $ref = (string)($_SERVER['HTTP_REFERER'] ?? '');
+        if ($ref !== '' && str_contains($ref, 'attempts.php')) {
+            return $ref;
+        }
+        $targetTestId = (int)post('test_id', (int)($atRow['test_id'] ?? 0));
+        $params = [];
+        if ($targetTestId > 0) $params['test_id'] = $targetTestId;
+        if ($defaultView) $params['view'] = $defaultView;
+        return SITE_URL . '/admin/attempts.php' . ($params ? '?' . http_build_query($params) : '');
+    };
+
     if (!$atRow && in_array($act, ['sms_report', 'sms_nudge', 'rescore', 'upgrade_mode', 'del_attempt', 'trash_attempt', 'restore_attempt', 'purge_attempt'], true)) {
         flash('جلسهٔ آزمون مورد نظر یافت نشد.', 'err');
-        redirect(SITE_URL . '/admin/attempts.php');
+        redirect($resolveReturnUrl());
     }
 
     // انتقال به سطل زباله
@@ -43,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             flash('خطا در انتقال جلسهٔ آزمون به سطل زباله.', 'err');
         }
-        redirect(SITE_URL . '/admin/attempts.php');
+        redirect($resolveReturnUrl());
     }
 
     // بازیابی از سطل زباله
@@ -53,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             flash('خطا در بازیابی جلسهٔ آزمون.', 'err');
         }
-        redirect(SITE_URL . '/admin/attempts.php?view=trash');
+        redirect($resolveReturnUrl('trash'));
     }
 
     // حذف قطعی و دائمی
@@ -63,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             flash('خطا در حذف قطعی جلسهٔ آزمون.', 'err');
         }
-        redirect(SITE_URL . '/admin/attempts.php?view=trash');
+        redirect($resolveReturnUrl('trash'));
     }
 
     // ارسال لینک کارنامه با پیامک برای مراجع
@@ -108,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             flash('ارسال پیامک با خطا مواجه شد.', 'err');
         }
-        redirect(SITE_URL . '/admin/attempts.php');
+        redirect($resolveReturnUrl());
     }
 
     // محاسبه و تحلیل مجدد نمرات آزمون
@@ -153,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('جلسهٔ آزمون و تمام نتایج آن با موفقیت حذف گردید 🗑', 'ok');
             log_activity('admin_del_attempt', 'attempt', $attemptId);
         }
-        redirect(SITE_URL . '/admin/attempts.php');
+        redirect($resolveReturnUrl());
     }
 }
 
@@ -198,7 +217,7 @@ if ($viewAttemptId > 0) {
     <div style="max-width:1040px;margin:0 auto">
       <!-- نوار ابزار بالای گزارش مراجع -->
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
-        <a class="fr-btn ghost sm" href="attempts.php">← بازگشت به فهرست تحلیل‌های مراجعین</a>
+        <a class="fr-btn ghost sm" href="<?= !empty($at['test_id']) ? 'attempts.php?test_id=' . (int)$at['test_id'] : 'attempts.php' ?>">← بازگشت به فهرست نتایج این آزمون (<?= e($at['test_title'] ?? '') ?>)</a>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <a class="fr-btn sm" href="<?= SITE_URL ?>/panel/report-pdf.php?attempt=<?= $at['id'] ?>&auto=1" target="_blank">📄 دریافت / چاپ PDF کارنامه</a>
           <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $at['id'] ?>" target="_blank">📋 پرونده بالینی مشاور</a>
@@ -229,6 +248,15 @@ if ($viewAttemptId > 0) {
             <button class="fr-btn sm" style="background:#7c3aed;color:#fff" type="submit">⭐ ارتقا به نسخه ویژه</button>
           </form>
           <?php endif; ?>
+
+          <form method="post" style="display:inline" onsubmit="return confirm('آیا از انتقال این کارنامه آزمون به سطل زباله اطمینان دارید؟\n(امکان بازیابی از سطل زباله وجود دارد)');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="trash_attempt">
+            <input type="hidden" name="attempt_id" value="<?= $at['id'] ?>">
+            <input type="hidden" name="return_url" value="<?= e('attempts.php?test_id=' . (int)$at['test_id']) ?>">
+            <input type="hidden" name="test_id" value="<?= (int)$at['test_id'] ?>">
+            <button class="fr-btn sm danger" type="submit" title="انتقال به سطل زباله">🗑 حذف / سطل زباله</button>
+          </form>
         </div>
       </div>
 
@@ -574,12 +602,15 @@ echo flash();
               <?= fa_num(jdate('Y/m/d - H:i', strtotime($a['completed_at'] ?? $a['started_at']))) ?>
             </td>
             <td class="actions" style="white-space:nowrap">
+              <?php $retUrl = 'attempts.php' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : ''); ?>
               <?php if ($viewMode === 'trash'): ?>
                 <!-- دکمه‌های حالت سطل زباله -->
                 <form method="post" style="display:inline" onsubmit="return confirm('آیا از بازیابی این آزمون و فعال‌سازی مجدد آن اطمینان دارید؟');">
                   <?= csrf_field() ?>
                   <input type="hidden" name="act" value="restore_attempt">
                   <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                  <input type="hidden" name="return_url" value="<?= e($retUrl) ?>">
+                  <input type="hidden" name="test_id" value="<?= (int)($filterTest ?: ($a['test_id'] ?? 0)) ?>">
                   <button class="fr-btn sm ok" style="background:#059669;color:#fff" type="submit" title="بازیابی آزمون">
                     ♻️ بازیابی
                   </button>
@@ -589,6 +620,8 @@ echo flash();
                   <?= csrf_field() ?>
                   <input type="hidden" name="act" value="purge_attempt">
                   <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                  <input type="hidden" name="return_url" value="<?= e($retUrl) ?>">
+                  <input type="hidden" name="test_id" value="<?= (int)($filterTest ?: ($a['test_id'] ?? 0)) ?>">
                   <button class="fr-btn sm danger" type="submit" title="حذف دائمی">
                     ❌ حذف قطعی
                   </button>
@@ -610,6 +643,8 @@ echo flash();
                     <?= csrf_field() ?>
                     <input type="hidden" name="act" value="sms_nudge">
                     <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                    <input type="hidden" name="return_url" value="<?= e($retUrl) ?>">
+                    <input type="hidden" name="test_id" value="<?= (int)($filterTest ?: ($a['test_id'] ?? 0)) ?>">
                     <button class="fr-btn sm" style="background:#f59e0b;color:#fff" type="submit" title="ارسال پیامک یادآوری تکمیل">
                       📲 یادآوری
                     </button>
@@ -624,6 +659,8 @@ echo flash();
                   <?= csrf_field() ?>
                   <input type="hidden" name="act" value="trash_attempt">
                   <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                  <input type="hidden" name="return_url" value="<?= e($retUrl) ?>">
+                  <input type="hidden" name="test_id" value="<?= (int)($filterTest ?: ($a['test_id'] ?? 0)) ?>">
                   <button class="fr-btn sm danger" style="padding:5px 8px" type="submit" title="انتقال به سطل زباله">🗑</button>
                 </form>
               <?php endif; ?>

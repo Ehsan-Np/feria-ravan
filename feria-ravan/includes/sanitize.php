@@ -30,10 +30,11 @@ function fr_safe_url(string $url, bool $isImg = false): ?string
     if (str_starts_with($low, 'javascript:') || str_starts_with($low, 'vbscript:') ||
         str_starts_with($low, 'data:') || str_starts_with($low, 'file:')) return null;
     if ($isImg) {
-        // تصویر: فقط آپلود داخلی در feria-uploads (یا assets/uploads قدیمی)
+        // تصویر: آپلود داخلی در feria-uploads (یا assets/uploads قدیمی) یا دامنه‌های مجاز نمادهای اعتماد و درگاه
         if (str_starts_with($url, SITE_URL . '/feria-uploads/') || str_starts_with($url, SITE_URL . '/assets/uploads/')) return $url;
         if (str_starts_with($url, '/feria-uploads/') || str_starts_with($url, 'feria-uploads/') ||
             str_starts_with($url, '/assets/uploads/') || str_starts_with($url, 'assets/uploads/')) return $url;
+        if (preg_match('#^https://([a-z0-9\-]+\.)?(enamad\.ir|zarinpal\.com|samandehi\.ir|shaparak\.ir)/#i', $url)) return $url;
         if (preg_match('#^https?://#i', $url)) return null; // تصویر خارجی غیرمجاز (حریم/سرعت)
         return null;
     }

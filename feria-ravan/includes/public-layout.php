@@ -110,17 +110,91 @@ function fr_footer_linklist(string $key, array $default): array
     return $links ?: $default;
 }
 
-/** چهار جایگاه نماد اعتماد فوتر (۲٫۲ — قبلاً ۳ تا بود) — تصویر+لینک یا کد HTML خام، همه هم‌اندازه */
+/** چهار جایگاه نماد اعتماد فوتر با پردازش و خودترمیمی هوشمند کدهای اینماد، زرین‌پال و ساماندهی */
 function fr_footer_badges(): array
 {
-    $titles = [1 => 'نماد اعتماد الکترونیک', 2 => 'نشان ملی ثبت (ساماندهی)', 3 => 'درگاه پرداخت زرین‌پال', 4 => 'انجمن روانشناسی'];
+    $titles = [
+        1 => 'نماد اعتماد الکترونیکی (اینماد)',
+        2 => 'نشان ملی ثبت (ساماندهی)',
+        3 => 'درگاه پرداخت امن زرین‌پال',
+        4 => 'انجمن روانشناسی'
+    ];
     $out = [];
     for ($i = 1; $i <= 4; $i++) {
+        $html = trim((string)DB::setting("footer_badge{$i}_html", ''));
+        $img  = trim((string)DB::setting("footer_badge{$i}_img", ''));
+        $url  = trim((string)DB::setting("footer_badge{$i}_url", ''));
+        $alt  = trim((string)DB::setting("footer_badge{$i}_alt", $titles[$i])) ?: $titles[$i];
+
+        // ۱. تشخیص درج اشتباه کد کامل HTML داخل فیلدهای Image یا URL
+        if ($html === '') {
+            if (str_contains($url, '<') && (str_contains($url, '<a') || str_contains($url, '<script') || str_contains($url, '<img') || str_contains($url, '<iframe'))) {
+                $html = $url;
+                $url  = '';
+            } elseif (str_contains($img, '<') && (str_contains($img, '<a') || str_contains($img, '<script') || str_contains($img, '<img') || str_contains($img, '<iframe'))) {
+                $html = $img;
+                $img  = '';
+            }
+        }
+
+        // ۲. نرمال‌سازی هوشمند کدهای اینماد (Enamad)
+        if ($html !== '') {
+            if (str_contains($html, 'enamad.ir') || str_contains($html, 'trustseal')) {
+                // اطمینان از referrerpolicy="origin" روی لینک و تصویر
+                if (!str_contains($html, 'referrerpolicy')) {
+                    $html = preg_replace('/(<(?:a|img)\b)/i', '$1 referrerpolicy="origin"', $html);
+                }
+            }
+        } elseif ($url !== '' && str_contains($url, 'trustseal.enamad.ir')) {
+            // ساخت خودکار قطعه‌کد رسمی اینماد اگر مدیر فقط پیوند اینماد را قرار داده باشد
+            $parts = parse_url($url);
+            $query = $parts['query'] ?? '';
+            $html = '<a referrerpolicy="origin" target="_blank" href="' . e($url) . '" rel="noopener" title="' . e($alt) . '">'
+                  . '<img referrerpolicy="origin" src="https://trustseal.enamad.ir/logo.aspx?' . e($query) . '" alt="' . e($alt) . '" style="cursor:pointer" loading="lazy">'
+                  . '</a>';
+        }
+
+        // ۳. نرمال‌سازی هوشمند کدهای زرین‌پال (ZarinPal)
+        if ($html !== '') {
+            if (str_contains($html, 'zarinpal.com')) {
+                if (str_contains($html, 'TrustCode') && !str_contains($html, 'id="zarinpal"')) {
+                    $html = '<div id="zarinpal">' . $html . '</div>';
+                }
+            }
+        } elseif ($url !== '' && str_contains($url, 'zarinpal.com')) {
+            if ($img === '') {
+                $img = SITE_URL . '/assets/img/badges/zarinpal.svg';
+            }
+        } elseif ($html === '' && $img === '' && $url === '' && $i === 3) {
+            $zpMerchant = trim((string)DB::setting('zarinpal_merchant', ''));
+            if ($zpMerchant !== '' && $zpMerchant !== 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx') {
+                $img = SITE_URL . '/assets/img/badges/zarinpal.svg';
+                $url = 'https://www.zarinpal.com/trust';
+            }
+        }
+
+        // ۴. نرمال‌سازی ساماندهی (Samandehi)
+        if ($html !== '') {
+            if (str_contains($html, 'samandehi.ir')) {
+                if (!str_contains($html, 'cursor')) {
+                    $html = preg_replace('/(<img\b)/i', '$1 style="cursor:pointer"', $html);
+                }
+            }
+        } elseif ($url !== '' && str_contains($url, 'samandehi.ir')) {
+            if ($img === '') {
+                $img = SITE_URL . '/assets/img/badges/samandehi.svg';
+            }
+        }
+
+        $hasBadge = ($html !== '' || $img !== '');
+
         $out[] = [
-            'img'  => trim((string)DB::setting("footer_badge{$i}_img", '')),
-            'url'  => trim((string)DB::setting("footer_badge{$i}_url", '')),
-            'alt'  => trim((string)DB::setting("footer_badge{$i}_alt", $titles[$i])) ?: $titles[$i],
-            'html' => trim((string)DB::setting("footer_badge{$i}_html", '')),
+            'index'     => $i,
+            'img'       => $img,
+            'url'       => $url,
+            'alt'       => $alt,
+            'html'      => $html,
+            'has_badge' => $hasBadge,
         ];
     }
     return $out;
@@ -204,16 +278,16 @@ function public_footer(): void
       <b><?= e(T('footer.badges_title')) ?></b>
       <div class="fb-badges fb-count-4">
         <?php foreach ($badges as $bg): ?>
-        <div class="fb-slot" title="<?= e($bg['alt']) ?>">
+        <div class="fb-slot <?= $bg['has_badge'] ? 'fb-active' : 'fb-empty-slot' ?>" title="<?= e($bg['alt']) ?>">
           <?php if ($bg['html'] !== ''): ?>
-            <div class="fb-embed"><?= $bg['html'] /* کد HTML خود نماد — مدیر مسئول اعتبار آن است */ ?></div>
+            <div class="fb-embed"><?= $bg['html'] ?></div>
           <?php elseif ($bg['img'] !== ''): ?>
             <?php if ($bg['url'] !== ''): ?>
-            <a href="<?= e($bg['url']) ?>" target="_blank" rel="noopener nofollow" aria-label="<?= e($bg['alt']) ?>">
-              <img src="<?= e($bg['img']) ?>" alt="<?= e($bg['alt']) ?>" loading="lazy">
+            <a href="<?= e($bg['url']) ?>" target="_blank" rel="noopener" referrerpolicy="origin" aria-label="<?= e($bg['alt']) ?>">
+              <img src="<?= e($bg['img']) ?>" alt="<?= e($bg['alt']) ?>" referrerpolicy="origin" loading="lazy">
             </a>
             <?php else: ?>
-            <img src="<?= e($bg['img']) ?>" alt="<?= e($bg['alt']) ?>" loading="lazy">
+            <img src="<?= e($bg['img']) ?>" alt="<?= e($bg['alt']) ?>" referrerpolicy="origin" loading="lazy">
             <?php endif; ?>
           <?php else: ?>
             <div class="fb-empty">
@@ -234,6 +308,17 @@ function public_footer(): void
 </footer>
 <script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
 <script src="<?= SITE_URL ?>/assets/js/site.js?v=<?= FR_VERSION ?>"></script>
+<script>
+/* تضمین نمایش نمادهای رسمی (زرین‌پال، اینماد) */
+(function(){
+  window.addEventListener('load', function() {
+    var zp = document.getElementById('zarinpal');
+    if (zp && (zp.children.length === 0 || zp.innerHTML.trim() === '')) {
+      zp.innerHTML = '<a href="https://www.zarinpal.com/trust" target="_blank" rel="noopener" aria-label="درگاه پرداخت امن زرین‌پال"><img src="<?= SITE_URL ?>/assets/img/badges/zarinpal.svg" alt="درگاه پرداخت زرین‌پال" style="max-height:80px;object-fit:contain"></a>';
+    }
+  });
+})();
+</script>
 <script>
 /* خبرنامهٔ پیامکی (۲٫۱) */
 (function(){

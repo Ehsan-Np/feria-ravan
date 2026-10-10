@@ -34,6 +34,14 @@ function fr_clinical_slug(string $slug): string
  */
 function fr_text_brief(string $engine, string $slug, string $scaleCode, string $band): ?string
 {
+    // ۱. ارجحیت تحلیل تخصصی روان‌سنجی با تفکیک دقیق باندها
+    if (function_exists('fr_get_specialized_scale_analysis')) {
+        $spec = fr_get_specialized_scale_analysis($engine, $slug, $scaleCode, $band, 'general', false);
+        if ($spec && !empty($spec['body'])) {
+            return $spec['body'];
+        }
+    }
+
     switch ($engine) {
         case 'disc':  return fr_as_html(fr_disc_brief($scaleCode));
         case 'neo':   { $b = fr_txt('FERIA_NEO_BRIEF'); return fr_as_html($b[$scaleCode] ?? null); }
@@ -57,6 +65,14 @@ function fr_text_brief(string $engine, string $slug, string $scaleCode, string $
  */
 function fr_text_full(string $engine, string $slug, string $scaleCode, string $band, string $ctx = 'family'): ?string
 {
+    // ۱. ارجحیت تحلیل مونوگراف عمیق و تخصصی روان‌سنجی (با تفکیک دقیق باندها و ابعاد بالینی)
+    if (function_exists('fr_get_specialized_scale_analysis')) {
+        $spec = fr_get_specialized_scale_analysis($engine, $slug, $scaleCode, $band, $ctx, true);
+        if ($spec && !empty($spec['body'])) {
+            return $spec['body'];
+        }
+    }
+
     switch ($engine) {
         case 'disc':  return fr_as_html(fr_disc_full($scaleCode, $ctx === 'manager' ? 'manager' : 'family'));
         case 'neo':   { $f = fr_txt('FERIA_NEO_FULL'); return fr_as_html($f[$scaleCode] ?? null); }
