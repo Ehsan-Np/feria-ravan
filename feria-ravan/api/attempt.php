@@ -117,8 +117,26 @@ switch ($action) {
                       'missing'=>$missed]);
         }
         if ($total === 0) json_out(['ok'=>false,'message'=>'سؤالی برای این تست روانشناسی فعال نیست.']);
+
+        $duration = (int)($in['duration'] ?? 0);
+        if ($duration > 0) {
+            DB::update('attempts', ['duration_sec' => $duration], 'id=?', [$attemptId]);
+        }
+
         Analyzer::scoreAttempt($attemptId);
         log_activity('test_done', 'attempt', $attemptId, ['mode'=>$at['mode'],'test'=>$at['slug']]);
+
+        // بررسی و اتصال خودکار به پیوند تطابق دونفره معلق (فاز ۲)
+        try {
+            $pendingDyad = DB::one('SELECT id FROM ' . DB::t('dyads') .
+                ' WHERE user2_id=? AND test_id=? AND status="pending" ORDER BY id DESC LIMIT 1',
+                [$u['id'], $at['test_id']]);
+            if ($pendingDyad) {
+                require_once FR_ROOT . '/core/DyadAnalyzer.php';
+                DB::update('dyads', ['attempt2_id' => $attemptId, 'status' => 'ready'], 'id=?', [$pendingDyad['id']]);
+                DyadAnalyzer::analyze((int)$pendingDyad['id']);
+            }
+        } catch (Throwable $e) {}
 
         $name = user_fullname($u);
         $link = SITE_URL . '/panel/report.php?attempt=' . $attemptId;

@@ -431,9 +431,9 @@ function fr_update_pipeline(): void
                     FOREIGN KEY (`campaign_id`) REFERENCES `{$p}campaigns`(`id`) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
                 "ALTER TABLE `{$p}notify_log` MODIFY COLUMN `msg_kind` ENUM('slot','test','connected','bulk','planner','campaign','event') NOT NULL DEFAULT 'slot'",
-                "ALTER TABLE `{$p}attempts` ADD COLUMN `nudge_sent` TINYINT(1) NOT NULL DEFAULT 0 AFTER `progress`",
-                "ALTER TABLE `{$p}consult_appointments` ADD COLUMN `social_reminded_at` DATETIME DEFAULT NULL",
-                "ALTER TABLE `{$p}event_registrations` ADD COLUMN `social_reminded_at` DATETIME DEFAULT NULL",
+                "ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `nudge_sent` TINYINT(1) NOT NULL DEFAULT 0 AFTER `progress`",
+                "ALTER TABLE `{$p}consult_appointments` ADD COLUMN IF NOT EXISTS `social_reminded_at` DATETIME DEFAULT NULL",
+                "ALTER TABLE `{$p}event_registrations` ADD COLUMN IF NOT EXISTS `social_reminded_at` DATETIME DEFAULT NULL",
             ] as $q) {
                 try { DB::run($q); } catch (Throwable $e) { error_log('feria: 2.5 ddl: ' . $e->getMessage()); }
             }
@@ -685,6 +685,87 @@ function fr_update_pipeline(): void
                 try { if (DB::setting($k, null) === null) DB::setSetting($k, $v); } catch (Throwable $e) { /* بی‌صدا */ }
             }
         } catch (Throwable $e) { error_log('feria: 3.0 deposit-suite: ' . $e->getMessage()); }
+
+        /* ─── ۳٫۰٫۱: اصلاح کامل دسترسی به نسخهٔ ویژه و همگام‌سازی آزمون‌های پرداخت‌شده ───
+           ۱. ارتقای خودکار تلاش‌های رایگانی که سفارش پرداخت‌شده دارند به mode='full'
+           ۲. پاک‌سازی تلاش‌های خالی معلق ناشی از فرآیند قبلی خرید */
+        try {
+            $p = DB_PREFIX;
+            // ارتقای تلاش‌های دارای سفارش پرداخت‌شده
+            DB::run("UPDATE `{$p}attempts` a
+                     JOIN `{$p}orders` o ON o.user_id = a.user_id AND o.test_id = a.test_id AND o.status = 'paid'
+                     SET a.mode = 'full', a.order_id = COALESCE(a.order_id, o.id)
+                     WHERE a.mode = 'free' AND a.status = 'completed'");
+
+            // پاک‌سازی تلاش‌های خالی معلق
+            DB::run("DELETE a FROM `{$p}attempts` a
+                     JOIN `{$p}orders` o ON o.id = a.order_id AND o.status = 'paid'
+                     WHERE a.status = 'in_progress' AND a.progress = 0
+                       AND EXISTS (SELECT 1 FROM `{$p}attempts` a2
+                                   WHERE a2.user_id = a.user_id AND a2.test_id = a.test_id AND a2.status = 'completed')");
+        } catch (Throwable $e) { error_log('feria: 3.0.1 upgrade-fix: ' . $e->getMessage()); }
+
+        /* ─── ۳٫۱٫۰: فاز ۱ روان‌سنجی دقیق (T-Scores، پایایی و اعتبارسنجی L-Scale)
+                   + فاز ۲ تحلیل تطابق دونفره و زوجین (Dyadic Synergy) ─── */
+        try {
+            $p = DB_PREFIX;
+            foreach ([
+                "ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `duration_sec` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `progress`",
+                "ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `validity_json` TEXT NULL AFTER `duration_sec`",
+                "ALTER TABLE `{$p}results` ADD COLUMN IF NOT EXISTS `t_score` FLOAT NULL DEFAULT NULL AFTER `percent`",
+                "ALTER TABLE `{$p}results` ADD COLUMN IF NOT EXISTS `sten_score` FLOAT NULL DEFAULT NULL AFTER `t_score`",
+                "ALTER TABLE `{$p}results` ADD COLUMN IF NOT EXISTS `percentile` FLOAT NULL DEFAULT NULL AFTER `sten_score`",
+                "CREATE TABLE IF NOT EXISTS `{$p}dyads` (
+                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `token` VARCHAR(32) NOT NULL,
+                    `test_id` INT UNSIGNED NOT NULL,
+                    `user1_id` BIGINT UNSIGNED NOT NULL,
+                    `attempt1_id` BIGINT UNSIGNED NOT NULL,
+                    `user2_id` BIGINT UNSIGNED DEFAULT NULL,
+                    `attempt2_id` BIGINT UNSIGNED DEFAULT NULL,
+                    `rel_type` ENUM('couple','spouse','coworker','friend','business') NOT NULL DEFAULT 'couple',
+                    `status` ENUM('pending','ready','archived') NOT NULL DEFAULT 'pending',
+                    `synergy_score` INT UNSIGNED DEFAULT NULL,
+                    `summary_json` MEDIUMTEXT DEFAULT NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uq_token` (`token`),
+                    KEY `ix_u1` (`user1_id`),
+                    KEY `ix_u2` (`user2_id`),
+                    KEY `ix_att1` (`attempt1_id`),
+                    KEY `ix_att2` (`attempt2_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            ] as $q) {
+                try { DB::run($q); } catch (Throwable $e) { error_log('feria: 3.1 ddl: ' . $e->getMessage()); }
+            }
+        } catch (Throwable $e) { error_log('feria: 3.1 psychometrics & dyads: ' . $e->getMessage()); }
+
+        /* ─── ۳٫۲٫۰: فاز ۳ پیوند کارنامه به پلنر روزانه (Growth Tasks)
+                   + فاز ۴ پرونده بالینی و تشخیصی مشاور (Clinical Case Summary) ─── */
+        try {
+            $p = DB_PREFIX;
+            foreach ([
+                "ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `growth_injected` TINYINT(1) NOT NULL DEFAULT 0 AFTER `validity_json`",
+                "ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `ref_attempt_id` BIGINT UNSIGNED DEFAULT NULL AFTER `user_id`",
+                "ALTER TABLE `{$p}planner_tasks` ADD KEY IF NOT EXISTS `ix_ref_att` (`ref_attempt_id`)",
+                "CREATE TABLE IF NOT EXISTS `{$p}clinical_notes` (
+                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `attempt_id` BIGINT UNSIGNED NOT NULL,
+                    `user_id` BIGINT UNSIGNED NOT NULL,
+                    `admin_id` INT UNSIGNED NOT NULL,
+                    `diagnosis` VARCHAR(255) DEFAULT NULL,
+                    `notes` MEDIUMTEXT NOT NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    KEY `ix_att` (`attempt_id`),
+                    KEY `ix_u` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            ] as $q) {
+                try { DB::run($q); } catch (Throwable $e) { error_log('feria: 3.2 ddl: ' . $e->getMessage()); }
+            }
+        } catch (Throwable $e) { error_log('feria: 3.2 growth & clinical: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);

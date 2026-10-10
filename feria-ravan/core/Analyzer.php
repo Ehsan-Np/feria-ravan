@@ -65,6 +65,11 @@ final class Analyzer
             default => throw new RuntimeException('موتور ناشناخته: ' . $at['engine']),
         };
 
+        // فاز ۱: هنجاریابی روان‌سنجی (T-Scores، Sten، Percentile) + ارزیابی اعتبار پاسخ‌ها
+        require_once __DIR__ . '/Psychometrics.php';
+        Psychometrics::standardizeResults($attemptId, (string)$at['engine'], (string)($at['slug'] ?? ''));
+        Psychometrics::evaluateValidity($at, $answers, (int)($at['question_count'] ?? count($answers)));
+
         DB::update('attempts', ['status' => 'completed', 'completed_at' => date('Y-m-d H:i:s')],
                    'id=?', [$attemptId]);
         return true;

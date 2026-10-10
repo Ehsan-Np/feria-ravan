@@ -81,6 +81,7 @@ render_header('درحال انجام: ' . $at['title']);
 const ATTEMPT = <?= $attemptId ?>;
 const API     = '../api/attempt.php';
 const LABELS  = <?= json_encode($likertLabels, JSON_UNESCAPED_UNICODE) ?>;
+const START_TIME = Date.now();
 
 let TOTAL   = <?= max(1, (int)$at['question_count']) ?>;   // با state سرور سینک می‌شود
 let questions = [];        // کش سؤال‌ها (کلید: ایندکس = number-1)
@@ -279,7 +280,8 @@ $id('btnReview').onclick = async (e)=>{
 /* پایان */
 $id('btnFinish').onclick=async()=>{
   const btn=$id('btnFinish'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> درحال بررسی پاسخ‌ها...';
-  const r=await api(API,{action:'finish',attempt:ATTEMPT});
+  const durationSec = Math.max(1, Math.round((Date.now() - START_TIME) / 1000));
+  const r=await api(API,{action:'finish',attempt:ATTEMPT,duration:durationSec});
   if(!r.ok){
     btn.disabled=false; btn.innerHTML='پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯';
     if (r.redirect){ location.href=r.redirect; return; }

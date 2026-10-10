@@ -46,6 +46,27 @@ $open = DB::one("SELECT a.*, o.status AS os FROM " . DB::t('attempts') . " a
                  WHERE a.user_id=? AND a.test_id=? AND a.status='in_progress'
                  ORDER BY a.id DESC LIMIT 1", [$u['id'], $test['id']]);
 
+/* آیا قبلاً این تست را انجام داده است؟ */
+$completedFree = DB::one("SELECT * FROM " . DB::t('attempts') .
+    " WHERE user_id=? AND test_id=? AND status='completed' ORDER BY id DESC LIMIT 1", [$u['id'], $test['id']]);
+
+// اگر کاربر قبلاً نسخهٔ ویژه را خریداری و تکمیل کرده، مستقیماً به گزارش برود
+if ($completedFree && $completedFree['mode'] === 'full') {
+    redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$completedFree['id']);
+}
+
+// خودترمیمی: اگر جلسهٔ ناتمام خالی ناشی از پرداخت قبلی وجود دارد درحالی که تستی را تمام کرده، مستقیماً ارتقا و انتقال به گزارش
+if ($open && $open['os'] === 'paid' && $completedFree) {
+    $ansCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('answers') . " WHERE attempt_id=?", [$open['id']]);
+    if ($ansCount === 0) {
+        DB::run("DELETE FROM " . DB::t('attempts') . " WHERE id=?", [$open['id']]);
+        DB::update('attempts', ['mode' => 'full', 'order_id' => $open['order_id']], 'id=?', [$completedFree['id']]);
+        require_once __DIR__ . '/../core/Analyzer.php';
+        Analyzer::scoreAttempt((int)$completedFree['id']);
+        redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$completedFree['id']);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = (string)($_POST['mode'] ?? 'free');
 
@@ -68,10 +89,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $code = trim((string)($_POST['discount_code'] ?? ''));
         $useWallet = !empty($_POST['use_wallet']);
-        $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet);
+        $upgradeAttemptId = (int)($_POST['upgrade_attempt'] ?? ($_GET['upgrade_attempt'] ?? 0));
+        if ($upgradeAttemptId <= 0 && $completedFree) {
+            $upgradeAttemptId = (int)$completedFree['id'];
+        }
+        $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet, $upgradeAttemptId > 0 ? $upgradeAttemptId : null);
         if ($r['error']) $err = $r['error'];
         elseif ($r['payment_url']) redirect($r['payment_url']);          // → درگاه
-        else redirect(SITE_URL . '/panel/take.php?attempt=' . (int)$r['attempt_id']); // پرداخت صفر
+        else {
+            $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
+            if ($attRow && $attRow['status'] === 'completed') {
+                redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$r['attempt_id']);
+            } else {
+                redirect(SITE_URL . '/panel/take.php?attempt=' . (int)$r['attempt_id']);
+            }
+        }
     }
 }
 
@@ -91,7 +123,8 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
 <div class="fr-alert warn">
   شما یک جلسهٔ ناتمام از این تست روانشناسی دارید.
   <?php if ($open['mode']==='full' && $open['os']!=='paid'): ?>
-    — ابتدا پرداخت را تکمیل کنید: <a href="payments.php">بخش تراکنش‌ها</a>
+    — <a href="test-start.php?id=<?= (int)$test['id'] ?>&resume=1"><b>💳 پرداخت سفارش معلق ←</b></a>
+    | <a href="abandon.php?attempt=<?= (int)$open['id'] ?>&back=<?= urlencode($_SERVER['REQUEST_URI']) ?>">انصراف و لغو</a>
   <?php else: ?>
     <a href="take.php?attempt=<?= (int)$open['id'] ?>"><b>ادامه از سؤال <?= fa_num($open['progress'] + 1) ?> ←</b></a>
   | <a href="abandon.php?attempt=<?= (int)$open['id'] ?>&back=<?= urlencode($_SERVER['REQUEST_URI']) ?>">انصراف و شروع مجدد</a>
@@ -158,6 +191,12 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
         <form method="post" id="fullForm">
           <?= csrf_field() ?>
           <input type="hidden" name="mode" value="full">
+          <?php if ($completedFree): ?>
+          <div class="fr-alert ok" style="font-size:12.5px;margin-bottom:12px;line-height:1.9">
+            🎉 شما قبلاً این تست روانشناسی را انجام داده‌اید. با خرید نسخه ویژه، بلافاصله به <b>تحلیل کامل و تخصصی</b> تمام پاسخ‌هایتان دسترسی خواهید داشت (بدون نیاز به پاسخ‌گویی دوباره).
+          </div>
+          <input type="hidden" name="upgrade_attempt" value="<?= (int)$completedFree['id'] ?>">
+          <?php endif; ?>
           <div style="display:flex;gap:8px;margin-bottom:12px">
             <input class="fr-input" id="dcCode" name="discount_code" placeholder="کد تخفیف (اختیاری)" style="direction:ltr;text-align:right">
             <button class="fr-btn ghost sm" type="button" id="btnDc">اعمال</button>
@@ -170,7 +209,9 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
           </label>
           <?php endif; ?>
           <button class="fr-btn" style="width:100%;justify-content:center">
-            <?= $pDeal['final'] === 0 ? 'شروع نسخه ویژه (رایگان)' : 'پرداخت و شروع ←' ?>
+            <?= $pDeal['final'] === 0
+                ? ($completedFree ? 'دریافت رایگان تحلیل ویژه' : 'شروع نسخه ویژه (رایگان)')
+                : ($completedFree ? 'پرداخت و دریافت تحلیل ویژه ←' : 'پرداخت و شروع ←') ?>
           </button>
         </form>
       </div>

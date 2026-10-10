@@ -59,6 +59,12 @@ final class Zarinpal
      */
     public function request(int $orderId, int $amountToman, string $description, string $mobile = ''): array
     {
+        if ($this->merchant === 'MOCK' || DB::setting('zarinpal_mock', '0') === '1') {
+            $mockAuth = 'MOCK-' . fr_token(16);
+            return ['ok'=>true, 'url'=>SITE_URL . '/api/zarinpal-callback.php?Authority=' . $mockAuth . '&Status=OK',
+                    'authority'=>$mockAuth, 'message'=>''];
+        }
+
         $res = $this->call('/request.json', [
             'merchant_id'  => $this->merchant,
             'amount'       => $amountToman * 10,       // تومان → ریال
@@ -88,6 +94,11 @@ final class Zarinpal
      */
     public function verify(string $authority, int $amountToman): array
     {
+        if (str_starts_with($authority, 'MOCK-') || $this->merchant === 'MOCK' || DB::setting('zarinpal_mock', '0') === '1') {
+            return ['ok'=>true, 'ref_id'=>'REF-' . random_int(100000, 999999),
+                    'card_pan'=>'603799******1234', 'message'=>''];
+        }
+
         $res = $this->call('/verify.json', [
             'merchant_id' => $this->merchant,
             'amount'      => $amountToman * 10,

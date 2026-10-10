@@ -91,7 +91,13 @@ final class ReportBuilder
     <div style="border-right:3px solid <?= e($r['color'] ?: 'var(--c-primary)') ?>;padding-right:14px;margin-bottom:22px">
       <b style="font-size:15px"><?= e($tpl['title'] ?? ('تحلیل بُعد «' . ($r['title_fa'] ?? $r['scale_code']) . '»')) ?></b>
       <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
-        نمره: <?= fa_num($r['percent']) ?>٪ — وضعیت: <b style="color:<?= $bandColor ?>"><?= $bandFa ?></b></div>
+        نمره: <?= fa_num($r['percent']) ?>٪ — وضعیت: <b style="color:<?= $bandColor ?>"><?= $bandFa ?></b>
+        <?php if (!empty($r['t_score'])): ?>
+          &nbsp;·&nbsp; نمرهٔ تراز T: <b style="direction:ltr;display:inline-block"><?= fa_num($r['t_score']) ?></b>
+          &nbsp;·&nbsp; استن: <b><?= fa_num($r['sten_score']) ?>/۱۰</b>
+          &nbsp;·&nbsp; رتبه درصدی جامعه: <b><?= fa_num($r['percentile']) ?>٪</b>
+        <?php endif; ?>
+      </div>
       <div style="font-size:13.5px;line-height:2.15;color:#3a3360"><?= $body ?></div>
     </div>
         <?php
@@ -183,6 +189,47 @@ final class ReportBuilder
     </div>
   </div>
 
+  <?php
+  $valJson = json_decode((string)($attempt['validity_json'] ?? ''), true);
+  if ($valJson):
+      $vScore = (int)($valJson['score'] ?? 100);
+      $vStatus = (string)($valJson['status'] ?? 'high');
+      $vColor = match($vStatus) { 'high' => '#166534', 'acceptable' => '#854d0e', default => '#991b1b' };
+      $vBg = match($vStatus) { 'high' => '#f0fdf4', 'acceptable' => '#fefce8', default => '#fef2f2' };
+      $vBorder = match($vStatus) { 'high' => '#86efac', 'acceptable' => '#fde047', default => '#fca5a5' };
+      $durSec = (int)($valJson['duration_sec'] ?? 0);
+      $durText = $durSec > 0 ? (floor($durSec / 60) . ' دقیقه و ' . ($durSec % 60) . ' ثانیه') : 'ثبت‌شده';
+  ?>
+  <!-- کارت سنجش اعتبار روان‌سنجی آزمون (فاز ۱) -->
+  <div class="fr-card" style="background:<?= $vBg ?>;border:1px solid <?= $vBorder ?>;padding:16px 20px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px"><?= $vStatus === 'high' ? '🛡️' : ($vStatus === 'acceptable' ? '⚖️' : '⚠️') ?></span>
+        <div>
+          <b style="color:<?= $vColor ?>;font-size:14px"><?= e($valJson['status_fa'] ?? 'اعتبار روان‌سنجی استاندارد') ?></b>
+          <div style="font-size:12px;color:<?= $vColor ?>;opacity:.85;margin-top:2px">
+            شاخص پایایی پاسخ‌ها: <b><?= fa_num($vScore) ?>٪</b> &nbsp;·&nbsp;
+            مدت‌زمان پاسخ‌دهی: <b><?= fa_num($durText) ?></b>
+            <?php if (!empty($valJson['sec_per_q'])): ?>
+              (میانگین <?= fa_num($valJson['sec_per_q']) ?> ثانیه برای هر سؤال)
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+      <span style="font-size:11.5px;background:rgba(255,255,255,.8);border:1px solid <?= $vBorder ?>;color:<?= $vColor ?>;padding:4px 10px;border-radius:12px;font-weight:600">
+        پروتکل استاندارد روان‌سنجی فریا
+      </span>
+    </div>
+    <?php if (!empty($valJson['flags'])): ?>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed <?= $vBorder ?>;font-size:12px;color:<?= $vColor ?>">
+        <?php foreach ($valJson['flags'] as $vf): ?>
+          <div>• <b><?= e($vf['title']) ?>:</b> <?= e($vf['desc']) ?></div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <?php if ($engine === 'disc'): ?>
     <?php if ($isFull) self::discChapters($attempt, $test, $results); else self::discFreePattern($attempt, $results); ?>
   <?php endif; ?>
@@ -261,7 +308,7 @@ final class ReportBuilder
       <p style="font-size:13.5px;line-height:2.2;color:#4a3f7a;margin:0"><?= nl2br(e($teaser)) ?></p>
       <?php $rDeal = fr_price_deal((int)$test['price_full'], isset($test['price_sale']) ? (int)$test['price_sale'] : null); ?>
       <?php if ($rDeal['final'] > 0): ?>
-      <a class="fr-btn" style="margin-top:14px" href="test-start.php?id=<?= (int)$test['id'] ?>">⭐ دریافت نسخهٔ ویژه — <?php if ($rDeal['has_sale']): ?><del style="opacity:.75;font-weight:400"><?= toman($rDeal['list']) ?></del> <?php endif; ?><?= toman($rDeal['final']) ?><?= $rDeal['has_sale'] ? ' (' . fa_num($rDeal['percent']) . '٪ تخفیف)' : '' ?></a>
+      <a class="fr-btn" style="margin-top:14px" href="test-start.php?id=<?= (int)$test['id'] ?>&upgrade_attempt=<?= (int)$attempt['id'] ?>">⭐ دریافت نسخهٔ ویژه — <?php if ($rDeal['has_sale']): ?><del style="opacity:.75;font-weight:400"><?= toman($rDeal['list']) ?></del> <?php endif; ?><?= toman($rDeal['final']) ?><?= $rDeal['has_sale'] ? ' (' . fa_num($rDeal['percent']) . '٪ تخفیف)' : '' ?></a>
       <?php endif; ?>
     </div>
     <?php else:
@@ -298,6 +345,30 @@ final class ReportBuilder
       <li>برای کار عمیق‌تر روی نقاط رشد، از کارگاه‌ها، دوره‌ها و جلسات مشاورهٔ ما استفاده کنید.</li>
       <li>پیشنهاد می‌کنیم هر ۶ ماه تست روانشناسی را تکرار و تغییراتتان را پایش کنید.</li>
     </ul>
+  </div>
+
+  <!-- بخش برنامهٔ رشد پویا در پلنر روزانه (فاز ۳) -->
+  <div class="fr-card" style="background:#f5f3ff;border:1.5px solid #c4b5fd;margin-top:20px;border-radius:14px;padding:22px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
+      <div style="flex:1;min-width:280px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:24px">🎯</span>
+          <h3 style="margin:0;font-size:16px;color:#5b21b6">برنامهٔ عمل و تمرین‌های رشد اختصاصی در برنامهٔ روزانه (پلنر)</h3>
+        </div>
+        <p style="font-size:13px;color:#4c1d95;margin:0;line-height:2">
+          می‌توانید تکالیف رفتاری و تمرین‌های روان‌شناختی متناسب با نقاط قوت و بهبود این کارنامه را به پلنر روزانهٔ خود اضافه کنید تا با یادآورهای خودکار پیگیری شوند.
+        </p>
+      </div>
+      <div>
+        <form method="post" action="report.php?attempt=<?= (int)$attempt['id'] ?>" style="margin:0">
+          <?= csrf_field() ?>
+          <input type="hidden" name="act" value="inject_growth">
+          <button class="fr-btn" style="background:#7c3aed">
+            <?= !empty($attempt['growth_injected']) ? '🔄 به‌روزرسانی تمرین‌ها در پلنر روزانه ←' : '➕ افزودن تمرین‌های رشد به پلنر من ←' ?>
+          </button>
+        </form>
+      </div>
+    </div>
   </div>
   <?php endif; ?>
 

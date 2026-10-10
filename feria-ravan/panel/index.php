@@ -30,9 +30,32 @@ $stats = [
 ];
 
 /* آخرین تست‌های روانشناسی کاربر */
-$recent = DB::all("SELECT a.*, t.title AS test_title, t.slug FROM " . DB::t('attempts') . " a
+$recent = DB::all("SELECT a.*, t.title AS test_title, t.slug, o.status AS order_status, o.id AS order_id
+                   FROM " . DB::t('attempts') . " a
                    JOIN " . DB::t('tests') . " t ON t.id=a.test_id
+                   LEFT JOIN " . DB::t('orders') . " o ON o.id=a.order_id
                    WHERE a.user_id=? ORDER BY a.id DESC LIMIT 6", [$u['id']]);
+
+// همگام‌سازی دسترسی‌های پرداخت‌شده
+foreach ($recent as &$r) {
+    if ($r['mode'] === 'free' && $r['status'] !== 'in_progress') {
+        $paidOrder = null;
+        if (!empty($r['order_id'])) {
+            $paidOrder = DB::one("SELECT id FROM " . DB::t('orders') . " WHERE id=? AND status='paid'", [(int)$r['order_id']]);
+        }
+        if (!$paidOrder) {
+            $paidOrder = DB::one("SELECT id FROM " . DB::t('orders') .
+                                 " WHERE user_id=? AND test_id=? AND status='paid' ORDER BY id DESC LIMIT 1",
+                                 [$u['id'], $r['test_id']]);
+        }
+        if ($paidOrder) {
+            DB::update('attempts', ['mode' => 'full', 'order_id' => $paidOrder['id']], 'id=?', [$r['id']]);
+            $r['mode'] = 'full';
+            $r['order_id'] = $paidOrder['id'];
+        }
+    }
+}
+unset($r);
 
 /* ثبت‌نام‌های من در کارگاه‌ها/دوره‌ها (نسخهٔ ۲٫۰ — همهٔ اطلاعاتِ کاربر در داشبورد) */
 $myEvents = DB::all("SELECT r.*, e.title, e.kind, e.starts_at, e.teacher, e.slug AS ev_slug

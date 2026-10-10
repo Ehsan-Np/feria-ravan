@@ -20,5 +20,6 @@ Thumbs.db
 # خروجی‌های حجیم توسعه (در گیت نمی‌آیند)
 *.zip
 *.sql
+!feria-ravan/install/schema.sql
 qa-shots/
 node_modules/

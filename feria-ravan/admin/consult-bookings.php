@@ -150,6 +150,7 @@ echo flash();
         <small style="color:var(--muted)"><?= $r['order_status'] === 'paid' ? 'پرداخت‌شده' : ($r['payable'] ? 'نقدی/نامشخص' : '—') ?></small></td>
       <td><span class="fr-chip <?= $stC ?>"><?= $stT ?></span></td>
       <td class="actions" style="white-space:nowrap">
+        <a class="fr-btn sm ghost" style="color:#4338ca" href="user-view.php?id=<?= $r['user_id'] ?>" title="مشاهده پرونده و خلاصه بالینی مراجع">📋 پرونده</a>
         <?php if ($r['status'] === 'booked'): ?>
         <?php if ($ts > time()): ?>
         <form method="post" style="display:inline" title="ارسال پیامک یادآوری نوبت"><?= csrf_field() ?>

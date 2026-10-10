@@ -69,6 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'wallet_adjust') {
 if (($view = (int)($_GET['report'] ?? 0))) {
     $at = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=? AND user_id=?', [$view, $id]);
     if ($at) {
+        if ($at['mode'] === 'free') {
+            $paidOrder = DB::one("SELECT id FROM " . DB::t('orders') . " WHERE user_id=? AND test_id=? AND status='paid' ORDER BY id DESC LIMIT 1", [$id, $at['test_id']]);
+            if ($paidOrder) {
+                DB::update('attempts', ['mode' => 'full', 'order_id' => $paidOrder['id']], 'id=?', [$at['id']]);
+                $at['mode'] = 'full';
+                require_once __DIR__ . '/../core/Analyzer.php';
+                Analyzer::scoreAttempt((int)$at['id']);
+            }
+        }
         admin_layout($adm, 'users', 'مشاهده تحلیل — ' . user_fullname($u));
         echo '<a class="fr-btn ghost sm" href="user-view.php?id='.$id.'">→ بازگشت به پرونده</a><br><br>';
         echo ReportBuilder::build($at, $u, $at['mode']);
@@ -78,6 +87,16 @@ if (($view = (int)($_GET['report'] ?? 0))) {
 
 $attempts = DB::all("SELECT a.*, t.title AS ttitle FROM " . DB::t('attempts') . " a
                      JOIN " . DB::t('tests') . " t ON t.id=a.test_id WHERE a.user_id=? ORDER BY a.id DESC", [$id]);
+foreach ($attempts as &$a) {
+    if ($a['mode'] === 'free' && $a['status'] !== 'in_progress') {
+        $paidOrder = DB::one("SELECT id FROM " . DB::t('orders') . " WHERE user_id=? AND test_id=? AND status='paid' ORDER BY id DESC LIMIT 1", [$id, $a['test_id']]);
+        if ($paidOrder) {
+            DB::update('attempts', ['mode' => 'full', 'order_id' => $paidOrder['id']], 'id=?', [$a['id']]);
+            $a['mode'] = 'full';
+        }
+    }
+}
+unset($a);
 $orders   = DB::all("SELECT o.*, CASE o.kind WHEN 'event' THEN CONCAT('🛠 ', COALESCE(ev.title,'رویداد'))
                            WHEN 'consult' THEN '🛋 رزرو مشاوره'
                            ELSE CONCAT('🧠 ', COALESCE(t.title,'تست روانشناسی')) END AS ttitle
@@ -156,7 +175,8 @@ echo flash();
       <td style="font-size:12px"><?= fa_num(jdate('j F Y', strtotime($a['started_at']))) ?></td>
       <td class="actions">
         <?php if ($a['status']!=='in_progress'): ?>
-        <a class="fr-btn sm" href="user-view.php?id=<?= $id ?>&report=<?= $a['id'] ?>">👁 مشاهده تحلیل</a>
+        <a class="fr-btn sm" href="user-view.php?id=<?= $id ?>&report=<?= $a['id'] ?>">👁 کارنامه مراجع</a>
+        <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" title="خلاصه پرونده بالینی و تشخیصی مشاور">📋 پرونده بالینی مشاور</a>
         <form method="post" style="display:inline" onsubmit="return confirm('لینک گزارش برای کاربر پیامک شود؟')">
           <?= csrf_field() ?><input type="hidden" name="act" value="sms_report">
           <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">

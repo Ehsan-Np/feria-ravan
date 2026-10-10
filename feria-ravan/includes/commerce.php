@@ -6,6 +6,11 @@
  */
 declare(strict_types=1);
 
+if (defined('FR_ROOT')) {
+    require_once FR_ROOT . '/core/Zarinpal.php';
+    require_once FR_ROOT . '/core/Kavenegar.php';
+}
+
 /**
  * بررسی و محاسبهٔ کد تخفیف
  * حالت‌ها: درصدی/مبلغی، سقف تخفیف، حداقل خرید، محدود به تست، محدود به رویداد،
@@ -71,9 +76,10 @@ function validate_discount(string $code, int $testId, int $userId, int $amount, 
 
 /**
  * ساخت سفارش + رکورد پرداخت + جلسهٔ تست روانشناسی (نسخهٔ ویژه)
- * @return array ['order'=>array,'payment_url'=>?string,'error'=>?string]
+ * پشتیبانی از ارتقای مستقیم آزمونِ تکمیل‌شدهٔ رایگان به نسخهٔ ویژه بدون نیاز به پاسخ‌گویی دوباره
+ * @return array ['order'=>array,'payment_url'=>?string,'error'=>?string,'attempt_id'=>?int]
  */
-function create_full_order(array $u, array $test, ?string $discountCode, bool $useWallet = false): array
+function create_full_order(array $u, array $test, ?string $discountCode, bool $useWallet = false, ?int $upgradeAttemptId = null): array
 {
     // نسخهٔ ۲٫۸: قیمت نهایی = قیمت با تخفیف در صورت اعتبار، وگرنه قیمت اصلی
     if (!array_key_exists('price_sale', $test)) {
@@ -86,21 +92,56 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
 
     if ($discountCode) {
         $v = validate_discount($discountCode, (int)$test['id'], (int)$u['id'], $amount);
-        if (!$v['ok']) return ['order'=>[], 'payment_url'=>null, 'error'=>$v['message']];
+        if (!$v['ok']) return ['order'=>[], 'payment_url'=>null, 'error'=>$v['message'], 'attempt_id'=>null];
         $discAmt = $v['discount_amt']; $payable = $v['payable']; $d = $v['discount'];
     }
 
     // ۱) سفارش
     $orderId = DB::insert('orders', [
-        'user_id'=>$u['id'], 'test_id'=>$test['id'], 'amount'=>$amount,
+        'user_id'=>$u['id'], 'test_id'=>$test['id'], 'kind'=>'test_full', 'amount'=>$amount,
         'discount_code'=> $d['code'] ?? null, 'discount_amt'=>$discAmt, 'payable'=>$payable,
     ]);
 
-    // ۲) جلسهٔ تست روانشناسی در حالت ویژه (قبل از پرداخت ساخته می‌شود؛ بعد از پرداخت آزاد می‌شود)
-    $attemptId = DB::insert('attempts', [
-        'user_id'=>$u['id'], 'test_id'=>$test['id'], 'order_id'=>$orderId, 'mode'=>'full',
-        'ip'=>client_ip_bin(), 'user_agent'=>substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
-    ]);
+    // ۲) جلسهٔ تست روانشناسی: اتصال به تلاش قبلی (برای ارتقا) یا ایجاد تلاش ویژه جدید
+    $attemptId = null;
+    if ($upgradeAttemptId && $upgradeAttemptId > 0) {
+        $existing = DB::one('SELECT id, status, mode FROM ' . DB::t('attempts') .
+                           ' WHERE id=? AND user_id=? AND test_id=?', [$upgradeAttemptId, $u['id'], $test['id']]);
+        if ($existing) {
+            $attemptId = (int)$existing['id'];
+            DB::update('attempts', ['order_id'=>$orderId], 'id=?', [$attemptId]);
+        }
+    }
+
+    if (!$attemptId) {
+        // اگر کاربر قبلاً نسخهٔ رایگان را تکمیل کرده، همان را به سفارش متصل می‌کنیم تا نیازی به آزمون مجدد نباشد
+        $lastCompleted = DB::one('SELECT id FROM ' . DB::t('attempts') .
+            " WHERE user_id=? AND test_id=? AND mode='free' AND status='completed' ORDER BY id DESC LIMIT 1",
+            [$u['id'], $test['id']]);
+        if ($lastCompleted) {
+            $attemptId = (int)$lastCompleted['id'];
+            DB::update('attempts', ['order_id'=>$orderId], 'id=?', [$attemptId]);
+        }
+    }
+
+    if (!$attemptId) {
+        // اگر تلاشی درحال‌انجام دارد، به آن وصل می‌کنیم
+        $lastInProgress = DB::one('SELECT id FROM ' . DB::t('attempts') .
+            " WHERE user_id=? AND test_id=? AND status='in_progress' ORDER BY id DESC LIMIT 1",
+            [$u['id'], $test['id']]);
+        if ($lastInProgress) {
+            $attemptId = (int)$lastInProgress['id'];
+            DB::update('attempts', ['order_id'=>$orderId], 'id=?', [$attemptId]);
+        }
+    }
+
+    if (!$attemptId) {
+        // جلسهٔ جدید در حالت ویژه (قبل از پرداخت ساخته می‌شود؛ بعد از پرداخت آزاد می‌شود)
+        $attemptId = DB::insert('attempts', [
+            'user_id'=>$u['id'], 'test_id'=>$test['id'], 'order_id'=>$orderId, 'mode'=>'full',
+            'ip'=>client_ip_bin(), 'user_agent'=>substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+        ]);
+    }
 
     // ۳) ثبت استفاده از کد تخفیف (همینجا ظرفیت رزرو می‌شود)
     if ($d) {
@@ -113,9 +154,8 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
     // ۴) اگر پس از تخفیف صفر شد → پرداخت موفق بدون درگاه
     if ($payable === 0) {
         mark_order_paid($orderId, 'FREE-' . fr_token(8), null);
-        $attempt = $attemptId;
         return ['order'=>DB::one('SELECT * FROM ' . DB::t('orders') . ' WHERE id=?', [$orderId]),
-                'payment_url'=>null, 'error'=>null, 'attempt_id'=>$attempt];
+                'payment_url'=>null, 'error'=>null, 'attempt_id'=>$attemptId];
     }
 
     // ۴٫۵) پرداخت از کیف پول (کل یا بخشی) — نسخهٔ ۱٫۶
@@ -137,7 +177,7 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
         // جبران کامل: هر بخشی که از کیف پول رفته، برمی‌گردد تا پول کاربر گم نشود
         require_once __DIR__ . '/wallet.php';
         fr_cancel_dead_order($orderId, 'خطای اتصال به درگاه');
-        return ['order'=>[], 'payment_url'=>null, 'error'=>'خطا در اتصال به درگاه: ' . $res['message']];
+        return ['order'=>[], 'payment_url'=>null, 'error'=>'خطا در اتصال به درگاه: ' . $res['message'], 'attempt_id'=>null];
     }
 
     DB::insert('payments', [
@@ -413,6 +453,53 @@ function mark_order_paid(int $orderId, string $refId, ?string $cardPan): void
         if ($reg && $evRow && $stage !== 'deposit') ev_notify_companions((int)$reg['id'], $evRow);
         if ($reg && $evRow && $stage === 'deposit') fr_deposit_notify_reg((int)$reg['id']);
         if ($reg && $evRow && $stage === 'settle')  fr_settle_notify_reg((int)$reg['id'], $refId);
+    }
+
+    // اگر سفارش تست روانشناسی است ← اعطای دسترسی نسخه ویژه و به‌روزرسانی گزارش
+    if (!empty($o['test_id'])) {
+        $testId = (int)$o['test_id'];
+        $userId = (int)$o['user_id'];
+
+        // ۱. تلاشی که مستقیم به این سفارش متصل شده است
+        $targetAtt = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE order_id=?', [$orderId]);
+
+        // ۲. تلاش تکمیل‌شده قبلی کاربر برای این تست
+        $completedAtt = DB::one('SELECT * FROM ' . DB::t('attempts') .
+            " WHERE user_id=? AND test_id=? AND status='completed' ORDER BY id DESC LIMIT 1",
+            [$userId, $testId]);
+
+        // اگر یک تلاش خالی درحال‌انجام به سفارش متصل شده اما کاربر از قبل تستی تمام‌شده دارد،
+        // تلاش خالی اضافی را پاک کرده و سفارش را به تلاش تکمیل‌شده پیوند می‌دهیم
+        if ($targetAtt && $targetAtt['status'] === 'in_progress' && $completedAtt && (int)$targetAtt['id'] !== (int)$completedAtt['id']) {
+            $ansCount = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('answers') . ' WHERE attempt_id=?', [$targetAtt['id']]);
+            if ($ansCount === 0) {
+                DB::run('DELETE FROM ' . DB::t('attempts') . ' WHERE id=?', [$targetAtt['id']]);
+                $targetAtt = null;
+            }
+        }
+
+        if (!$targetAtt && $completedAtt) {
+            $targetAtt = $completedAtt;
+        }
+
+        if ($targetAtt) {
+            DB::update('attempts', ['mode' => 'full', 'order_id' => $orderId], 'id=?', [$targetAtt['id']]);
+
+            // اگر آزمون تکمیل شده، نمره‌گذاری و تولید کامل تحلیل ویژه صورت گیرد
+            if ($targetAtt['status'] === 'completed') {
+                require_once __DIR__ . '/../core/Analyzer.php';
+                Analyzer::scoreAttempt((int)$targetAtt['id']);
+
+                $nameForSms = trim($o['first_name'] . ' ' . $o['last_name']) ?: 'کاربر';
+                $repLink = SITE_URL . '/panel/report.php?attempt=' . (int)$targetAtt['id'];
+                (new Kavenegar())->sendEvent('report_full', $o['mobile'], [
+                    'name'    => $nameForSms,
+                    'test'    => $o['test_title'] ?? 'تست روانشناسی',
+                    'link'    => $repLink,
+                    '_tokens' => [$nameForSms, $o['test_title'] ?? 'تست روانشناسی', $repLink],
+                ]);
+            }
+        }
     }
 
     $itemTitle = $o['kind'] === 'event' ? ($o['event_title'] ?? 'رویداد') : ($o['test_title'] ?? 'تست روانشناسی');

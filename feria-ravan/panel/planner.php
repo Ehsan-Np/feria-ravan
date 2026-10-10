@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 fr_planner_ensure_day((int)$u['id'], $today);
 
 $tabRaw = (string)($_GET['t'] ?? 'today');
-$tab = in_array($tabRaw, ['today','week','all','cats','stats','recur','badges','focus'], true) ? $tabRaw : 'today';
+$tab = in_array($tabRaw, ['today','week','all','cats','stats','recur','badges','focus','delta'], true) ? $tabRaw : 'today';
 
 $tasks   = fr_planner_day_tasks((int)$u['id'], $today);
 $week    = fr_planner_week((int)$u['id']);
@@ -123,7 +123,17 @@ panel_layout($u, 'planner');
 echo (string)$plFlash();
 
 /* نوار برگه‌ها */
-$TABS = ['today' => '🗓 امروز', 'week' => '📅 نمای هفته', 'all' => '🔎 همهٔ کارها', 'recur' => '🔁 تکرارشونده‌ها', 'cats' => '🏷 دسته‌ها', 'stats' => '📈 آمار و پیشرفت', 'badges' => '🏅 دستاوردها', 'focus' => '⏱ تمرکز'];
+$TABS = [
+    'today'  => '🗓 امروز',
+    'week'   => '📅 نمای هفته',
+    'all'    => '🔎 همهٔ کارها',
+    'recur'  => '🔁 تکرارشونده‌ها',
+    'cats'   => '🏷 دسته‌ها',
+    'stats'  => '📈 آمار و پیشرفت',
+    'badges' => '🏅 دستاوردها',
+    'focus'  => '⏱ تمرکز',
+    'delta'  => '🎯 پایش رشد آزمون‌ها',
+];
 ?>
 <div class="pl-tabs">
   <?php foreach ($TABS as $k => $lbl): ?>
@@ -617,6 +627,132 @@ $TABS = ['today' => '🗓 امروز', 'week' => '📅 نمای هفته', 'all'
   fmt();
 })();
 </script>
+
+<?php elseif ($tab === 'delta'): ?>
+<!-- ════════════ برگهٔ پایش تغییرات و دلتا آزمون‌ها (فاز ۳) ════════════ -->
+<?php
+require_once __DIR__ . '/../core/GrowthEngine.php';
+
+$userTests = DB::all("SELECT DISTINCT t.id, t.title FROM " . DB::t('tests') . " t
+                      JOIN " . DB::t('attempts') . " a ON a.test_id = t.id
+                      WHERE a.user_id = ? AND a.status = 'completed'
+                      ORDER BY t.title ASC", [(int)$u['id']]);
+
+$selectedTestId = (int)($_GET['test_id'] ?? ($userTests[0]['id'] ?? 0));
+$deltaData = $selectedTestId > 0 ? GrowthEngine::getDeltaComparison((int)$u['id'], $selectedTestId) : ['has_comparison' => false, 'scales' => []];
+?>
+<div class="fr-card" style="margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+    <div>
+      <h3 style="margin:0 0 4px 0;font-size:16px">🎯 پایش تغییرات و مقایسهٔ آزمون‌های مجدد (Retest &amp; Delta Tracking)</h3>
+      <p style="font-size:12.5px;color:var(--muted);margin:0">
+        روند تغییرات و اثربخشی تمرین‌های خود را با مقایسهٔ آزمون‌های مجدد در گذر زمان مشاهده کنید.
+      </p>
+    </div>
+    <?php if ($userTests): ?>
+    <form method="get" style="display:flex;gap:8px;align-items:center;margin:0">
+      <input type="hidden" name="t" value="delta">
+      <select class="fr-input" name="test_id" onchange="this.form.submit()" style="font-size:13px;padding:6px 12px">
+        <?php foreach ($userTests as $ut): ?>
+        <option value="<?= $ut['id'] ?>" <?= $selectedTestId === (int)$ut['id'] ? 'selected' : '' ?>><?= e($ut['title']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </form>
+    <?php endif; ?>
+  </div>
+</div>
+
+<?php if (!$userTests): ?>
+  <div class="fr-card" style="text-align:center;padding:36px">
+    <div style="font-size:40px;margin-bottom:12px">🧠</div>
+    <h4>هنوز آزمونی تکمیل نکرده‌اید</h4>
+    <p style="color:var(--muted);font-size:13px;max-width:440px;margin:8px auto 16px auto;line-height:2">
+      برای سنجش ابعاد شخصیتی و پایش رشد رفتاری خود، ابتدا در یکی از آزمون‌های تخصصی شرکت کنید.
+    </p>
+    <a href="<?= SITE_URL ?>/panel/tests.php" class="fr-btn">مشاهده و شرکت در آزمون‌ها ←</a>
+  </div>
+<?php elseif (!$deltaData['has_comparison']): ?>
+  <div class="fr-card" style="text-align:center;padding:36px">
+    <div style="font-size:40px;margin-bottom:12px">🌱</div>
+    <h4>نیاز به تکرار آزمون (Retest)</h4>
+    <p style="color:var(--muted);font-size:13px;max-width:520px;margin:8px auto 16px auto;line-height:2">
+      شما این آزمون را یک بار انجام داده‌اید. برای محاسبهٔ دلتای رشد (&Delta;) و مقایسهٔ تغییرات شخصیتی یا رفتاری، پیشنهاد می‌شود پس از طی کردن تمرین‌های پلنر روزانه (حداقل ۲ تا ۴ هفته)، آزمون را مجدداً تکرار کنید.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
+      <a href="<?= SITE_URL ?>/panel/test-start.php?id=<?= $selectedTestId ?>" class="fr-btn">شرکت مجدد در این آزمون (Retest)</a>
+      <a href="?t=today" class="fr-btn ghost">انجام تمرین‌های امروز</a>
+    </div>
+  </div>
+<?php else: ?>
+  <div class="fr-grid cols-3" style="margin-bottom:16px">
+    <div class="fr-card" style="margin:0;text-align:center">
+      <small style="color:var(--muted)">تعداد دفعات آزمون</small>
+      <div style="font-size:24px;font-weight:bold;color:#4338ca;margin-top:4px"><?= fa_num($deltaData['total_attempts']) ?> نوبت</div>
+    </div>
+    <div class="fr-card" style="margin:0;text-align:center">
+      <small style="color:var(--muted)">تاریخ آزمون پایه</small>
+      <div style="font-size:14px;font-weight:bold;margin-top:8px"><?= fa_num(jdate('j F Y', strtotime($deltaData['first_attempt']['created_at'] ?? 'now'))) ?></div>
+    </div>
+    <div class="fr-card" style="margin:0;text-align:center">
+      <small style="color:var(--muted)">تاریخ آخرین آزمون</small>
+      <div style="font-size:14px;font-weight:bold;color:#10b981;margin-top:8px"><?= fa_num(jdate('j F Y', strtotime($deltaData['latest_attempt']['created_at'] ?? 'now'))) ?></div>
+    </div>
+  </div>
+
+  <div class="fr-card">
+    <h4 style="margin:0 0 14px 0">مقایسهٔ شاخص‌ها و میزان تغییر (&Delta;)</h4>
+    <div style="overflow-x:auto">
+      <table class="fr-table">
+        <thead>
+          <tr>
+            <th>شاخص / مؤلفه</th>
+            <th style="text-align:center">نمرهٔ اولیه</th>
+            <th style="text-align:center">نمرهٔ اخیر</th>
+            <th style="text-align:center">میزان تغییرات (&Delta;)</th>
+            <th>وضعیت روند</th>
+            <th>تحلیل و توصیه</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($deltaData['scales'] as $code => $sc):
+            $d = $sc['delta'];
+            $color = $d > 0 ? '#10b981' : ($d < 0 ? '#ef4444' : '#6b7280');
+            $badge = $d > 0 ? '+'.fa_num($d) : ($d < 0 ? fa_num($d) : 'بدون تغییر');
+          ?>
+          <tr>
+            <td><b><?= e($sc['title']) ?></b></td>
+            <td style="text-align:center;font-weight:bold"><?= fa_num(round($sc['first_score'], 1)) ?></td>
+            <td style="text-align:center;font-weight:bold"><?= fa_num(round($sc['latest_score'], 1)) ?></td>
+            <td style="text-align:center">
+              <span class="fr-chip" style="background:<?= $d >= 0 ? '#ecfdf5' : '#fef2f2' ?>;color:<?= $color ?>;font-weight:bold">
+                <?= $badge ?>
+              </span>
+            </td>
+            <td>
+              <?php if ($sc['trend'] === 'increased'): ?>
+                <span style="color:#10b981">▲ افزایش شاخص</span>
+              <?php elseif ($sc['trend'] === 'decreased'): ?>
+                <span style="color:#ef4444">▼ کاهش شاخص</span>
+              <?php else: ?>
+                <span style="color:#6b7280">■ پایدار و بدون تغییر</span>
+              <?php endif; ?>
+            </td>
+            <td style="font-size:12px;color:var(--muted)">
+              <?php if ($d > 0): ?>
+                نشان‌دهندهٔ تقویت فعالانهٔ این شاخص در رفتارهای روزمره.
+              <?php elseif ($d < 0): ?>
+                نیاز به بازنگری در الگوهای واکنشی و تمرین مستمرتر.
+              <?php else: ?>
+                شاخص در سطح تعادل پایدار حفظ شده است.
+              <?php endif; ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php

@@ -61,14 +61,25 @@ if (!$ver['ok']) {
 mark_order_paid((int)$pay['order_id'], (string)$ver['ref_id'], $ver['card_pan'] ?? null);
 
 // یافتن جلسهٔ تست روانشناسی یا ثبت‌نام رویداد مرتبط
-$order = DB::one('SELECT kind, event_id FROM ' . DB::t('orders') . ' WHERE id=?', [(int)$pay['order_id']]);
-$attempt = DB::one('SELECT id FROM ' . DB::t('attempts') . ' WHERE order_id=? ORDER BY id DESC', [(int)$pay['order_id']]);
+$order = DB::one('SELECT kind, event_id, test_id, user_id FROM ' . DB::t('orders') . ' WHERE id=?', [(int)$pay['order_id']]);
+$attempt = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE order_id=? ORDER BY id DESC', [(int)$pay['order_id']]);
+if (!$attempt && !empty($order['test_id'])) {
+    $attempt = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE user_id=? AND test_id=? ORDER BY id DESC',
+                      [(int)$pay['user_id'], (int)$order['test_id']]);
+}
+
 render_header('پرداخت موفق');
 echo '<div style="max-width:520px;margin:60px auto" class="fr-card" style="text-align:center">';
 echo '<div style="font-size:46px">🎉</div><h3>پرداخت شما با موفقیت انجام شد</h3>';
 echo '<p style="color:var(--muted)">کد رهگیری: <b style="direction:ltr;display:inline-block">' . e((string)$ver['ref_id']) . '</b></p>';
 if ($attempt) {
-    echo '<a class="fr-btn" href="' . SITE_URL . '/panel/take.php?attempt=' . (int)$attempt['id'] . '">شروع تست روانشناسی ←</a> ';
+    if ($attempt['status'] === 'completed') {
+        echo '<div class="fr-alert ok" style="margin:16px 0;font-size:13.5px">✨ دسترسی به <b>تحلیل نسخهٔ ویژه و گزارش کامل</b> برای شما فعال شد.</div>';
+        echo '<a class="fr-btn" href="' . SITE_URL . '/panel/report.php?attempt=' . (int)$attempt['id'] . '">مشاهده تحلیل ویژه ←</a> ';
+    } else {
+        $btnLbl = ((int)$attempt['progress'] > 0) ? 'ادامه تست روانشناسی ←' : 'شروع تست روانشناسی ←';
+        echo '<a class="fr-btn" href="' . SITE_URL . '/panel/take.php?attempt=' . (int)$attempt['id'] . '">' . $btnLbl . '</a> ';
+    }
 } elseif (($order['kind'] ?? '') === 'event') {
     /* نسخهٔ ۲٫۲: بازگشت به برگهٔ تفکیک‌شدهٔ درست (کارگاه/دوره) */
     $evk = (string)(DB::val('SELECT kind FROM ' . DB::t('events') . ' WHERE id=?', [(int)($order['event_id'] ?? 0)]) ?: 'workshop');
