@@ -24,6 +24,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'sms_report') {
     redirect(SITE_URL . '/admin/user-view.php?id=' . $id);
 }
 
+/* ارسال پیامک یادآوری ادامه آزمون نیمه‌کاره به همراه لینک اختصاصی ادامه */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'sms_nudge') {
+    $at = DB::one('SELECT a.*, t.title FROM ' . DB::t('attempts') . ' a JOIN ' . DB::t('tests') .
+                  ' t ON t.id=a.test_id WHERE a.id=? AND a.user_id=?', [(int)post('attempt_id'), $id]);
+    if ($at) {
+        $link = SITE_URL . '/panel/take.php?attempt=' . $at['id'];
+        $name = trim($u['first_name'] . ' ' . $u['last_name']) ?: 'کاربر گرامی';
+        $kv = new Kavenegar();
+        $ok = $kv->sendEvent('test_nudge', $u['mobile'], [
+            'name'    => $name,
+            'test'    => $at['title'],
+            'link'    => $link,
+            '_tokens' => [$name, $at['title'], $link],
+        ]);
+        if (!$ok) {
+            $site = DB::setting('site_title', 'فریا روان');
+            $msg = "سلام {$name} عزیز\nپاسخ‌گویی به آزمون «{$at['title']}» شما نیمه‌کاره است. جهت تکمیل سوالات و دریافت کارنامه، روی لینک زیر بزنید:\n{$link}\n{$site}";
+            $ok = $kv->send($u['mobile'], $msg, 'test_nudge');
+        }
+        if ($ok) {
+            DB::update('attempts', ['nudge_sent' => 1], 'id=?', [$at['id']]);
+            flash('پیامک یادآوری و لینک ادامهٔ آزمون با موفقیت برای کاربر ارسال شد ✅', 'ok');
+            log_activity('admin_sms_nudge', 'attempt', (int)$at['id']);
+        } else {
+            flash('ارسال پیامک با خطا مواجه شد (تنظیمات کاوه‌نگار را بررسی کنید).', 'err');
+        }
+    }
+    redirect(SITE_URL . '/admin/user-view.php?id=' . $id);
+}
+
 /* تغییر/حذف کارت بانکی کاربر — فقط مدیرکل (superadmin)؛ کاربر خودش بعد از ثبت کارت نمی‌تواند تغییرش دهد (۱٫۷) */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(post('act'), ['bank_card_set','bank_card_remove'], true)) {
     if (($adm['role'] ?? '') !== 'superadmin') {
@@ -173,14 +203,20 @@ echo flash();
       <td><span class="fr-chip <?= $a['mode']==='full'?'purple':'info' ?>"><?= $a['mode']==='full'?'ویژه':'رایگان' ?></span></td>
       <td><?= $a['status']==='in_progress' ? '<span class="fr-chip warn">ناتمام ('.fa_num($a['progress']).' سؤال)</span>' : '<span class="fr-chip ok">تکمیل</span>' ?></td>
       <td style="font-size:12px"><?= fa_num(jdate('j F Y', strtotime($a['started_at']))) ?></td>
-      <td class="actions">
+      <td class="actions" style="white-space:nowrap">
+        <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $a['id'] ?>" target="_blank" title="مشاهده و ویرایش سؤالات و پاسخ‌های کاربر در برگهٔ جدید">📝 پاسخ‌ها ↗</a>
         <?php if ($a['status']!=='in_progress'): ?>
-        <a class="fr-btn sm" href="user-view.php?id=<?= $id ?>&report=<?= $a['id'] ?>">👁 کارنامه مراجع</a>
-        <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" title="خلاصه پرونده بالینی و تشخیصی مشاور">📋 پرونده بالینی مشاور</a>
+        <a class="fr-btn sm" href="user-view.php?id=<?= $id ?>&report=<?= $a['id'] ?>" target="_blank">👁 کارنامه مراجع</a>
+        <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">📋 پرونده بالینی مشاور</a>
         <form method="post" style="display:inline" onsubmit="return confirm('لینک گزارش برای کاربر پیامک شود؟')">
           <?= csrf_field() ?><input type="hidden" name="act" value="sms_report">
           <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
           <button class="fr-btn sm ghost" title="ارسال لینک گزارش با پیامک">📩 لینک</button></form>
+        <?php else: ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('پیامک یادآوری به همراه لینک ادامهٔ آزمون برای کاربر ارسال شود؟')">
+          <?= csrf_field() ?><input type="hidden" name="act" value="sms_nudge">
+          <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+          <button class="fr-btn sm" style="background:#f59e0b;color:#fff" title="ارسال پیامک یادآوری با لینک ادامه تست">📲 پیامک ادامه</button></form>
         <?php endif; ?>
       </td>
     </tr>

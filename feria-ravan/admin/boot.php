@@ -172,7 +172,7 @@ function admin_layout_end(): void
 }
 
 /** پیام flash ساده با سشن */
-function flash(string $msg = null, string $type = 'ok'): ?string
+function flash(?string $msg = null, string $type = 'ok'): ?string
 {
     if ($msg !== null) { $_SESSION['flash'] = [$msg, $type]; return null; }
     if (!empty($_SESSION['flash'])) {

@@ -585,20 +585,14 @@ function admin_events_page(array $adm, string $kind): void
         <td><?= fa_num((int)$e['views']) ?></td>
         <td style="font-size:11.5px;white-space:nowrap"><?= $e['starts_at'] ? fa_num(jdate('j F', strtotime($e['starts_at']))) : '—' ?></td>
         <td class="actions" style="white-space:nowrap">
-          <a class="fr-btn sm ghost" href="?edit_e=<?= $e['id'] ?>">ویرایش</a>
+          <a class="fr-btn sm ghost" href="?edit_e=<?= $e['id'] ?>" target="_blank" title="ویرایش در برگهٔ جدید">ویرایش ↗</a>
           <?php if ($e['slug']): ?>
           <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/<?= $public ?>.php?s=<?= urlencode($e['slug']) ?>" target="_blank" rel="noopener" title="مشاهدهٔ صفحهٔ عمومی">🌐</a>
           <?php endif; ?>
           <a class="fr-btn sm accent" href="?export_regs=<?= $e['id'] ?>" title="خروجی اکسل ثبت‌نام‌شدگان و همراهان">📊</a>
-          <a class="fr-btn sm ghost" href="registrants.php?ctx=<?= urlencode($kind) ?>&id=<?= $e['id'] ?>" title="مدیریت ثبت‌نام‌شدگان (افزودن/ویرایش/حذف) — ۱٫۹">👥</a>
-          <form method="post" style="display:inline" title="کپی کردن با همهٔ تنظیمات">
-            <?= csrf_field() ?><input type="hidden" name="act" value="copy">
-            <input type="hidden" name="id" value="<?= $e['id'] ?>">
-            <button class="fr-btn sm ghost">📋</button></form>
-          <form method="post" style="display:inline" onsubmit="return confirm('حذف «<?= e($e['title']) ?>»؟\n(اگر ثبت‌نام پرداخت‌شده داشته باشد، حذف انجام نمی‌شود و باید آن را غیرفعال کنید.)')">
-            <?= csrf_field() ?><input type="hidden" name="act" value="delete">
-            <input type="hidden" name="id" value="<?= $e['id'] ?>">
-            <button class="fr-btn sm danger">حذف</button></form>
+          <a class="fr-btn sm ghost" href="registrants.php?ctx=<?= urlencode($kind) ?>&id=<?= $e['id'] ?>" target="_blank" title="مدیریت ثبت‌نام‌شدگان (افزودن/ویرایش/حذف) — ۱٫۹">👥</a>
+          <button type="button" class="fr-btn sm ghost" onclick="frCopyEvent(<?= (int)$e['id'] ?>)" title="کپی کردن با همهٔ تنظیمات">📋</button>
+          <button type="button" class="fr-btn sm danger" onclick="frDeleteEvent(<?= (int)$e['id'] ?>, '<?= e(addslashes($e['title'])) ?>')" title="حذف">حذف</button>
         </td>
       </tr>
       <?php endforeach; ?>
@@ -609,6 +603,13 @@ function admin_events_page(array $adm, string $kind): void
   </div>
   <?php endif; ?>
 </div>
+
+<!-- فرم مجزای اقدامات تکی سطرهای رویداد (جلوگیری از تداخل فرم‌های تودرتو) -->
+<form method="post" id="evRowActionForm" style="display:none">
+  <?= csrf_field() ?>
+  <input type="hidden" name="act" id="evRowAct" value="">
+  <input type="hidden" name="id" id="evRowId" value="">
+</form>
 
 <script src="<?= SITE_URL ?>/assets/js/editor.js?v=<?= FR_VERSION ?>"></script>
 <script>
@@ -709,6 +710,20 @@ function admin_events_page(array $adm, string $kind): void
     }
   });
 })();
+
+function frCopyEvent(id) {
+  document.getElementById('evRowAct').value = 'copy';
+  document.getElementById('evRowId').value = id;
+  document.getElementById('evRowActionForm').submit();
+}
+
+function frDeleteEvent(id, title) {
+  if (confirm('حذف «' + title + '»؟\n\n(اگر ثبت‌نام پرداخت‌شده داشته باشد، حذف انجام نمی‌شود و باید آن را غیرفعال کنید.)')) {
+    document.getElementById('evRowAct').value = 'delete';
+    document.getElementById('evRowId').value = id;
+    document.getElementById('evRowActionForm').submit();
+  }
+}
 </script>
     <?php
     admin_layout_end();

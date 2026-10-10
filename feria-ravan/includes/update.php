@@ -749,6 +749,23 @@ function fr_update_pipeline(): void
                 "ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `growth_injected` TINYINT(1) NOT NULL DEFAULT 0 AFTER `validity_json`",
                 "ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `ref_attempt_id` BIGINT UNSIGNED DEFAULT NULL AFTER `user_id`",
                 "ALTER TABLE `{$p}planner_tasks` ADD KEY IF NOT EXISTS `ix_ref_att` (`ref_attempt_id`)",
+                "CREATE TABLE IF NOT EXISTS `{$p}sms_logs` (
+                    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `user_id` BIGINT UNSIGNED NULL,
+                    `mobile` VARCHAR(20) NOT NULL,
+                    `event` VARCHAR(60) NULL,
+                    `body` TEXT NOT NULL,
+                    `status` VARCHAR(30) NOT NULL DEFAULT 'sent',
+                    `provider_id` VARCHAR(100) NULL,
+                    `cost` INT NULL,
+                    `ip` VARBINARY(16) NULL,
+                    `user_agent` VARCHAR(255) NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    KEY `ix_mobile` (`mobile`),
+                    KEY `ix_event` (`event`),
+                    KEY `ix_created` (`created_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
                 "CREATE TABLE IF NOT EXISTS `{$p}clinical_notes` (
                     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                     `attempt_id` BIGINT UNSIGNED NOT NULL,

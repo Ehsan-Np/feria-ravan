@@ -2,7 +2,35 @@
 /** مدیریت تست‌های روانشناسی — قیمت، وضعیت، دستورالعمل + عملیات گروهی و زباله‌دان (۱٫۹) */
 declare(strict_types=1);
 require_once __DIR__ . '/boot.php';
-$adm = require_admin();
+$adm = require_admin(['superadmin','manager','support']);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ۰) حذف تکی تست روانشناسی (سریع یا نهایی)
+   ══════════════════════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'delete_single') {
+    csrf_guard();
+    $tid = (int)post('id');
+    $force = (int)post('force') === 1;
+    if ($tid > 0) {
+        $row = DB::one('SELECT id, title FROM ' . DB::t('tests') . ' WHERE id=?', [$tid]);
+        if ($row) {
+            if ($force) {
+                if (fr_purge_test($tid)) {
+                    require_once __DIR__ . '/../includes/seo.php';
+                    fr_permalinks_flush();
+                    flash('تست روانشناسی «' . $row['title'] . '» و تمامی سوالات و داده‌های آن با موفقیت پاکسازی و حذف شد 🗑', 'ok');
+                } else {
+                    flash('خطا در پاکسازی تست روانشناسی.', 'err');
+                }
+            } else {
+                DB::update('tests', ['status' => 'trash'], 'id=?', [$tid]);
+                log_activity('test_trash', 'test', $tid);
+                flash('تست روانشناسی «' . $row['title'] . '» به زباله‌دان منتقل شد.', 'ok');
+            }
+        }
+    }
+    redirect(SITE_URL . '/admin/tests.php?view=' . (string)post('view', 'active'));
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    ۱) عملیات گروهی (۱٫۹): فعال/غیرفعال/زباله‌دان/بازگردانی/حذف نهایی
@@ -30,23 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'bulk') {
             $done++; log_activity('test_restore', 'test', $tid);
         }
         elseif ($do === 'delete') {
-            /* گارد حذف نهایی: تست روانشناسیِ دارای تلاش یا سفارش (حتی یک مورد) هرگز حذف فیزیکی
-               نمی‌شود تا تاریخچهٔ پاسخ‌ها و سوابق مالی کاربران امن بماند — فقط زباله‌دان */
-            $used = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . ' WHERE test_id=?', [$tid])
-                  + (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('orders')   . ' WHERE test_id=?', [$tid]);
-            if ($used > 0) { $blocked[] = $row['title'] . ' (' . fa_num($used) . ' سابقه)'; continue; }
-            try {
-                DB::pdo()->beginTransaction();
-                DB::run('DELETE FROM ' . DB::t('analysis_templates') . ' WHERE test_id=?', [$tid]);
-                DB::run('DELETE FROM ' . DB::t('scoring_keys')       . ' WHERE test_id=?', [$tid]);
-                DB::run('DELETE FROM ' . DB::t('questions')          . ' WHERE test_id=?', [$tid]);
-                DB::run('DELETE FROM ' . DB::t('test_scales')        . ' WHERE test_id=?', [$tid]);
-                DB::run('DELETE FROM ' . DB::t('tests')              . ' WHERE id=?',      [$tid]);
-                DB::pdo()->commit();
-                log_activity('test_delete', 'test', $tid, ['title' => $row['title']]);
+            if (fr_purge_test($tid)) {
                 $done++;
-            } catch (Throwable $e) {
-                DB::pdo()->rollBack();
+            } else {
                 $blocked[] = $row['title'] . ' (خطا در حذف)';
             }
         }
@@ -54,8 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'bulk') {
     require_once __DIR__ . '/../includes/seo.php';
     fr_permalinks_flush();      // صفحهٔ /t/اسلاگ حذف‌شده فوراً از پیوندها پاک شود
     $lbl = ['activate'=>'فعال‌سازی','deactivate'=>'غیرفعال‌سازی','trash'=>'انتقال به زباله‌دان','restore'=>'بازگردانی از زباله‌دان','delete'=>'حذف نهایی'][$do] ?? $do;
-    flash($done > 0 ? "$lbl برای " . fa_num($done) . " تست روانشناسی انجام شد ✅" : 'موردی انجام نشد.', $blocked ? 'warn' : 'ok');
-    if ($blocked) flash('⛔ حذفِ این موارد به دلیل وجود سابقهٔ کاربر/مالی ممنوع است: ' . implode(' ؛ ', $blocked), 'err');
+    flash($done > 0 ? "$lbl برای " . fa_num($done) . " تست روانشناسی با موفقیت انجام شد ✅" : 'موردی انجام نشد.', $blocked ? 'warn' : 'ok');
+    if ($blocked) flash('⛔ خطا در حذف این موارد: ' . implode(' ؛ ', $blocked), 'err');
     redirect(SITE_URL . '/admin/tests.php?view=' . (in_array($do, ['delete','restore'], true) ? 'trash' : $view));
 }
 
@@ -203,6 +217,7 @@ echo flash();
         <input type="hidden" name="free_teaser" id="hd-teaser">
         <small style="color:var(--muted)">این متن ته گزارش رایگان نشان داده می‌شود تا کاربر را به خرید نسخهٔ ویژه ترغیب کند. اگر خالی بماند، متن پیش‌فرض سیستم چاپ می‌شود.</small></div>
       <br><button class="fr-btn" onclick="syncRte()" style="margin-top:14px">ذخیره تغییرات</button>
+      <button type="button" class="fr-btn danger" style="margin-top:14px" onclick="frDeleteTest(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')">🗑 حذف کامل این تست</button>
       <a class="fr-btn ghost" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>" style="margin-top:14px">بازگشت</a>
     </div>
   </form>
@@ -231,9 +246,10 @@ echo flash();
         <option value="activate">✅ فعال‌سازی</option>
         <option value="deactivate">⛔ غیرفعال‌سازی</option>
         <option value="trash">🗑 انتقال به زباله‌دان</option>
+        <option value="delete">❌ حذف نهایی و پاکسازی کامل</option>
         <?php else: ?>
         <option value="restore">♻️ بازگردانی از زباله‌دان</option>
-        <option value="delete">❌ حذف نهایی (فقط بدون سابقه)</option>
+        <option value="delete">❌ حذف نهایی و پاکسازی کامل</option>
         <?php endif; ?>
       </select>
       <button class="fr-btn sm" onclick="return frBulkGo()">اعمال روی انتخاب‌شده‌ها</button>
@@ -259,11 +275,12 @@ echo flash();
         <td><?= $t['status']==='active' ? '<span class="fr-chip ok">فعال</span>'
               : ($t['status']==='trash' ? '<span class="fr-chip warn">زباله‌دان</span>'
               : '<span class="fr-chip warn">'.e($t['status']).'</span>') ?></td>
-        <td class="actions">
-          <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?><?= $view==='trash'?'&view=trash':'' ?>">ویرایش</a>
-          <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>">سوالات</a>
-          <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>">تحلیل‌ها</a>
-          <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" title="مدیریت شرکت‌کنندگان — ۱٫۹">👥</a>
+        <td class="actions" style="white-space:nowrap">
+          <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?><?= $view==='trash'?'&view=trash':'' ?>" target="_blank" title="ویرایش تست در برگهٔ جدید">ویرایش ↗</a>
+          <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>" target="_blank" title="مدیریت سوالات">سوالات ↗</a>
+          <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>" target="_blank" title="قالب‌های تحلیل">تحلیل‌ها ↗</a>
+          <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" target="_blank" title="مدیریت شرکت‌کنندگان — ۱٫۹">👥</a>
+          <button type="button" class="fr-btn sm danger" onclick="frDeleteTest(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')" title="حذف این تست روانشناسی">🗑</button>
         </td>
       </tr>
       <?php endforeach; ?>
@@ -271,6 +288,16 @@ echo flash();
     </table></div>
   </form>
 </div>
+
+<!-- فرم مجزای حذف تکی تست -->
+<form method="post" id="testSingleDelForm" style="display:none">
+  <?= csrf_field() ?>
+  <input type="hidden" name="act" value="delete_single">
+  <input type="hidden" name="id" id="singleDelId" value="">
+  <input type="hidden" name="force" id="singleDelForce" value="1">
+  <input type="hidden" name="view" value="<?= e($view) ?>">
+</form>
+
 <script>
 (function(){
   var all=document.getElementById('allChk');
@@ -283,12 +310,21 @@ echo flash();
   if(all) all.addEventListener('change',function(){ boxes().forEach(function(c){c.checked=all.checked;}); up(); });
   boxes().forEach(function(c){ c.addEventListener('change',up); });
 })();
+
+function frDeleteTest(id, title) {
+  if (confirm('آیا از حذف تست روانشناسی «' + title + '» اطمینان دارید؟\n\nبا تایید شما، این تست و تمام سوالات، پاسخ‌ها و رکوردهای مربوطه به صورت کامل پاکسازی و حذف خواهند شد.')) {
+    document.getElementById('singleDelId').value = id;
+    document.getElementById('singleDelForce').value = '1';
+    document.getElementById('testSingleDelForm').submit();
+  }
+}
+
 function frBulkGo(){
   var n=document.querySelectorAll('.tid:checked').length;
   if(!n){ alert('هیچ تستی انتخاب نشده است. ابتدا چک‌باکس موارد دلخواه را تیک بزنید.'); return false; }
   var d=document.getElementById('bulkDo').value;
   if(d==='delete')
-    return confirm('حذف نهایی '+n+' تست روانشناسی؟\n\n• فقط تست‌های روانشناسی بدون هیچ سابقهٔ کاربر/مالی حذف می‌شوند.\n• تست‌های روانشناسی دارای انجام‌شده یا سفارش، مسدود و دست‌نخورده می‌مانند.\n• این کار قابل بازگشت نیست!');
+    return confirm('آیا از حذف نهایی و پاکسازی '+n+' تست روانشناسی انتخاب‌شده اطمینان دارید؟\nاین عملیات تست‌ها و سؤالات مربوطه را پاکسازی می‌کند و غیرقابل بازگشت است.');
   if(d==='trash')
     return confirm('انتقال '+n+' تست روانشناسی به زباله‌دان؟\nتست‌های روانشناسی زباله‌دانی در سایت نمایش داده نمی‌شوند ولی بعداً قابل بازگردانی هستند.');
   return true;

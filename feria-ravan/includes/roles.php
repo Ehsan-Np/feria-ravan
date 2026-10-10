@@ -39,10 +39,10 @@ function fr_page_cap_map(): array
 {
     return [
         'index.php' => null, 'dashboard.php' => null, 'profile.php' => null,
-        'tests.php' => 'tests', 'questions.php' => 'tests', 'templates.php' => 'tests',
+        'tests.php' => 'tests', 'questions.php' => 'tests', 'templates.php' => 'tests', 'attempt-answers.php' => 'tests',
         'events.php' => 'events', 'workshops.php' => 'events', 'courses.php' => 'events',
         'registrants.php' => 'registrants',
-        'consult.php' => 'consult', 'consult-bookings.php' => 'consult', 'consult-schedule.php' => 'consult',
+        'consult.php' => 'consult', 'consult-bookings.php' => 'consult', 'consult-schedule.php' => 'consult', 'clinical-case.php' => 'consult',
         'orders.php' => 'orders', 'refunds.php' => 'orders', 'discounts.php' => 'discounts',
         'users.php' => 'users', 'user-view.php' => 'users', 'tickets.php' => 'users',
         'reviews.php' => 'reviews', 'banners.php' => 'banners', 'permalinks.php' => 'pages',

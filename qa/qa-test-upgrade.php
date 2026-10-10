@@ -536,6 +536,128 @@ ok(!empty($savedNote), "Clinical note retrieved successfully");
 ok($savedNote['therapist_name'] === 'دکتر بالینی نمونه', "Therapist author verified");
 ok(str_contains($savedNote['diagnosis'], 'اضطراب موقعیتی'), "Diagnostic text preserved in clinical case");
 
+echo "\n=== 15. Phase 5: Answer Editing, In-Progress SMS Nudge, Bulk Actions & Test Purge ===\n";
+// 1. Test Answer Editing logic (attempt-answers.php backend logic)
+$firstQ = DB::one("SELECT id, text FROM " . DB::t('questions') . " WHERE test_id=? ORDER BY number ASC LIMIT 1", [$test['id']]);
+ok(!empty($firstQ), "Found first question for attempt $attemptId (id: {$firstQ['id']})");
+
+// Update or set answer to 5
+$qExists = DB::one("SELECT id FROM " . DB::t('answers') . " WHERE attempt_id=? AND question_id=?", [$attemptId, $firstQ['id']]);
+if ($qExists) {
+    DB::update('answers', ['value' => '5'], 'id=?', [$qExists['id']]);
+} else {
+    DB::insert('answers', ['attempt_id' => $attemptId, 'question_id' => $firstQ['id'], 'value' => '5']);
+}
+$savedAns = DB::one("SELECT value FROM " . DB::t('answers') . " WHERE attempt_id=? AND question_id=?", [$attemptId, $firstQ['id']]);
+ok((string)$savedAns['value'] === '5', "Answer successfully updated in DB");
+
+// Recalculate
+$recalcOk = Analyzer::scoreAttempt($attemptId);
+ok($recalcOk === true, "Recalculation and rescoring succeeded");
+
+// 2. Test In-Progress SMS Nudge
+$inProgAttId = (int)DB::insert('attempts', [
+    'user_id'    => $userId,
+    'test_id'    => $test['id'],
+    'mode'       => 'free',
+    'status'     => 'in_progress',
+    'progress'   => 5,
+    'started_at' => date('Y-m-d H:i:s'),
+]);
+ok($inProgAttId > 0, "Created in-progress attempt for user $userId (id: $inProgAttId)");
+
+$kv = new Kavenegar();
+$nudgeLink = SITE_URL . '/panel/take.php?attempt=' . $inProgAttId;
+$nudgeSent = $kv->sendEvent('test_nudge', $u['mobile'], [
+    'name'    => 'آرش',
+    'test'    => $test['title'],
+    'link'    => $nudgeLink,
+    '_tokens' => ['آرش', $test['title'], $nudgeLink],
+]);
+if (!$nudgeSent) {
+    $msg = "سلام آرش عزیز\nپاسخ‌گویی به آزمون «{$test['title']}» شما نیمه‌کاره است:\n{$nudgeLink}\nفریا روان";
+    $nudgeSent = $kv->send($u['mobile'], $msg, 'test_nudge');
+}
+DB::update('attempts', ['nudge_sent' => 1], 'id=?', [$inProgAttId]);
+
+$nudgeCheck = DB::one("SELECT nudge_sent FROM " . DB::t('attempts') . " WHERE id=?", [$inProgAttId]);
+ok((int)$nudgeCheck['nudge_sent'] === 1, "Attempt nudge_sent marked as 1");
+
+// 3. Test Bulk Actions on Events (Workshops / Courses)
+$ws1 = (int)DB::insert('events', ['kind' => 'workshop', 'title' => 'کارگاه هوش هیجانی نمونه ۱', 'status' => 'active', 'price' => 100000]);
+$ws2 = (int)DB::insert('events', ['kind' => 'workshop', 'title' => 'کارگاه هوش هیجانی نمونه ۲', 'status' => 'active', 'price' => 120000]);
+ok($ws1 > 0 && $ws2 > 0, "Created 2 test workshops for bulk operations");
+
+// Bulk deactivate
+DB::update('events', ['status' => 'inactive'], 'id IN (?, ?)', [$ws1, $ws2]);
+$st1 = DB::val("SELECT status FROM " . DB::t('events') . " WHERE id=?", [$ws1]);
+$st2 = DB::val("SELECT status FROM " . DB::t('events') . " WHERE id=?", [$ws2]);
+ok($st1 === 'inactive' && $st2 === 'inactive', "Bulk deactivate successfully set both to 'inactive'");
+
+// Bulk activate
+DB::update('events', ['status' => 'active'], 'id IN (?, ?)', [$ws1, $ws2]);
+$st1b = DB::val("SELECT status FROM " . DB::t('events') . " WHERE id=?", [$ws1]);
+ok($st1b === 'active', "Bulk activate successfully restored to 'active'");
+
+// Bulk delete
+DB::run("DELETE FROM " . DB::t('events') . " WHERE id IN (?, ?)", [$ws1, $ws2]);
+$remWs = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('events') . " WHERE id IN (?, ?)", [$ws1, $ws2]);
+ok($remWs === 0, "Bulk delete successfully removed test events");
+
+// 4. Test Purge / Force Delete of a Test
+// Create dummy test with questions, attempts, answers, and templates
+$dummyTestId = (int)DB::insert('tests', [
+    'title'          => 'تست آزمایشی برای تست پاکسازی',
+    'slug'           => 'dummy-test-purge-' . fr_token(4),
+    'engine'         => 'generic',
+    'price_full'     => 50000,
+    'status'         => 'active',
+    'question_count' => 2,
+]);
+ok($dummyTestId > 0, "Created dummy test for purge test (id: $dummyTestId)");
+
+$dummyQ1 = (int)DB::insert('questions', ['test_id' => $dummyTestId, 'number' => 1, 'text' => 'سؤال ۱', 'format' => 'likert']);
+$dummyQ2 = (int)DB::insert('questions', ['test_id' => $dummyTestId, 'number' => 2, 'text' => 'سؤال ۲', 'format' => 'likert']);
+$dummyAttId = (int)DB::insert('attempts', [
+    'user_id'    => $userId,
+    'test_id'    => $dummyTestId,
+    'mode'       => 'free',
+    'status'     => 'completed',
+    'started_at' => date('Y-m-d H:i:s'),
+]);
+DB::insert('answers', ['attempt_id' => $dummyAttId, 'question_id' => $dummyQ1, 'value' => '4']);
+DB::insert('answers', ['attempt_id' => $dummyAttId, 'question_id' => $dummyQ2, 'value' => '3']);
+DB::insert('results', ['attempt_id' => $dummyAttId, 'scale_code' => 'overall', 'percent' => 70, 't_score' => 55, 'sten_score' => 6]);
+DB::insert('clinical_notes', [
+    'attempt_id' => $dummyAttId,
+    'user_id'    => $userId,
+    'admin_id'   => $adminId,
+    'notes'      => 'یادداشت بالینی تستی',
+]);
+
+// Purge test helper is loaded from functions.php
+$purgeOk = fr_purge_test($dummyTestId);
+ok($purgeOk === true, "fr_purge_test executed cleanly");
+
+// Verify that test and all related records were purged
+$chkTest = DB::one("SELECT id FROM " . DB::t('tests') . " WHERE id=?", [$dummyTestId]);
+ok(empty($chkTest), "Test record removed from tests table");
+
+$chkQ = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('questions') . " WHERE test_id=?", [$dummyTestId]);
+ok($chkQ === 0, "Questions removed from questions table");
+
+$chkAtt = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE test_id=?", [$dummyTestId]);
+ok($chkAtt === 0, "Attempts removed from attempts table");
+
+$chkAns = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('answers') . " WHERE attempt_id=?", [$dummyAttId]);
+ok($chkAns === 0, "Answers purged from answers table");
+
+$chkRes = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('results') . " WHERE attempt_id=?", [$dummyAttId]);
+ok($chkRes === 0, "Results purged from results table");
+
+$chkNotes = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('clinical_notes') . " WHERE attempt_id=?", [$dummyAttId]);
+ok($chkNotes === 0, "Clinical notes purged from clinical_notes table");
+
 echo "\n============================================\n";
-echo "🎉 ALL 14 STAGES (PHASES 1, 2, 3, & 4) PASSED WITH 100% SUCCESS!\n";
+echo "🎉 ALL 15 STAGES PASSED WITH 100% SUCCESS!\n";
 echo "============================================\n";

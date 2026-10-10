@@ -282,6 +282,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($back());
     }
 
+    /* ─────────── تست روانشناسی: ارسال پیامک یادآوری تلاش ناتمام ─────────── */
+    if ($act === 'att_nudge') {
+        $aid = (int)post('attempt_id');
+        $a   = DB::one('SELECT a.*, u.first_name, u.last_name, u.mobile, t.title AS ttitle FROM ' . DB::t('attempts') . ' a
+                        JOIN ' . DB::t('users') . ' u ON u.id=a.user_id
+                        JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
+                        WHERE a.id=?', [$aid]);
+        if (!$a) { flash('تلاش یافت نشد.', 'err'); redirect($back()); }
+        $link = SITE_URL . '/panel/take.php?attempt=' . $aid;
+        $name = trim($a['first_name'] . ' ' . $a['last_name']) ?: 'کاربر گرامی';
+        require_once FR_ROOT . '/core/Kavenegar.php';
+        $kv = new Kavenegar();
+        $ok = $kv->sendEvent('test_nudge', $a['mobile'], [
+            'name'    => $name,
+            'test'    => $a['ttitle'],
+            'link'    => $link,
+            '_tokens' => [$name, $a['ttitle'], $link],
+        ]);
+        if (!$ok) {
+            $site = DB::setting('site_title', 'فریا روان');
+            $msg = "سلام {$name} عزیز\nپاسخ‌گویی به آزمون «{$a['ttitle']}» شما نیمه‌کاره است. جهت تکمیل سوالات و دریافت کارنامه، روی لینک زیر بزنید:\n{$link}\n{$site}";
+            $ok = $kv->send($a['mobile'], $msg, 'test_nudge');
+        }
+        if ($ok) {
+            DB::update('attempts', ['nudge_sent' => 1], 'id=?', [$aid]);
+            flash('پیامک یادآوری به همراه لینک ادامهٔ آزمون برای کاربر ارسال شد ✅', 'ok');
+            log_activity('admin_sms_nudge', 'attempt', $aid);
+        } else {
+            flash('ارسال پیامک با خطا مواجه شد.', 'err');
+        }
+        redirect($back());
+    }
+
     /* ─────────── تست روانشناسی: حذف تلاش (کاسکید پاسخ/نتیجه/گزارش) ─────────── */
     if ($act === 'att_del') {
         $aid = (int)post('attempt_id');
@@ -725,8 +758,15 @@ echo flash();
         <?php else: ?>—<?php endif; ?>
       </td>
       <td><?= fa_num(jdate('j F Y', strtotime($r['started_at']))) ?></td>
-      <td class="actions">
+      <td class="actions" style="white-space:nowrap">
+        <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= (int)$r['id'] ?>" target="_blank" title="مشاهده و ویرایش سؤالات و پاسخ‌های کاربر در برگهٔ جدید">📝 پاسخ‌ها ↗</a>
         <a class="fr-btn sm ghost" href="<?= e($back(['edit_att' => (int)$r['id']])) ?>">ویرایش</a>
+        <?php if ($r['status'] === 'in_progress'): ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('پیامک یادآوری به همراه لینک ادامهٔ آزمون ارسال شود؟')">
+          <?= csrf_field() ?><input type="hidden" name="act" value="att_nudge"><input type="hidden" name="attempt_id" value="<?= (int)$r['id'] ?>">
+          <button class="fr-btn sm" style="background:#f59e0b;color:#fff" title="ارسال پیامک یادآوری با لینک تست">📲 یادآوری</button>
+        </form>
+        <?php endif; ?>
         <form method="post" style="display:inline" onsubmit="return confirm('حذف این تلاش؟\nتمام پاسخ‌ها، نتایج و گزارش‌هایش هم حذف می‌شود.\nتلاشِ دارای سفارشِ پرداخت‌شده قابل حذف نیست.')">
           <?= csrf_field() ?><input type="hidden" name="act" value="att_del"><input type="hidden" name="attempt_id" value="<?= (int)$r['id'] ?>">
           <button class="fr-btn sm danger">حذف</button>

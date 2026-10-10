@@ -418,3 +418,41 @@ function fr_test_kind_fa(array $t): string
         'jobsat' => 'سنجش سازمانی',
     ][(string)($t['engine'] ?? '')] ?? 'تست روانشناسی';
 }
+
+/**
+ * پاکسازی کامل و حذف نهایی یک تست روانشناسی و تمام داده‌های وابستهٔ آن
+ */
+function fr_purge_test(int $tid): bool
+{
+    $row = DB::one('SELECT id, title FROM ' . DB::t('tests') . ' WHERE id=?', [$tid]);
+    if (!$row) return false;
+
+    DB::pdo()->beginTransaction();
+    try {
+        $attempts = DB::all('SELECT id FROM ' . DB::t('attempts') . ' WHERE test_id=?', [$tid]);
+        if ($attempts) {
+            $aids = array_map('intval', array_column($attempts, 'id'));
+            $inClause = implode(',', $aids);
+            try { DB::run('DELETE FROM ' . DB::t('clinical_notes') . " WHERE attempt_id IN ($inClause)"); } catch (Throwable $e) {}
+            try { DB::run('DELETE FROM ' . DB::t('answers') . " WHERE attempt_id IN ($inClause)"); } catch (Throwable $e) {}
+            try { DB::run('DELETE FROM ' . DB::t('results') . " WHERE attempt_id IN ($inClause)"); } catch (Throwable $e) {}
+            try { DB::run('DELETE FROM ' . DB::t('reports') . " WHERE attempt_id IN ($inClause)"); } catch (Throwable $e) {}
+            try { DB::run('UPDATE ' . DB::t('planner_tasks') . " SET ref_attempt_id=NULL WHERE ref_attempt_id IN ($inClause)"); } catch (Throwable $e) {}
+            try { DB::run('DELETE FROM ' . DB::t('dyads') . " WHERE test_id=? OR attempt1_id IN ($inClause) OR attempt2_id IN ($inClause)", [$tid]); } catch (Throwable $e) {}
+            DB::run('DELETE FROM ' . DB::t('attempts') . ' WHERE test_id=?', [$tid]);
+        }
+        try { DB::run('UPDATE ' . DB::t('orders') . ' SET test_id=NULL WHERE test_id=?', [$tid]); } catch (Throwable $e) {}
+        try { DB::run('UPDATE ' . DB::t('discount_codes') . ' SET test_id=NULL WHERE test_id=?', [$tid]); } catch (Throwable $e) {}
+        try { DB::run('DELETE FROM ' . DB::t('analysis_templates') . ' WHERE test_id=?', [$tid]); } catch (Throwable $e) {}
+        try { DB::run('DELETE FROM ' . DB::t('scoring_keys') . ' WHERE test_id=?', [$tid]); } catch (Throwable $e) {}
+        try { DB::run('DELETE FROM ' . DB::t('questions') . ' WHERE test_id=?', [$tid]); } catch (Throwable $e) {}
+        try { DB::run('DELETE FROM ' . DB::t('test_scales') . ' WHERE test_id=?', [$tid]); } catch (Throwable $e) {}
+        DB::run('DELETE FROM ' . DB::t('tests') . ' WHERE id=?', [$tid]);
+        DB::pdo()->commit();
+        log_activity('test_delete', 'test', $tid, ['title' => $row['title']]);
+        return true;
+    } catch (Throwable $e) {
+        if (DB::pdo()->inTransaction()) DB::pdo()->rollBack();
+        return false;
+    }
+}

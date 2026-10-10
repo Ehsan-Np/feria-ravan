@@ -269,6 +269,23 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}sms_templates` (
   `enabled` TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}sms_logs` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NULL,
+  `mobile` VARCHAR(20) NOT NULL,
+  `event` VARCHAR(60) NULL,
+  `body` TEXT NOT NULL,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'sent',
+  `provider_id` VARCHAR(100) NULL,
+  `cost` INT NULL,
+  `ip` VARBINARY(16) NULL,
+  `user_agent` VARCHAR(255) NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `ix_mobile` (`mobile`),
+  KEY `ix_event` (`event`),
+  KEY `ix_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}sms_log` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `mobile` VARCHAR(11) NOT NULL,

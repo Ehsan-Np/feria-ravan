@@ -52,7 +52,8 @@ admin_layout($adm, 'consult', 'خلاصه پرونده بالینی — ' . user
       <span class="fr-badge danger" style="font-size:12px;padding:6px 12px">🔒 محرمانه بالینی</span>
       <span style="font-size:13px;color:var(--muted)">مخصوص مشاور و روان‌درمانگر پرونده</span>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a class="fr-btn ghost sm" href="attempt-answers.php?attempt=<?= $attemptId ?>" target="_blank" style="color:#7c3aed;border-color:#c4b5fd">📝 مشاهده و ویرایش پاسخ‌ها ↗</a>
       <button class="fr-btn sm" onclick="window.print()">🖨️ چاپ برگه پرونده فیزیکی</button>
       <a class="fr-btn ghost sm" href="user-view.php?id=<?= $u['id'] ?>">→ بازگشت به پرونده مراجع</a>
     </div>
