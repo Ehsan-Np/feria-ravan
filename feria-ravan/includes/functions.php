@@ -334,13 +334,22 @@ function fr_ticket_attach_save(array $file): array
 /** رندر خروجی امن پیوست تیکت — تصویر با لینک بزرگ‌نمایی */
 function fr_ticket_attach_html(?string $path): string
 {
-    $p = (string)$path;
+    $p = trim((string)$path, " /\\");
     if ($p === '') return '';
-    if (!str_starts_with($p, 'assets/uploads/tickets/')) return '';
+    if (!str_starts_with($p, 'feria-uploads/tickets/') && !str_starts_with($p, 'assets/uploads/tickets/')) return '';
     $url = SITE_URL . '/' . ltrim($p, '/');
     return '<a href="' . e($url) . '" target="_blank" rel="noopener" title="بزرگ‌نمایی تصویر">'
          . '<img src="' . e($url) . '" alt="پیوست تصویری تیکت" loading="lazy" '
          . 'style="max-width:230px;max-height:170px;border-radius:12px;border:1.5px solid rgba(30,58,110,.25);display:block;margin-top:8px;cursor:zoom-in"></a>';
+}
+
+/** تبدیل مسیر نسبی دیتابیس به آدرس URL کامل تصویر (با پشتیبانی کامل از feria-uploads) */
+function fr_img_url(?string $path, string $fallback = ''): string
+{
+    $p = trim((string)$path);
+    if ($p === '') return $fallback;
+    if (str_starts_with($p, 'http://') || str_starts_with($p, 'https://') || str_starts_with($p, 'data:')) return $p;
+    return SITE_URL . '/' . ltrim($p, '/');
 }
 
 /**

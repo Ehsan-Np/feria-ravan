@@ -658,6 +658,107 @@ ok($chkRes === 0, "Results purged from results table");
 $chkNotes = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('clinical_notes') . " WHERE attempt_id=?", [$dummyAttId]);
 ok($chkNotes === 0, "Clinical notes purged from clinical_notes table");
 
+echo "\n=== 16. Feria Uploads System & Directory Structure Verification ===\n";
+require_once FR_ROOT . '/includes/upload.php';
+fr_ensure_upload_dirs();
+
+// 1. Check directories existence
+$subdirsToCheck = ['workshops', 'courses', 'users', 'tests', 'tickets', 'services', 'banners', 'general', 'rte'];
+foreach ($subdirsToCheck as $sub) {
+    ok(is_dir(FR_ROOT . '/feria-uploads/' . $sub), "Directory feria-uploads/$sub exists and is writable");
+}
+ok(is_file(FR_ROOT . '/feria-uploads/.htaccess'), "Security .htaccess exists in feria-uploads/");
+
+// 2. Create sample test image and test uploads
+$tmpImg = sys_get_temp_dir() . '/test_img_' . uniqid() . '.jpg';
+$im = imagecreatetruecolor(200, 200);
+$bg = imagecolorallocate($im, 70, 130, 180);
+imagefilledrectangle($im, 0, 0, 199, 199, $bg);
+imagejpeg($im, $tmpImg, 90);
+imagedestroy($im);
+
+$mockFile = [
+    'name'     => 'test.jpg',
+    'type'     => 'image/jpeg',
+    'tmp_name' => $tmpImg,
+    'error'    => UPLOAD_ERR_OK,
+    'size'     => filesize($tmpImg),
+];
+
+// Test workshop cover
+copy($tmpImg, $tmpImg . '.ws');
+$mockWs = array_merge($mockFile, ['tmp_name' => $tmpImg . '.ws']);
+$upWs = fr_save_cover($mockWs, 'workshops', 'workshop', 88);
+ok($upWs['ok'] === true, "Workshop cover saved successfully");
+ok(str_starts_with($upWs['path'], 'feria-uploads/workshops/'), "Workshop cover path is in feria-uploads/workshops/ ({$upWs['path']})");
+ok(is_file(FR_ROOT . '/' . $upWs['path']), "Physical file exists on disk in feria-uploads/workshops/");
+
+// Test course cover
+copy($tmpImg, $tmpImg . '.cs');
+$mockCs = array_merge($mockFile, ['tmp_name' => $tmpImg . '.cs']);
+$upCs = fr_save_cover($mockCs, 'courses', 'course', 99);
+ok($upCs['ok'] === true, "Course cover saved successfully");
+ok(str_starts_with($upCs['path'], 'feria-uploads/courses/'), "Course cover path is in feria-uploads/courses/ ({$upCs['path']})");
+ok(is_file(FR_ROOT . '/' . $upCs['path']), "Physical file exists on disk in feria-uploads/courses/");
+
+// Test user avatar
+copy($tmpImg, $tmpImg . '.usr');
+$mockUsr = array_merge($mockFile, ['tmp_name' => $tmpImg . '.usr']);
+$upUsr = fr_save_avatar($mockUsr, 'user', 77);
+ok($upUsr['ok'] === true, "User avatar saved successfully");
+ok(str_starts_with($upUsr['path'], 'feria-uploads/users/'), "User avatar path is in feria-uploads/users/ ({$upUsr['path']})");
+ok(is_file(FR_ROOT . '/' . $upUsr['path']), "Physical avatar exists on disk in feria-uploads/users/");
+
+// Test test cover
+copy($tmpImg, $tmpImg . '.tst');
+$mockTst = array_merge($mockFile, ['tmp_name' => $tmpImg . '.tst']);
+$upTst = fr_save_cover($mockTst, 'tests', 'test', 66);
+ok($upTst['ok'] === true, "Test cover saved successfully");
+ok(str_starts_with($upTst['path'], 'feria-uploads/tests/'), "Test cover path is in feria-uploads/tests/ ({$upTst['path']})");
+ok(is_file(FR_ROOT . '/' . $upTst['path']), "Physical test cover exists on disk in feria-uploads/tests/");
+
+// Test ticket attachment
+copy($tmpImg, $tmpImg . '.tck');
+$mockTck = array_merge($mockFile, ['tmp_name' => $tmpImg . '.tck']);
+$upTck = fr_save_image($mockTck, 'tickets', 'tick', 55);
+ok($upTck['ok'] === true, "Ticket attachment saved successfully");
+ok(str_starts_with($upTck['path'], 'feria-uploads/tickets/'), "Ticket path is in feria-uploads/tickets/ ({$upTck['path']})");
+$tckHtml = fr_ticket_attach_html($upTck['path']);
+ok(str_contains($tckHtml, 'feria-uploads/tickets/'), "Ticket HTML embeds feria-uploads/tickets/ URL correctly");
+
+// Test clean deletion
+fr_delete_image($upWs['path']);
+ok(!is_file(FR_ROOT . '/' . $upWs['path']), "fr_delete_image properly deleted the workshop file");
+fr_delete_image($upCs['path']);
+ok(!is_file(FR_ROOT . '/' . $upCs['path']), "fr_delete_image properly deleted the course file");
+fr_delete_image($upUsr['path']);
+ok(!is_file(FR_ROOT . '/' . $upUsr['path']), "fr_delete_image properly deleted the user avatar");
+fr_delete_image($upTst['path']);
+ok(!is_file(FR_ROOT . '/' . $upTst['path']), "fr_delete_image properly deleted the test cover");
+fr_delete_image($upTck['path']);
+ok(!is_file(FR_ROOT . '/' . $upTck['path']), "fr_delete_image properly deleted the ticket attachment");
+@unlink($tmpImg);
+
+// Verify pipeline migration of legacy DB rows
+DB::run("INSERT INTO " . DB::t('events') . " (title, slug, kind, price, capacity, status, image) VALUES ('کارگاه قدیمی تستی', 'ws-legacy-qa', 'workshop', 100000, 20, 'active', 'assets/uploads/events/cover-workshop-1.svg')");
+$wsLegId = (int)DB::val("SELECT id FROM " . DB::t('events') . " WHERE slug='ws-legacy-qa'");
+
+DB::run("INSERT INTO " . DB::t('events') . " (title, slug, kind, price, capacity, status, image) VALUES ('دوره قدیمی تستی', 'cs-legacy-qa', 'course', 150000, 15, 'active', 'assets/uploads/events/cover-course-11.svg')");
+$csLegId = (int)DB::val("SELECT id FROM " . DB::t('events') . " WHERE slug='cs-legacy-qa'");
+
+require_once FR_ROOT . '/includes/update.php';
+// Force run update pipeline
+fr_update_pipeline(true);
+
+$migWsImg = DB::val("SELECT image FROM " . DB::t('events') . " WHERE id=?", [$wsLegId]);
+ok(str_starts_with($migWsImg, 'feria-uploads/workshops/'), "Legacy workshop image migrated to feria-uploads/workshops/ ($migWsImg)");
+
+$migCsImg = DB::val("SELECT image FROM " . DB::t('events') . " WHERE id=?", [$csLegId]);
+ok(str_starts_with($migCsImg, 'feria-uploads/courses/'), "Legacy course image migrated to feria-uploads/courses/ ($migCsImg)");
+
+// Clean up test events
+DB::run("DELETE FROM " . DB::t('events') . " WHERE id IN (?, ?)", [$wsLegId, $csLegId]);
+
 echo "\n============================================\n";
-echo "🎉 ALL 15 STAGES PASSED WITH 100% SUCCESS!\n";
+echo "🎉 ALL 16 STAGES PASSED WITH 100% SUCCESS!\n";
 echo "============================================\n";

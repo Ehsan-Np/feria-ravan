@@ -11,7 +11,7 @@
  */
 declare(strict_types=1);
 
-define('FR_RELEASE', '3.2.0');
+define('FR_RELEASE', '3.3.0');
 
 /* سازگاری: اگر config.php قدیمی هنوز FR_VERSION نساخته، از همین‌جا بساز */
 if (!defined('FR_VERSION')) define('FR_VERSION', FR_RELEASE);

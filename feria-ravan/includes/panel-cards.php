@@ -30,14 +30,19 @@ function fr_panel_test_card(array $t, string $mode = 'start'): void
     $g    = $grads[(string)($t['engine'] ?? '')] ?? ['#7c5cf0', '#a78bfa'];
     $grad = $isMgr ? 'linear-gradient(135deg,#17122e,#3b2a7a)'
                    : 'linear-gradient(135deg,' . $g[0] . ',' . $g[1] . ')';
+    $coverStyle = 'background:' . $grad;
+    if (!empty($t['image'])) {
+        $coverImg = str_starts_with($t['image'], 'http') ? $t['image'] : SITE_URL . '/' . ltrim($t['image'], '/');
+        $coverStyle .= ';background-image:url(' . str_replace(["'", ')', '('], '', $coverImg) . ');background-size:cover;background-position:center';
+    }
     $isNew = !empty($t['created_at']) && strtotime((string)$t['created_at']) > time() - 75 * 86400;
     $url   = $mode === 'start'
         ? SITE_URL . '/panel/test-start.php?id=' . (int)$t['id']
         : fr_test_url($t);
     ?>
 <article class="pc-card" style="margin:0">
-  <a class="pc-cover" href="<?= e($url) ?>" style="background:<?= e($grad) ?>" aria-label="<?= e($t['title']) ?>">
-    <span class="pc-cover-ic" aria-hidden="true"><?= $ico ?></span>
+  <a class="pc-cover" href="<?= e($url) ?>" style="<?= e($coverStyle) ?>" aria-label="<?= e($t['title']) ?>">
+    <?php if (empty($t['image'])): ?><span class="pc-cover-ic" aria-hidden="true"><?= $ico ?></span><?php endif; ?>
     <span class="pc-badge <?= $isMgr ? 'manager' : '' ?>"><?= $isMgr ? '👑 ویژهٔ مدیران' : 'عمومی' ?></span>
     <?php if ($isNew): ?><span class="pc-badge new">✨ جدید</span><?php endif; ?>
     <?php $pcDeal = fr_price_deal((int)$t['price_full'], isset($t['price_sale']) ? (int)$t['price_sale'] : null); ?>

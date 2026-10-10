@@ -1,0 +1,6 @@
+# فریا روان — محافظت از پوشهٔ اختصاصی آپلود feria-uploads
+Options -Indexes
+<FilesMatch "\.(php|phtml|phar|cgi|pl|py|asp|aspx|sh)$">
+  Require all denied
+  Deny from all
+</FilesMatch>

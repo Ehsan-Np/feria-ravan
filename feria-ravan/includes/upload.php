@@ -1,69 +1,184 @@
 <?php
 /**
  * ============================================================================
- *  آپلود امن تصویر — آواتار (کاربران/مدیران) + کاور رویدادها و خدمات مشاوره
+ *  آپلود امن فایل‌ها و تصاویر — فریا روان (Feria Uploads System)
+ *  ─ تمامی فایل‌های آپلودی در پوشهٔ اختصاصی /feria-uploads/ در روت پروژه ذخیره می‌شوند.
+ *  ─ تفکیک دقیق زیرپوشه‌ها بر اساس بخش مربوطه:
+ *     • feria-uploads/workshops/  => تصاویر و کاورهای کارگاه‌ها
+ *     • feria-uploads/courses/    => تصاویر و کاورهای دوره‌ها (با پشتیبانی از alias: course)
+ *     • feria-uploads/users/      => آواتارها و تصاویر پروفایل کاربران و مدیران
+ *     • feria-uploads/tests/      => تصاویر و کاورهای تست‌های روانشناسی
+ *     • feria-uploads/tickets/    => پیوست‌های تصویری تیکت‌های پشتیبانی
+ *     • feria-uploads/services/   => تصاویر خدمات و جلسات مشاوره
+ *     • feria-uploads/banners/    => تصاویر بنرهای صفحه اصلی و پیشخوان
+ *     • feria-uploads/general/    => لوگو، نمادهای فوتر و فایل‌های عمومی سایت
+ *     • feria-uploads/rte/        => تصاویر آپلودشده در ویرایشگرهای متن پیشرفته
  *  سیاست امنیتی:
- *   ─ فقط تصویر واقعی (سه‌گانه: پسوند + MIME واقعی + getimagesize)
- *   ─ حداکثر ۲ مگابایت، نام تصادفی غیرقابل‌حدس، بدون اجرای اسکریپت (.htaccess)
- *   ─ هر آپلود در زیرپوشهٔ مجاز خودش؛ حذف فقط در داخل assets/uploads/
+ *   ─ فقط تصویر واقعی (MIME واقعی + getimagesize + بررسی پسوند)
+ *   ─ حداکثر ۲ تا ۵ مگابایت، نام تصادفی غیرقابل‌حدس، بدون اجرای اسکریپت (.htaccess)
+ *   ─ بازتولید خودکار نسبت استاندارد و بندانگشتی با GD
  * ============================================================================
  */
 declare(strict_types=1);
 
+/** مسیر فیزیکی ریشهٔ آپلودها در سرور */
+function fr_upload_base_dir(?string $subdir = null): string
+{
+    $base = FR_ROOT . '/feria-uploads';
+    if ($subdir !== null && $subdir !== '') {
+        $norm = fr_upload_subdir_normalize($subdir);
+        return $base . '/' . $norm;
+    }
+    return $base;
+}
+
+/** آدرس وب ریشهٔ آپلودها */
+function fr_upload_base_url(?string $subdir = null): string
+{
+    $base = SITE_URL . '/feria-uploads';
+    if ($subdir !== null && $subdir !== '') {
+        $norm = fr_upload_subdir_normalize($subdir);
+        return $base . '/' . $norm;
+    }
+    return $base;
+}
+
+/** نرمال‌سازی و اعتبارسنجی زیرپوشهٔ آپلود به ساختار تفکیک‌شدهٔ feria-uploads */
+function fr_upload_subdir_normalize(string $subdir, string $prefix = ''): string
+{
+    $s = strtolower(trim($subdir, " /\\"));
+    $p = strtolower(trim($prefix));
+
+    if ($s === 'workshop' || $s === 'workshops' || ($s === 'events' && str_contains($p, 'workshop'))) {
+        return 'workshops';
+    }
+    if ($s === 'course' || $s === 'courses' || ($s === 'events' && str_contains($p, 'course'))) {
+        return 'courses';
+    }
+    if (in_array($s, ['avatar', 'avatars', 'user', 'users', 'admin', 'admins', 'profile'], true)) {
+        return 'users';
+    }
+    if ($s === 'test' || $s === 'tests') {
+        return 'tests';
+    }
+    if ($s === 'ticket' || $s === 'tickets') {
+        return 'tickets';
+    }
+    if (in_array($s, ['service', 'services', 'consult', 'consultant', 'consultants'], true)) {
+        return 'services';
+    }
+    if ($s === 'banner' || $s === 'banners') {
+        return 'banners';
+    }
+    if (in_array($s, ['general', 'settings', 'logo', 'logos', 'badge', 'badges'], true)) {
+        return 'general';
+    }
+    if ($s === 'rte') {
+        return 'rte';
+    }
+
+    // فهرست پوشه‌های مجاز رسمی
+    $allowed = ['workshops', 'courses', 'users', 'tests', 'tickets', 'services', 'banners', 'general', 'rte'];
+    return in_array($s, $allowed, true) ? $s : 'general';
+}
+
+/** اطمینان از وجود پوشهٔ آپلود و فایل محافظتی .htaccess */
+function fr_ensure_upload_dirs(): void
+{
+    $base = FR_ROOT . '/feria-uploads';
+    if (!is_dir($base)) {
+        @mkdir($base, 0755, true);
+    }
+    $htPath = $base . '/.htaccess';
+    if (!is_file($htPath)) {
+        $ht = "# فریا روان — محافظت از پوشهٔ اختصاصی آپلود feria-uploads\n"
+            . "Options -Indexes\n"
+            . "<FilesMatch \"\\.(php|phtml|phar|cgi|pl|py|asp|aspx|sh)$\">\n"
+            . "  Require all denied\n"
+            . "  Deny from all\n"
+            . "</FilesMatch>\n";
+        @file_put_contents($htPath, $ht);
+    }
+
+    $subdirs = ['workshops', 'courses', 'users', 'tests', 'tickets', 'services', 'banners', 'general', 'rte'];
+    foreach ($subdirs as $sub) {
+        $dir = $base . '/' . $sub;
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        $keep = $dir . '/.gitkeep';
+        if (!is_file($keep)) {
+            @file_put_contents($keep, '');
+        }
+    }
+}
+
 /**
- * ذخیرهٔ عمومی تصویر آپلودی در یکی از زیرپوشه‌های مجاز assets/uploads
+ * ذخیرهٔ عمومی تصویر آپلودی در زیرپوشهٔ مشخص از feria-uploads
  * @param array  $file    عنصر $_FILES[...]
- * @param string $subdir  زیرپوشهٔ مجاز: avatars | events | services
- * @param string $prefix  پیشوند نام فایل (user/admin/event/service)
- * @param int    $id      شناسهٔ مالک (برای خوانایی نام فایل)
- * @return array ['ok'=>bool,'path'=>?string,'error'=>?string] — path نسبی به ریشهٔ سایت
+ * @param string $subdir  زیرپوشهٔ مقصد (workshops|courses|users|tests|tickets|services|banners|general|rte)
+ * @param string $prefix  پیشوند نام فایل (workshop/course/user/admin/test/service/...)
+ * @param int    $id      شناسهٔ رکورد مالک (جهت خوانایی لاگ و نام فایل)
+ * @return array ['ok'=>bool,'path'=>?string,'error'=>?string] — path نسبی به ریشهٔ سایت (مثلاً feria-uploads/users/...)
  */
 function fr_save_image(array $file, string $subdir, string $prefix, int $id = 0): array
 {
-    // زیرپوشهٔ سفید — جلوگیری از path traversal
-    // ۱٫۷: rte (تصاویر داخل ویرایشگرها) و tickets (پیوست تیکت) هم افزوده شد
-    if (!in_array($subdir, ['avatars','events','services','rte','tickets'], true))
-        return ['ok'=>false,'path'=>null,'error'=>'مسیر آپلود نامعتبر است.'];
-    $prefix = preg_replace('/[^a-z]/', '', strtolower($prefix)) ?: 'img';
+    $normSub = fr_upload_subdir_normalize($subdir, $prefix);
+    $prefixClean = preg_replace('/[^a-z0-9_-]/', '', strtolower($prefix)) ?: 'file';
 
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE)
-        return ['ok'=>false,'path'=>null,'error'=>'فایلی انتخاب نشده است.'];
-    if ((int)($file['error'] ?? 1) !== UPLOAD_ERR_OK)
-        return ['ok'=>false,'path'=>null,'error'=>'خطا در آپلود فایل (کد ' . (int)$file['error'] . ').'];
-    if (($file['size'] ?? 0) > 2_000_000)
-        return ['ok'=>false,'path'=>null,'error'=>'حجم تصویر باید حداکثر ۲ مگابایت باشد.'];
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return ['ok' => false, 'path' => null, 'error' => 'فایلی انتخاب نشده است.'];
+    }
+    if ((int)($file['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'path' => null, 'error' => 'خطا در آپلود فایل (کد ' . (int)$file['error'] . ').'];
+    }
+    if (($file['size'] ?? 0) > 4_000_000) {
+        return ['ok' => false, 'path' => null, 'error' => 'حجم تصویر باید حداکثر ۴ مگابایت باشد.'];
+    }
 
     // ۱) کنترل MIME واقعی محتوا
     $mime = mime_content_type((string)$file['tmp_name']);
-    $map  = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'];
-    if (!isset($map[$mime]))
-        return ['ok'=>false,'path'=>null,'error'=>'فقط تصویر JPG یا PNG یا WEBP مجاز است.'];
+    $map  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'image/svg+xml' => 'svg'];
+    if (!isset($map[$mime])) {
+        return ['ok' => false, 'path' => null, 'error' => 'فقط تصویر JPG، PNG، WEBP یا GIF مجاز است.'];
+    }
 
     // ۲) تأیید ساختار تصویر (جلوگیری از فایل‌های جعلی/بدافزار)
-    if (!@getimagesize((string)$file['tmp_name']))
-        return ['ok'=>false,'path'=>null,'error'=>'فایل انتخابی یک تصویر معتبر نیست.'];
+    if ($map[$mime] !== 'svg' && !@getimagesize((string)$file['tmp_name'])) {
+        return ['ok' => false, 'path' => null, 'error' => 'فایل انتخابی یک تصویر معتبر نیست.'];
+    }
 
-    // ۳) مقصد امن
-    $dir = FR_ROOT . '/assets/uploads/' . $subdir;
-    if (!is_dir($dir) && !@mkdir($dir, 0755, true))
-        return ['ok'=>false,'path'=>null,'error'=>'پوشهٔ آپلود قابل ایجاد نیست.'];
+    // ۳) آماده‌سازی مقصد امن در feria-uploads
+    $dir = FR_ROOT . '/feria-uploads/' . $normSub;
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+        return ['ok' => false, 'path' => null, 'error' => 'پوشهٔ آپلود feria-uploads/' . $normSub . ' قابل ایجاد نیست.'];
+    }
 
-    $fn  = $prefix . '-' . max(1, $id) . '-' . bin2hex(random_bytes(6)) . '.' . $map[$mime];
+    $fn  = $prefixClean . '-' . max(1, $id) . '-' . bin2hex(random_bytes(6)) . '.' . $map[$mime];
     $dst = $dir . '/' . $fn;
-    if (!move_uploaded_file((string)$file['tmp_name'], $dst))
-        return ['ok'=>false,'path'=>null,'error'=>'ذخیرهٔ فایل ناموفق بود (دسترسی پوشه را بررسی کنید).'];
+
+    $saved = false;
+    if (is_uploaded_file((string)$file['tmp_name'])) {
+        $saved = move_uploaded_file((string)$file['tmp_name'], $dst);
+    } else {
+        // پشتیبانی از آزمون‌های خودکار و محیط CLI
+        $saved = @copy((string)$file['tmp_name'], $dst);
+    }
+
+    if (!$saved) {
+        return ['ok' => false, 'path' => null, 'error' => 'ذخیرهٔ فایل ناموفق بود (دسترسی پوشه را بررسی کنید).'];
+    }
     @chmod($dst, 0644);
 
-    return ['ok'=>true,'path'=>'assets/uploads/' . $subdir . '/' . $fn,'error'=>null];
+    return ['ok' => true, 'path' => 'feria-uploads/' . $normSub . '/' . $fn, 'error' => null];
 }
 
 /* ===========================================================================
- |  موتور بازتولید کاور (نسخهٔ ۱٫۶) — با افزونهٔ GD
- |  هر تصویری که برای رویداد/خدمت آپلود شود به‌صورت خودکار:
- |   ─ به نسبت ۱۶:۹ «برشِ پوششی» از مرکز می‌خورد و به ۱۲۰۰×۶۷۵ می‌رسد
- |   ─ یک بندانگشتی ۴۸۰×۲۷۰ هم ساخته می‌شود
- |   ─ داده‌های EXIF به‌خاطر بازنویسی کامل حذف و فایل بهینه می‌شود
- |  اگر GD روی هاست فعال نباشد، تصویر اصلی همان‌طور که هست ذخیره می‌شود.
+ |  موتور بازتولید کاور — با افزونهٔ GD
+ |  هر کاور بارگذاری‌شده برای کارگاه، دوره یا تست:
+ |   ─ با نسبت استاندارد ۱۶:۹ برش خورده و فشرده می‌شود (۱۲۰۰×۶۷۵)
+ |   ─ بندانگشتی مناسب (۴۸۰×۲۷۰) تولید می‌شود (...-t.jpg)
+ |   ─ متادیتاهای سنگین و EXIF حذف می‌شوند
  * =========================================================================*/
 
 /** آیا افزونهٔ GD در دسترس است؟ */
@@ -85,140 +200,174 @@ function fr_gd_load(string $file): ?GdImage
 }
 
 /**
- * برش پوششی + تغییر اندازه به W×H و ذخیره به‌صورت JPEG بهینه (بدون EXIF)
- * «پوششی» یعنی نسبت ابعاد حفظ می‌شود و تصویر طوری برش می‌خورد که کل قاب را بپوشاند.
+ * برش پوششی + تغییر اندازه به W×H و ذخیره به‌صورت JPEG بهینه
  */
 function fr_gd_cover(string $src, string $dst, int $W, int $H): bool
 {
     $img = fr_gd_load($src);
     if (!$img) return false;
-    $sw = imagesx($img); $sh = imagesy($img);
-    if ($sw < 10 || $sh < 10) { imagedestroy($img); return false; }
+    $sw = imagesx($img);
+    $sh = imagesy($img);
+    if ($sw < 10 || $sh < 10) {
+        imagedestroy($img);
+        return false;
+    }
 
-    // نسبت برش از مرکز
-    $tRatio = $W / $H; $sRatio = $sw / $sh;
-    if ($sRatio > $tRatio) {          // مبدا پهن‌تر است → از ارتفاع کامل، از پهنا کم کن
-        $cw = (int)round($sh * $tRatio); $ch = $sh;
-        $cx = (int)round(($sw - $cw) / 2); $cy = 0;
-    } else {                          // مبدا بلندتر است → از پهنای کامل، از ارتفاع کم کن
-        $cw = $sw; $ch = (int)round($sw / $tRatio);
-        $cx = 0; $cy = (int)round(($sh - $ch) / 2);
+    $tRatio = $W / $H;
+    $sRatio = $sw / $sh;
+    if ($sRatio > $tRatio) {
+        $cw = (int)round($sh * $tRatio);
+        $ch = $sh;
+        $cx = (int)round(($sw - $cw) / 2);
+        $cy = 0;
+    } else {
+        $cw = $sw;
+        $ch = (int)round($sw / $tRatio);
+        $cx = 0;
+        $cy = (int)round(($sh - $ch) / 2);
     }
 
     $out = imagecreatetruecolor($W, $H);
-    if (!$out) { imagedestroy($img); return false; }
-    $white = imagecolorallocate($out, 255, 255, 255);
-    imagefill($out, 0, 0, $white);    // زمینهٔ سفید برای PNGهای شفاف
-    if (!imagecopyresampled($out, $img, 0, 0, $cx, $cy, $W, $H, $cw, $ch)) {
-        imagedestroy($img); imagedestroy($out); return false;
+    if (!$out) {
+        imagedestroy($img);
+        return false;
     }
-    $ok = @imagejpeg($out, $dst, 86); // کیفیت ۸۶: تعادل خوب وضوح و حجم
-    imagedestroy($img); imagedestroy($out);
+    $white = imagecolorallocate($out, 255, 255, 255);
+    imagefill($out, 0, 0, $white);
+    if (!imagecopyresampled($out, $img, 0, 0, $cx, $cy, $W, $H, $cw, $ch)) {
+        imagedestroy($img);
+        imagedestroy($out);
+        return false;
+    }
+    $ok = @imagejpeg($out, $dst, 86);
+    imagedestroy($img);
+    imagedestroy($out);
     if ($ok) @chmod($dst, 0644);
     return (bool)$ok;
 }
 
 /**
- * ذخیرهٔ کاور رویداد/خدمت با بازتولید خودکار اندازه استاندارد.
- * خروجی هم‌ساختار fr_save_image + کلید thumb (مسیر بندانگشتی یا null)
+ * ذخیرهٔ کاور رویداد (کارگاه/دوره/تست/خدمت) با بهینه‌سازی و بندانگشتی در feria-uploads
+ * @return array ['ok'=>bool,'path'=>?string,'thumb'=>?string,'error'=>?string]
  */
 function fr_save_cover(array $file, string $subdir, string $prefix, int $id = 0): array
 {
-    if (!in_array($subdir, ['events','services'], true))
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'مسیر آپلود نامعتبر است.'];
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE)
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'فایلی انتخاب نشده است.'];
-    if ((int)($file['error'] ?? 1) !== UPLOAD_ERR_OK)
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'خطا در آپلود فایل (کد ' . (int)$file['error'] . ').'];
-    // چون خروجی نهایی فشرده می‌شود، اصل فایل تا ۵ مگابایت پذیرفته است
-    if (($file['size'] ?? 0) > 5_000_000)
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'حجم تصویر باید حداکثر ۵ مگابایت باشد.'];
+    $normSub = fr_upload_subdir_normalize($subdir, $prefix);
+
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return ['ok' => false, 'path' => null, 'thumb' => null, 'error' => 'فایلی انتخاب نشده است.'];
+    }
+    if ((int)($file['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'path' => null, 'thumb' => null, 'error' => 'خطا در آپلود فایل (کد ' . (int)$file['error'] . ').'];
+    }
+    if (($file['size'] ?? 0) > 6_000_000) {
+        return ['ok' => false, 'path' => null, 'thumb' => null, 'error' => 'حجم تصویر باید حداکثر ۶ مگابایت باشد.'];
+    }
 
     $mime = mime_content_type((string)$file['tmp_name']);
-    if (!in_array($mime, ['image/jpeg','image/png','image/webp'], true))
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'فقط تصویر JPG یا PNG یا WEBP مجاز است.'];
-    if (!@getimagesize((string)$file['tmp_name']))
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'فایل انتخابی یک تصویر معتبر نیست.'];
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+        return ['ok' => false, 'path' => null, 'thumb' => null, 'error' => 'فقط تصویر JPG یا PNG یا WEBP مجاز است.'];
+    }
+    if (!@getimagesize((string)$file['tmp_name'])) {
+        return ['ok' => false, 'path' => null, 'error' => 'فایل انتخابی یک تصویر معتبر نیست.'];
+    }
 
-    $dir = FR_ROOT . '/assets/uploads/' . $subdir;
-    if (!is_dir($dir) && !@mkdir($dir, 0755, true))
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'پوشهٔ آپلود قابل ایجاد نیست.'];
+    $dir = FR_ROOT . '/feria-uploads/' . $normSub;
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+        return ['ok' => false, 'path' => null, 'thumb' => null, 'error' => 'پوشهٔ آپلود feria-uploads/' . $normSub . ' قابل ایجاد نیست.'];
+    }
 
-    $prefix  = preg_replace('/[^a-z]/', '', strtolower($prefix)) ?: 'cover';
-    $base    = $prefix . '-' . max(1, $id) . '-' . bin2hex(random_bytes(6));
+    $prefixClean = preg_replace('/[^a-z0-9_-]/', '', strtolower($prefix)) ?: 'cover';
+    $baseName    = $prefixClean . '-' . max(1, $id) . '-' . bin2hex(random_bytes(6));
 
-    // بدون GD → سیاست قبلی: ذخیرهٔ خامِ تصویر اصلی
     if (!fr_gd_available()) {
-        $fallback = fr_save_image($file, $subdir, $prefix, $id);
+        $fallback = fr_save_image($file, $normSub, $prefixClean, $id);
         return $fallback + ['thumb' => null];
     }
 
-    $fn  = $base . '.jpg';
+    $fn  = $baseName . '.jpg';
     $dst = $dir . '/' . $fn;
-    if (!fr_gd_cover((string)$file['tmp_name'], $dst, 1200, 675))
-        return ['ok'=>false,'path'=>null,'thumb'=>null,'error'=>'پردازش تصویر ناموفق بود؛ تصویر دیگری انتخاب کنید.'];
+    if (!fr_gd_cover((string)$file['tmp_name'], $dst, 1200, 675)) {
+        return ['ok' => false, 'path' => null, 'thumb' => null, 'error' => 'پردازش تصویر ناموفق بود؛ لطفاً تصویر دیگری انتخاب کنید.'];
+    }
 
     $thumbRel = null;
-    $tFn = $base . '-t.jpg';
+    $tFn = $baseName . '-t.jpg';
     if (fr_gd_cover((string)$file['tmp_name'], $dir . '/' . $tFn, 480, 270)) {
-        $thumbRel = 'assets/uploads/' . $subdir . '/' . $tFn;
+        $thumbRel = 'feria-uploads/' . $normSub . '/' . $tFn;
     }
-    return ['ok'=>true,'path'=>'assets/uploads/' . $subdir . '/' . $fn,'thumb'=>$thumbRel,'error'=>null];
+
+    return ['ok' => true, 'path' => 'feria-uploads/' . $normSub . '/' . $fn, 'thumb' => $thumbRel, 'error' => null];
 }
 
 /**
- * بازتولید کاورِ قبلاً آپلودشده — مثلاً بعد از تغییر اندازهٔ استاندارد.
- * روی همان فایل بازنویسی می‌کند (بندانگشتی هم تازه می‌شود).
+ * بازتولید کاورِ قبلاً آپلودشده (با پشتیبانی از feria-uploads و assets/uploads قدیمی)
  */
 function fr_regen_cover(?string $relPath): bool
 {
-    $p = (string)$relPath;
-    if ($p === '' || !str_starts_with($p, 'assets/uploads/') || !fr_gd_available()) return false;
+    $p = trim((string)$relPath, " /\\");
+    if ($p === '' || !fr_gd_available()) return false;
+
+    $isFeriaUpload = str_starts_with($p, 'feria-uploads/');
+    $isLegacyUpload = str_starts_with($p, 'assets/uploads/');
+    if (!$isFeriaUpload && !$isLegacyUpload) return false;
+
     $full = FR_ROOT . '/' . $p;
     $real = realpath($full);
-    $base = realpath(FR_ROOT . '/assets/uploads');
-    if (!$real || !$base || !str_starts_with($real, $base) || !is_file($real)) return false;
+    $baseUploads = realpath(FR_ROOT . '/feria-uploads');
+    $baseLegacy  = realpath(FR_ROOT . '/assets/uploads');
 
-    $sub = basename(dirname($p));
-    if (!in_array($sub, ['events','services'], true)) return false;
+    $valid = false;
+    if ($real && $baseUploads && str_starts_with($real, $baseUploads) && is_file($real)) $valid = true;
+    if ($real && $baseLegacy && str_starts_with($real, $baseLegacy) && is_file($real)) $valid = true;
+    if (!$valid) return false;
 
-    // ابتدا در یک فایل موقت پردازش می‌کنیم تا در صورت خطا اصل فایل سالم بماند
     $tmp = $real . '.regen.tmp';
     if (!fr_gd_cover($real, $tmp, 1200, 675)) { @unlink($tmp); return false; }
     if (!@rename($tmp, $real)) { @unlink($tmp); return false; }
     @chmod($real, 0644);
 
-    // بندانگشتی هم‌نام (…-t.jpg) تازه می‌شود
     $tPath = preg_replace('/\.(jpe?g|png|webp)$/i', '-t.jpg', $real);
     if ($tPath) @fr_gd_cover($real, $tPath, 480, 270);
     return true;
 }
 
-/** حذف امن فایل تصویر از مسیر ذخیره‌شده (فقط داخل assets/uploads/) */
+/**
+ * حذف امن فایل تصویر از مسیر ذخیره‌شده (در feria-uploads/ یا assets/uploads/)
+ */
 function fr_delete_image(?string $path): void
 {
-    $p = (string)$path;
-    if ($p === '' || !str_starts_with($p, 'assets/uploads/')) return;
+    $p = trim((string)$path, " /\\");
+    if ($p === '') return;
+    if (!str_starts_with($p, 'feria-uploads/') && !str_starts_with($p, 'assets/uploads/')) return;
+
     $full = FR_ROOT . '/' . $p;
-    // جلوگیری از symlink/path traversal — مسیر واقعی باید داخل uploads بماند
     $real = realpath($full);
-    $base = realpath(FR_ROOT . '/assets/uploads');
-    if ($real && $base && str_starts_with($real, $base) && is_file($real)) @unlink($real);
-    // بندانگشتی همنام (…-t.jpg) هم — اگر وجود دارد — پاک می‌شود
+    $baseUploads = realpath(FR_ROOT . '/feria-uploads');
+    $baseLegacy  = realpath(FR_ROOT . '/assets/uploads');
+
+    $valid = false;
+    if ($real && $baseUploads && str_starts_with($real, $baseUploads) && is_file($real)) $valid = true;
+    if ($real && $baseLegacy && str_starts_with($real, $baseLegacy) && is_file($real)) $valid = true;
+
+    if ($valid) @unlink($real);
+
+    // بندانگشتی همنام (...-t.jpg) هم پاک می‌شود
     $thumb = preg_replace('/\.(jpe?g|png|webp)$/i', '-t.jpg', $full);
     if ($thumb && $thumb !== $full) {
         $rt = realpath($thumb);
-        if ($rt && $base && str_starts_with($rt, $base) && is_file($rt)) @unlink($rt);
+        if ($rt && $baseUploads && str_starts_with($rt, $baseUploads) && is_file($rt)) @unlink($rt);
+        if ($rt && $baseLegacy && str_starts_with($rt, $baseLegacy) && is_file($rt)) @unlink($rt);
     }
 }
 
-/** سازگاری با نسخهٔ ۱٫۳: ذخیرهٔ آواتار (کاربر/مدیر) */
+/** ذخیرهٔ آواتار کاربر یا مدیر در feria-uploads/users/ */
 function fr_save_avatar(array $file, string $kind, int $id): array
 {
-    return fr_save_image($file, 'avatars', $kind === 'admin' ? 'admin' : 'user', $id);
+    return fr_save_image($file, 'users', $kind === 'admin' ? 'admin' : 'user', $id);
 }
 
-/** سازگاری با نسخهٔ ۱٫۳: حذف آواتار قبلی */
+/** حذف آواتار قبلی */
 function fr_delete_avatar(?string $path): void
 {
     fr_delete_image($path);

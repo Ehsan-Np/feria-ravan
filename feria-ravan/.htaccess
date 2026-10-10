@@ -11,6 +11,23 @@ ServerSignature Off
 # صفحه پیش‌فرض
 DirectoryIndex index.php
 
+# سازگاری با پیوندهای آپلود قدیمی: هدایت امن assets/uploads به feria-uploads
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^assets/uploads/events/cover-workshop-(.*)$ feria-uploads/workshops/cover-workshop-$1 [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^assets/uploads/events/cover-course-(.*)$ feria-uploads/courses/cover-course-$1 [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^assets/uploads/services/(.*)$ feria-uploads/services/$1 [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^assets/uploads/avatars/(.*)$ feria-uploads/users/$1 [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^assets/uploads/tickets/(.*)$ feria-uploads/tickets/$1 [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^assets/uploads/(.*)$ feria-uploads/$1 [L]
+</IfModule>
+
 # ============================================================================
 #  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
 #  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛

@@ -9,15 +9,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($act === 'save') {
         $id = (int)post('id');
         $image = (string)post('image');
-        // آپلود تصویر (در صورت انتخاب)
+        // آپلود تصویر در feria-uploads/banners/
         if (!empty($_FILES['file']['tmp_name'])) {
             $allowed = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif'];
             $mime = mime_content_type($_FILES['file']['tmp_name']);
-            if (isset($allowed[$mime]) && $_FILES['file']['size'] < 2_000_000) {
-                $fn = 'banner-' . time() . '.' . $allowed[$mime];
-                $dst = FR_ROOT . '/assets/uploads/' . $fn;
+            if (isset($allowed[$mime]) && $_FILES['file']['size'] < 3_000_000) {
+                $dir = FR_ROOT . '/feria-uploads/banners';
+                if (!is_dir($dir)) @mkdir($dir, 0755, true);
+                $fn = 'banner-' . time() . '-' . bin2hex(random_bytes(4)) . '.' . $allowed[$mime];
+                $dst = $dir . '/' . $fn;
                 if (move_uploaded_file($_FILES['file']['tmp_name'], $dst)) {
-                    $image = SITE_URL . '/assets/uploads/' . $fn;
+                    $image = SITE_URL . '/feria-uploads/banners/' . $fn;
                 }
             }
         }

@@ -124,8 +124,10 @@ function admin_events_page(array $adm, string $kind): void
                 DB::update('events', ['image'=>null], 'id=?', [$id]);
             }
             if (!empty($_FILES['image']) && (int)($_FILES['image']['error'] ?? 4) !== 4) {
-                /* کاور با موتور بازتولید: برش پوششی ۱۶:۹ + اندازهٔ استاندارد ۱۲۰۰×۶۷۵ + بندانگشتی */
-                $up = fr_save_cover($_FILES['image'], 'events', ($kind === 'course' ? 'course' : 'workshop'), $id);
+                /* کاور با موتور بازتولید در feria-uploads (تفکیک کارگاه و دوره) */
+                $targetSubdir = ($kind === 'course' ? 'courses' : 'workshops');
+                $prefix = ($kind === 'course' ? 'course' : 'workshop');
+                $up = fr_save_cover($_FILES['image'], $targetSubdir, $prefix, $id);
                 if ($up['ok']) {
                     if ($old && $old['image']) fr_delete_image($old['image']);
                     DB::update('events', ['image'=>$up['path']], 'id=?', [$id]);
@@ -237,14 +239,15 @@ function admin_events_page(array $adm, string $kind): void
                     $newId = DB::insert('events', $src);
                     $slug  = fr_unique_slug('events', fr_slugify($src['title']), 'slug', $newId);
                     DB::update('events', ['slug'=>$slug], 'id=?', [$newId]);
-                    // کاور کپی را از مبدا کپی فیزیکی می‌کنیم (فایل مجزا تا حذف یکی به دیگری آسیب نزند)
+                    // کاور کپی را از مبدا کپی فیزیکی می‌کنیم (فایل مجزا در feria-uploads)
                     if ($img && is_file(FR_ROOT . '/' . $img)) {
+                        $targetSubdir = ($src['kind'] === 'course' ? 'courses' : 'workshops');
                         $ext  = pathinfo($img, PATHINFO_EXTENSION);
-                        $dir  = FR_ROOT . '/assets/uploads/events';
+                        $dir  = FR_ROOT . '/feria-uploads/' . $targetSubdir;
                         if (!is_dir($dir)) @mkdir($dir, 0755, true);
-                        $fn = 'event-' . $newId . '-' . bin2hex(random_bytes(6)) . '.' . $ext;
+                        $fn = ($src['kind'] === 'course' ? 'course' : 'workshop') . '-' . $newId . '-' . bin2hex(random_bytes(6)) . '.' . $ext;
                         if (@copy(FR_ROOT . '/' . $img, $dir . '/' . $fn)) {
-                            DB::update('events', ['image'=>'assets/uploads/events/' . $fn], 'id=?', [$newId]);
+                            DB::update('events', ['image'=>'feria-uploads/' . $targetSubdir . '/' . $fn], 'id=?', [$newId]);
                         }
                     }
                 } catch (Throwable $e) {}

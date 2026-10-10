@@ -90,6 +90,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ۱٫۹: 'trash' فقط وقتی پذیرفته می‌شود که تست روانشناسی هم‌اکنون در زباله‌دان باشد (ویرایشِ درونِ زباله‌دان)
     $curStatus = $id ? (string)DB::val('SELECT status FROM ' . DB::t('tests') . ' WHERE id=?', [$id]) : '';
     $allowSt   = ['active','inactive','draft'] + ($curStatus === 'trash' ? [3=>'trash'] : []);
+
+    // مدیریت کاور تست روانشناسی (ذخیره در feria-uploads/tests/)
+    $oldTest = $id ? DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$id]) : null;
+    if ((int)post('remove_image') === 1 && !empty($oldTest['image'])) {
+        require_once __DIR__ . '/../includes/upload.php';
+        fr_delete_image($oldTest['image']);
+        DB::update('tests', ['image' => null], 'id=?', [$id]);
+    }
+    if (!empty($_FILES['image']) && (int)($_FILES['image']['error'] ?? 4) !== 4) {
+        require_once __DIR__ . '/../includes/upload.php';
+        $up = fr_save_cover($_FILES['image'], 'tests', 'test', $id);
+        if ($up['ok']) {
+            if (!empty($oldTest['image'])) fr_delete_image($oldTest['image']);
+            DB::update('tests', ['image' => $up['path']], 'id=?', [$id]);
+        } else {
+            flash('خطا در آپلود کاور تست: ' . $up['error'], 'warn');
+        }
+    }
+
     if ($id && DB::update('tests', [
         'title'         => trim((string)post('title')),
         'slug'          => $newSlug,
@@ -140,12 +159,24 @@ echo flash();
 <?php if ($edit && $t = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$edit])): ?>
 <div class="fr-card">
   <h3>ویرایش: <?= e($t['title']) ?> <?= $t['status']==='trash' ? '<span class="fr-chip warn">در زباله‌دان</span>' : '' ?></h3>
-  <form method="post" class="fr-grid cols-2">
+  <form method="post" enctype="multipart/form-data" class="fr-grid cols-2">
     <?= csrf_field() ?>
     <input type="hidden" name="id" value="<?= $t['id'] ?>"><input type="hidden" name="edit_page" value="1">
     <div>
       <div class="fr-field"><label>عنوان تست روانشناسی</label><input class="fr-input" name="title" id="tTitle" value="<?= e($t['title']) ?>"></div>
       <div class="fr-field"><label>توضیح کوتاه</label><input class="fr-input" name="short_desc" id="tShort" value="<?= e($t['short_desc'] ?? '') ?>"></div>
+      <div class="fr-field"><label>کاور تست روانشناسی</label>
+        <?php if (!empty($t['image'])): ?>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <img src="<?= e(SITE_URL . '/' . ltrim($t['image'], '/')) ?>" alt="" style="width:120px;height:68px;object-fit:cover;border-radius:12px;border:1px solid var(--line)">
+          <label style="font-size:12px;color:var(--err);display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" name="remove_image" value="1"> حذف کاور فعلی
+          </label>
+        </div>
+        <?php endif; ?>
+        <input class="fr-input" type="file" name="image" accept="image/jpeg,image/png,image/webp">
+        <small class="hint">فرمت‌های مجاز: JPG, PNG, WEBP (ذخیرهٔ خودکار در feria-uploads/tests/)</small>
+      </div>
       <div class="fr-field"><label>اسلاگ صفحهٔ عمومی (بدون تغییر بمانید = خودکار)</label>
         <input class="fr-input" name="slug" id="tSlug" dir="ltr" style="text-align:left" value="<?= e($t['slug'] ?? '') ?>" placeholder="mbti-test">
         <?php if (!empty($t['slug'])): ?>
@@ -264,8 +295,17 @@ echo flash();
       <?php foreach ($tests as $t): ?>
       <tr>
         <td><input type="checkbox" class="tid" name="ids[]" value="<?= (int)$t['id'] ?>"></td>
-        <td><b><?= e($t['title']) ?></b><br>
-          <small style="color:var(--muted)"><?= ($t['audience'] ?? 'general')==='manager' ? '💼 مدیران' : '👥 عمومی' ?></small></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <?php if (!empty($t['image'])): ?>
+            <img src="<?= e(SITE_URL . '/' . ltrim($t['image'], '/')) ?>" alt="" style="width:50px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:0 0 auto">
+            <?php endif; ?>
+            <div>
+              <b><?= e($t['title']) ?></b><br>
+              <small style="color:var(--muted)"><?= ($t['audience'] ?? 'general')==='manager' ? '💼 مدیران' : '👥 عمومی' ?></small>
+            </div>
+          </div>
+        </td>
         <td><span class="fr-chip purple"><?= e($t['engine']) ?></span></td>
         <td><?= fa_num($t['qc']) ?></td>
         <td><?= fa_num($t['done_count']) ?></td>

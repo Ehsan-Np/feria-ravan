@@ -103,8 +103,8 @@ function fr_seed_events(): void
  |  ─ upsert نرم: موارد موجود (v3) فقط فیلدهای خالیِ جدید را می‌گیرند
  * ==========================================================================*/
 
-/** تولید کاور SVG اختصاصی برند — گرادیان + ایموجی + فرم‌های هندسی (۱۲۰۰×۶۷۵) */
-function fr_seed_cover(string $kind, int $idx, string $emoji, string $subdir = 'events'): ?string
+/** تولید کاور SVG اختصاصی برند در feria-uploads — گرادیان + ایموجی + فرم‌های هندسی (۱۲۰۰×۶۷۵) */
+function fr_seed_cover(string $kind, int $idx, string $emoji, string $subdir = ''): ?string
 {
     /* پالت‌های گرادیان متمایز (۲٫۳ — رسمی اجرایی): کارگاه (سرمه‌ای)، دوره (فیروزه)، مشاوره (سبز/طلایی) */
     $pals = [
@@ -140,15 +140,19 @@ function fr_seed_cover(string $kind, int $idx, string $emoji, string $subdir = '
   <text x="600" y="400" font-size="190" text-anchor="middle" style="filter:drop-shadow(0 10px 22px rgba(0,0,0,.25))">{$emoji}</text>
 </svg>
 SVG;
-    $dir = FR_ROOT . '/assets/uploads/' . $subdir;
+    // تفکیک زیرپوشه بر اساس نوع فایل
+    if ($subdir === '' || $subdir === 'events') {
+        $subdir = ($kind === 'course') ? 'courses' : (($kind === 'consult') ? 'services' : 'workshops');
+    }
+    $dir = FR_ROOT . '/feria-uploads/' . $subdir;
     if (!is_dir($dir) && !@mkdir($dir, 0755, true)) return null;
     $fn = 'cover-' . $kind . '-' . ($idx + 1) . '.svg';
     // اگر فایل از قبل هست و محتوایش تغییر نکرده، دوباره‌نویسی لازم نیست
     if (is_file($dir . '/' . $fn) && md5_file($dir . '/' . $fn) === md5($svg))
-        return 'assets/uploads/' . $subdir . '/' . $fn;
+        return 'feria-uploads/' . $subdir . '/' . $fn;
     if (@file_put_contents($dir . '/' . $fn, $svg) === false) return null;
     @chmod($dir . '/' . $fn, 0644);
-    return 'assets/uploads/' . $subdir . '/' . $fn;
+    return 'feria-uploads/' . $subdir . '/' . $fn;
 }
 
 /**

@@ -69,6 +69,11 @@ public_header([
 
 <div class="pb-wrap" style="max-width:900px">
   <div class="fr-card" style="margin-bottom:18px">
+    <?php if (!empty($t['image'])): ?>
+    <div style="margin-bottom:20px;border-radius:16px;overflow:hidden;box-shadow:0 6px 20px rgba(30,58,110,.12)">
+      <img src="<?= e(SITE_URL . '/' . ltrim($t['image'], '/')) ?>" alt="<?= e($t['title']) ?>" style="width:100%;max-height:420px;object-fit:cover;display:block">
+    </div>
+    <?php endif; ?>
     <?php if ($t['description']): ?>
     <div class="ev-content rte-area" style="line-height:2.1;font-size:15px"><?= fr_sanitize_html((string)$t['description']) ?></div>
     <?php else: ?>

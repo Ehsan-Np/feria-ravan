@@ -15,19 +15,18 @@
 declare(strict_types=1);
 
 /** اجرای خودکار به‌روزرسانی‌ها در اولین ریکوئست پس از آپلود نسخهٔ جدید */
-function fr_update_pipeline(): void
+function fr_update_pipeline(bool $force = false): void
 {
     // قبل از نصب کامل، settings وجود ندارد — بی‌صدا رد می‌شویم
     static $tried = false;
-    /* نسخهٔ ۱٫۹: منبع حقیقت نگارش، کد است (FR_RELEASE از includes/version.php) —
-       نه config.php کاربر که هنگام ارتقا حفظ می‌شود */
+    /* منبع حقیقت نگارش، کد است (FR_RELEASE از includes/version.php) */
     $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : null);
-    if ($tried || $codeVer === null) return;
+    if ((!$force && $tried) || $codeVer === null) return;
     $tried = true;
 
     $cur = '';
     try { $cur = (string)DB::setting('fr_version', '0'); } catch (Throwable $e) { return; }
-    if ($cur === $codeVer) return;
+    if (!$force && $cur === $codeVer) return;
 
     /* ── قفل اتمیک: اولین پروسه‌ای که موفق به نوشتن مهر زمانی شود، اجرا می‌کند ── */
     $T = DB::t('settings');
@@ -783,6 +782,71 @@ function fr_update_pipeline(): void
                 try { DB::run($q); } catch (Throwable $e) { error_log('feria: 3.2 ddl: ' . $e->getMessage()); }
             }
         } catch (Throwable $e) { error_log('feria: 3.2 growth & clinical: ' . $e->getMessage()); }
+
+        /* ─── ۳٫۳٫۰: ساختار جدید و تفکیک‌شدهٔ آپلودها در روت پروژه (feria-uploads) ─── */
+        try {
+            require_once FR_ROOT . '/includes/upload.php';
+            fr_ensure_upload_dirs();
+
+            // انتقال یا همگام‌سازی فایل‌های موجود از assets/uploads به feria-uploads
+            $legacyBase = FR_ROOT . '/assets/uploads';
+            $newBase    = FR_ROOT . '/feria-uploads';
+
+            if (is_dir($legacyBase . '/events')) {
+                $evFiles = glob($legacyBase . '/events/*') ?: [];
+                foreach ($evFiles as $srcFile) {
+                    if (!is_file($srcFile)) continue;
+                    $bName = basename($srcFile);
+                    if (str_contains($bName, 'workshop')) {
+                        $dst = $newBase . '/workshops/' . $bName;
+                        if (!is_file($dst)) @copy($srcFile, $dst);
+                    } elseif (str_contains($bName, 'course')) {
+                        $dst = $newBase . '/courses/' . $bName;
+                        if (!is_file($dst)) @copy($srcFile, $dst);
+                    }
+                }
+            }
+            if (is_dir($legacyBase . '/services')) {
+                $srvFiles = glob($legacyBase . '/services/*') ?: [];
+                foreach ($srvFiles as $srcFile) {
+                    if (!is_file($srcFile)) continue;
+                    $dst = $newBase . '/services/' . basename($srcFile);
+                    if (!is_file($dst)) @copy($srcFile, $dst);
+                }
+            }
+            if (is_dir($legacyBase . '/avatars')) {
+                $avaFiles = glob($legacyBase . '/avatars/*') ?: [];
+                foreach ($avaFiles as $srcFile) {
+                    if (!is_file($srcFile)) continue;
+                    $dst = $newBase . '/users/' . basename($srcFile);
+                    if (!is_file($dst)) @copy($srcFile, $dst);
+                }
+            }
+            if (is_dir($legacyBase . '/tickets')) {
+                $tckFiles = glob($legacyBase . '/tickets/*') ?: [];
+                foreach ($tckFiles as $srcFile) {
+                    if (!is_file($srcFile)) continue;
+                    $dst = $newBase . '/tickets/' . basename($srcFile);
+                    if (!is_file($dst)) @copy($srcFile, $dst);
+                }
+            }
+
+            // به‌روزرسانی آدرس‌های قدیمی در پایگاه‌داده به feria-uploads
+            $p = DB_PREFIX;
+            DB::run("UPDATE `{$p}events` SET `image` = REPLACE(`image`, 'assets/uploads/events/cover-workshop', 'feria-uploads/workshops/cover-workshop') WHERE `image` LIKE 'assets/uploads/events/cover-workshop%'");
+            DB::run("UPDATE `{$p}events` SET `image` = REPLACE(`image`, 'assets/uploads/events/cover-course', 'feria-uploads/courses/cover-course') WHERE `image` LIKE 'assets/uploads/events/cover-course%'");
+            DB::run("UPDATE `{$p}events` SET `image` = REPLACE(`image`, 'assets/uploads/events/workshop-', 'feria-uploads/workshops/workshop-') WHERE `image` LIKE 'assets/uploads/events/workshop-%'");
+            DB::run("UPDATE `{$p}events` SET `image` = REPLACE(`image`, 'assets/uploads/events/course-', 'feria-uploads/courses/course-') WHERE `image` LIKE 'assets/uploads/events/course-%'");
+            DB::run("UPDATE `{$p}events` SET `image` = REPLACE(`image`, 'assets/uploads/events/', 'feria-uploads/workshops/') WHERE `kind`='workshop' AND `image` LIKE 'assets/uploads/events/%'");
+            DB::run("UPDATE `{$p}events` SET `image` = REPLACE(`image`, 'assets/uploads/events/', 'feria-uploads/courses/') WHERE `kind`='course' AND `image` LIKE 'assets/uploads/events/%'");
+            DB::run("UPDATE `{$p}consult_services` SET `image` = REPLACE(`image`, 'assets/uploads/services/', 'feria-uploads/services/') WHERE `image` LIKE 'assets/uploads/services/%'");
+            DB::run("UPDATE `{$p}consultants` SET `avatar` = REPLACE(`avatar`, 'assets/uploads/avatars/', 'feria-uploads/users/') WHERE `avatar` LIKE 'assets/uploads/avatars/%'");
+            DB::run("UPDATE `{$p}users` SET `avatar` = REPLACE(`avatar`, 'assets/uploads/avatars/', 'feria-uploads/users/') WHERE `avatar` LIKE 'assets/uploads/avatars/%'");
+            DB::run("UPDATE `{$p}admins` SET `avatar` = REPLACE(`avatar`, 'assets/uploads/avatars/', 'feria-uploads/users/') WHERE `avatar` LIKE 'assets/uploads/avatars/%'");
+            DB::run("UPDATE `{$p}ticket_messages` SET `attachment` = REPLACE(`attachment`, 'assets/uploads/tickets/', 'feria-uploads/tickets/') WHERE `attachment` LIKE 'assets/uploads/tickets/%'");
+            DB::run("UPDATE `{$p}settings` SET `value` = REPLACE(`value`, 'assets/uploads/', 'feria-uploads/general/') WHERE `key` IN ('logo', 'footer_badge1_img', 'footer_badge2_img', 'footer_badge3_img', 'footer_badge4_img') AND `value` LIKE '%assets/uploads/%'");
+            DB::run("UPDATE `{$p}banners` SET `image` = REPLACE(`image`, 'assets/uploads/', 'feria-uploads/banners/') WHERE `image` LIKE '%assets/uploads/%'");
+        } catch (Throwable $e) { error_log('feria: 3.3 feria-uploads: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);

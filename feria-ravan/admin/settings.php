@@ -68,27 +68,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
             DB::setSetting($k, $v);
         }
     }
-    /* آپلود لوگو */
+    /* آپلود لوگو در feria-uploads/general/ */
     if (!empty($_FILES['logo_file']['tmp_name'])) {
         $mime = mime_content_type($_FILES['logo_file']['tmp_name']);
         $map = ['image/jpeg'=>'jpg','image/png'=>'png','image/svg+xml'=>'svg','image/webp'=>'webp'];
-        if (isset($map[$mime]) && $_FILES['logo_file']['size'] < 1_500_000) {
+        if (isset($map[$mime]) && $_FILES['logo_file']['size'] < 2_000_000) {
+            $genDir = FR_ROOT . '/feria-uploads/general';
+            if (!is_dir($genDir)) @mkdir($genDir, 0755, true);
             $fn = 'logo.' . $map[$mime];
-            if (move_uploaded_file($_FILES['logo_file']['tmp_name'], FR_ROOT . '/assets/uploads/' . $fn)) {
-                DB::setSetting('logo', SITE_URL . '/assets/uploads/' . $fn);
+            if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $genDir . '/' . $fn)) {
+                DB::setSetting('logo', SITE_URL . '/feria-uploads/general/' . $fn);
             }
         }
     }
-    /* نسخهٔ ۲٫۱: آپلود تصویر نمادهای فوتر */
+    /* نسخهٔ ۲٫۱: آپلود تصویر نمادهای فوتر در feria-uploads/general/ */
     $map = ['image/jpeg'=>'jpg','image/png'=>'png','image/svg+xml'=>'svg','image/webp'=>'webp','image/gif'=>'gif'];
     for ($bi = 1; $bi <= 4; $bi++) {
         $fld = 'badge' . $bi . '_file';
         if (!empty($_FILES[$fld]['tmp_name']) && is_uploaded_file($_FILES[$fld]['tmp_name'])) {
             $mime = mime_content_type($_FILES[$fld]['tmp_name']);
-            if (isset($map[$mime]) && $_FILES[$fld]['size'] < 1_000_000) {
+            if (isset($map[$mime]) && $_FILES[$fld]['size'] < 1_500_000) {
+                $genDir = FR_ROOT . '/feria-uploads/general';
+                if (!is_dir($genDir)) @mkdir($genDir, 0755, true);
                 $fn = 'badge-' . $bi . '-' . date('YmdHis') . '.' . $map[$mime];
-                if (move_uploaded_file($_FILES[$fld]['tmp_name'], FR_ROOT . '/assets/uploads/' . $fn)) {
-                    DB::setSetting('footer_badge' . $bi . '_img', SITE_URL . '/assets/uploads/' . $fn);
+                if (move_uploaded_file($_FILES[$fld]['tmp_name'], $genDir . '/' . $fn)) {
+                    DB::setSetting('footer_badge' . $bi . '_img', SITE_URL . '/feria-uploads/general/' . $fn);
                 }
             }
         }
