@@ -260,6 +260,76 @@ it('admin/trash.php exists', file_exists(FR_ROOT . '/admin/trash.php'));
 it('panel/trash.php exists', file_exists(FR_ROOT . '/panel/trash.php'));
 it('core/TrashManager.php exists', file_exists(FR_ROOT . '/core/TrashManager.php'));
 
+// --- 9. Registration & Review Trash Capabilities ---
+echo "\n--- 9. Registration & Review Trash Capabilities ---\n";
+it('normalizeType maps plural attempts to attempt', TrashManager::normalizeType('attempts') === 'attempt');
+it('normalizeType maps registrations to registration', TrashManager::normalizeType('registrations') === 'registration');
+it('normalizeType maps workshops to event', TrashManager::normalizeType('workshops') === 'event');
+
+// Test registration soft-delete and restore
+$testEvId = (int)DB::val("SELECT id FROM " . DB::t('events') . " LIMIT 1");
+$rndMob = '0912' . random_int(1000000, 9999999);
+$testRegUser = DB::insert('users', ['first_name' => 'کاربر', 'last_name' => 'رویداد', 'mobile' => $rndMob]);
+$testRegId = DB::insert('event_registrations', [
+    'event_id' => $testEvId,
+    'user_id'  => $testRegUser,
+    'order_id' => 0,
+    'status'   => 'pending',
+]);
+it('Test registration fixture created', $testRegId > 0);
+
+$regTrashed = TrashManager::trash('registration', $testRegId, 1);
+it('TrashManager::trash registration succeeded', $regTrashed === true);
+$regTrashCheck = DB::one("SELECT deleted_at FROM " . DB::t('event_registrations') . " WHERE id=?", [$testRegId]);
+it('Registration deleted_at is populated', !empty($regTrashCheck['deleted_at']));
+
+$regList = TrashManager::getList('registrations', 10);
+$foundRegInList = false;
+foreach ($regList as $itReg) {
+    if ($itReg['type'] === 'registration' && $itReg['id'] === $testRegId) {
+        $foundRegInList = true;
+        break;
+    }
+}
+it('Trashed registration appears in getList(registrations)', $foundRegInList);
+
+$regRestored = TrashManager::restore('registration', $testRegId);
+it('TrashManager::restore registration succeeded', $regRestored === true);
+$regPurged = TrashManager::purge('registration', $testRegId);
+it('TrashManager::purge registration succeeded', $regPurged === true);
+DB::run("DELETE FROM " . DB::t('users') . " WHERE id=?", [$testRegUser]);
+
+// Test review soft-delete and restore
+$testRevId = DB::insert('reviews', [
+    'context'     => 'workshop',
+    'ref_id'      => $testEvId,
+    'author_name' => 'کاربر دیدگاه',
+    'body'        => 'این یک نظر آزمایشی برای سطل زباله است.',
+    'status'      => 'approved',
+]);
+it('Test review fixture created', $testRevId > 0);
+
+$revTrashed = TrashManager::trash('review', $testRevId, 1);
+it('TrashManager::trash review succeeded', $revTrashed === true);
+$revTrashCheck = DB::one("SELECT deleted_at, status FROM " . DB::t('reviews') . " WHERE id=?", [$testRevId]);
+it('Review deleted_at is populated', !empty($revTrashCheck['deleted_at']));
+it('Review status marked rejected when trashed', $revTrashCheck['status'] === 'rejected');
+
+$revList = TrashManager::getList('reviews', 10);
+$foundRevInList = false;
+foreach ($revList as $itRev) {
+    if ($itRev['type'] === 'review' && $itRev['id'] === $testRevId) {
+        $foundRevInList = true;
+        break;
+    }
+}
+it('Trashed review appears in getList(reviews)', $foundRevInList);
+
+$revRestored = TrashManager::restore('review', $testRevId);
+it('TrashManager::restore review succeeded', $revRestored === true);
+$revPurged = TrashManager::purge('review', $testRevId);
+it('TrashManager::purge review succeeded', $revPurged === true);
+
 // Test user edit logic without prompt blocker
 $editUid = DB::insert('users', [
     'first_name' => 'سعید',

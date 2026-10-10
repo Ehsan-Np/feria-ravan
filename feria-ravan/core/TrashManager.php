@@ -48,6 +48,11 @@ final class TrashManager
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         } catch (Throwable $e) {}
 
+        // انعطاف‌پذیری ستون order_id در event_registrations برای ثبت‌نام‌های رایگان یا بدون سفارش اولیه
+        try {
+            DB::run("ALTER TABLE `{$p}event_registrations` MODIFY COLUMN `order_id` BIGINT UNSIGNED NULL DEFAULT 0");
+        } catch (Throwable $e) {}
+
         foreach ($tables as $tbl => $statusCol) {
             $tableName = "{$p}{$tbl}";
             try {
