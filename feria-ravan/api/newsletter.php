@@ -32,6 +32,13 @@ if ($action === 'subscribe') {
     /* نسخهٔ ۲٫۲: نام و نام خانوادگی (یک فیلد) برای عضو جدید الزامی است */
     $row = DB::one("SELECT * FROM " . DB::t('newsletter') . " WHERE mobile=?", [$mobile]);
     if (!$row && mb_strlen($name) < 3) {
+        $u = function_exists('current_user') ? current_user() : null;
+        if ($u) {
+            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+            if (mb_strlen($fullName) >= 2) $name = $fullName;
+        }
+    }
+    if (!$row && mb_strlen($name) < 3) {
         json_out(['ok'=>false,'need_name'=>true,'message'=>'نام و نام خانوادگی خود را هم بنویسید (مثلاً: سارا احمدی).']);
     }
     if ($row) {

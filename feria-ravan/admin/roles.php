@@ -127,6 +127,43 @@ $legacyTitles = ['superadmin' => 'مدیر ارشد', 'manager' => 'مدیر ا�
 admin_layout($adm, 'roles', 'نقش‌ها و سطح دسترسی مدیران');
 echo flash();
 ?>
+<?php if ($edit): ?>
+<div class="fr-card" style="margin:0 max-width:800px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+    <h3 style="margin:0">✏️ ویرایش نقش: «<?= e($edit['title']) ?>»</h3>
+    <a class="fr-btn ghost sm" href="roles.php">← بازگشت به فهرست نقش‌ها</a>
+  </div>
+  <form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="act" value="save">
+    <input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
+    <div class="fr-field">
+      <label>عنوان نقش</label>
+      <input class="fr-input" name="title" value="<?= e($edit['title']) ?>" required>
+    </div>
+    <div class="fr-field">
+      <label>دسترسی‌ها (Capabilities)</label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:8px;max-height:360px;overflow-y:auto;padding:8px;border:1px solid var(--line);border-radius:10px;background:#fbfaff">
+        <?php foreach (fr_caps_catalog() as $cap => $cLabel): ?>
+        <label class="tog" style="font-size:12.5px">
+          <input type="checkbox" name="caps[]" value="<?= e($cap) ?>" <?= in_array($cap, $editCaps, true) ? 'checked' : '' ?>>
+          <span><?= e($cLabel) ?> <small style="color:var(--muted)">(<?= e($cap) ?>)</small></span>
+        </label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
+      <button class="fr-btn sm" type="submit">ذخیره تغییرات نقش</button>
+      <a class="fr-btn ghost sm" href="roles.php">انصراف و بازگشت</a>
+    </div>
+  </form>
+</div>
+<?php
+admin_layout_end();
+exit;
+endif;
+?>
+
 <div class="fr-grid" style="grid-template-columns:1.2fr .8fr;gap:16px;align-items:start">
   <div class="fr-card">
     <h3>نقش‌های تعریف‌شده</h3>

@@ -18,7 +18,7 @@ function fr_admin_notify_mobiles(): array
     if ($cache !== null) return $cache;
     $list = [];
     try {
-        foreach (DB::all("SELECT mobile FROM " . DB::t('admins') . " WHERE active=1 AND mobile IS NOT NULL AND mobile<>''") as $a) {
+        foreach (DB::all("SELECT mobile FROM " . DB::t('admins') . " WHERE (status='active' OR status IS NULL) AND mobile IS NOT NULL AND mobile<>''") as $a) {
             $m = en_num((string)$a['mobile']);
             if (valid_mobile($m)) $list[] = $m;
         }

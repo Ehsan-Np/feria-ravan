@@ -69,7 +69,7 @@ function public_header(array $opts = [], string $title = ''): void
       <?php endforeach; ?>
       <span class="pb-links-cta">
         <?php if ($u): ?>
-          <a class="fr-btn sm" href="<?= SITE_URL ?>/panel/"><?= e(T('nav.panel')) ?> ←</a>
+          <a class="fr-btn sm" href="<?= function_exists('fr_panel_url') ? fr_panel_url() : (SITE_URL . '/panel/') ?>"><?= e(function_exists('fr_panel_title') ? fr_panel_title() : T('nav.panel')) ?> ←</a>
         <?php else: ?>
           <a class="fr-btn sm" href="<?= SITE_URL ?>/auth.php"><?= e(T('nav.login')) ?></a>
         <?php endif; ?>
@@ -140,9 +140,9 @@ function public_footer(): void
         ['label' => T('nav.consult'), 'url' => '/consult.php'],
     ]);
     $links2 = fr_footer_linklist('footer_links2_json', [
-        ['label' => '💌 عضویت در خبرنامه', 'url' => '/newsletter.php'],
+        ['label' => '💌 عضویت در خبرنامه', 'url' => SITE_URL . '/newsletter.php'],
         ['label' => T('nav.login'), 'url' => '/auth.php'],
-        ['label' => T('nav.panel'), 'url' => '/panel/'],
+        ['label' => (function_exists('fr_panel_title') ? fr_panel_title() : T('nav.panel')), 'url' => (function_exists('fr_panel_url') ? fr_panel_url() : '/panel/')],
         ['label' => 'پشتیبانی و تیکت', 'url' => '/panel/tickets.php'],
     ]);
     $badges = fr_footer_badges();
@@ -158,7 +158,7 @@ function public_footer(): void
         <span><?= e(DB::setting('newsletter_desc', T('footer.newsletter_desc'))) ?></span>
       </div>
       <?php if ($u): ?>
-      <button type="button" class="fr-btn white" id="nlJoin" data-mobile="<?= e((string)$u['mobile']) ?>">
+      <button type="button" class="fr-btn white" id="nlJoin" data-mobile="<?= e((string)$u['mobile']) ?>" data-name="<?= e(function_exists('user_fullname') ? user_fullname($u) : '') ?>">
         <?= e(T('footer.newsletter_btn')) ?></button>
       <?php else: ?>
       <form class="pb-nl-form" id="nlForm">
@@ -170,7 +170,7 @@ function public_footer(): void
       </form>
       <?php endif; ?>
       <span class="pb-nl-msg" id="nlMsg" role="status"></span>
-      <a href="/newsletter.php" style="font-size:12px;color:#fff;opacity:.9;text-decoration:underline;margin-inline-start:8px">فرم کامل عضویت (با تلگرام و بله) ←</a>
+      <a href="<?= SITE_URL ?>/newsletter.php" style="font-size:12px;color:#fff;opacity:.9;text-decoration:underline;margin-inline-start:8px">فرم کامل عضویت (با تلگرام و بله) ←</a>
     </div>
   </div>
 
@@ -189,14 +189,14 @@ function public_footer(): void
     <div class="pb-foot-col">
       <b><?= e(T('footer.links_title')) ?></b>
       <?php foreach ($links1 as $l): ?>
-      <a href="<?= e($l['url']) ?>"><?= e($l['label']) ?></a>
+      <a href="<?= e(function_exists('fr_format_url') ? fr_format_url($l['url']) : $l['url']) ?>"><?= e($l['label']) ?></a>
       <?php endforeach; ?>
     </div>
     <!-- ستون ۳: خدمات کاربران -->
     <div class="pb-foot-col">
       <b><?= e(T('footer.support_title')) ?></b>
       <?php foreach ($links2 as $l): ?>
-      <a href="<?= e($l['url']) ?>"><?= e($l['label']) ?></a>
+      <a href="<?= e(function_exists('fr_format_url') ? fr_format_url($l['url']) : $l['url']) ?>"><?= e($l['label']) ?></a>
       <?php endforeach; ?>
     </div>
     <!-- ستون ۴: چهار نماد هم‌اندازه (اینماد / ساماندهی / زرین‌پال / انجمن) — ۲٫۲ -->
@@ -246,7 +246,7 @@ function public_footer(): void
   var join = document.getElementById('nlJoin');
   if (join) join.addEventListener('click', function(){
     join.disabled = true;
-    window.api('<?= SITE_URL ?>/api/newsletter.php', {action:'subscribe', mobile: join.getAttribute('data-mobile'), source: 'footer'}).then(done);
+    window.api('<?= SITE_URL ?>/api/newsletter.php', {action:'subscribe', mobile: join.getAttribute('data-mobile'), name: join.getAttribute('data-name') || '', source: 'footer'}).then(done);
   });
   var f = document.getElementById('nlForm');
   if (f) f.addEventListener('submit', function(e){

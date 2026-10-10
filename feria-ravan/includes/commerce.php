@@ -500,6 +500,42 @@ function mark_order_paid(int $orderId, string $refId, ?string $cardPan): void
                 ]);
             }
         }
+
+        // ۳٫۴: به‌روزرسانی پیوند تطابق دونفره و زوجین در صورت پرداخت هدیه یا خرید همراه
+        try {
+            $dyad1 = DB::one('SELECT d.*, t.title AS test_title FROM ' . DB::t('dyads') . ' d
+                             JOIN ' . DB::t('tests') . ' t ON t.id=d.test_id
+                             WHERE d.order1_id=?', [$orderId]);
+            if ($dyad1) {
+                DB::update('dyads', ['partner_paid' => 1, 'updated_at' => date('Y-m-d H:i:s')], 'id=?', [$dyad1['id']]);
+                if (!empty($dyad1['partner_mobile'])) {
+                    $u1 = DB::one('SELECT first_name, last_name FROM ' . DB::t('users') . ' WHERE id=?', [(int)$dyad1['user1_id']]);
+                    $u1Name = trim(($u1['first_name'] ?? '') . ' ' . ($u1['last_name'] ?? '')) ?: 'همراه شما';
+                    $testTitle = $dyad1['test_title'] ?? 'سنجش تطابق';
+                    $inviteUrl = rtrim(SITE_URL, '/') . '/panel/dyad.php?token=' . urlencode($dyad1['token']);
+                    $pName = $dyad1['partner_name'] ?: 'همراه گرامی';
+
+                    require_once FR_ROOT . '/core/Kavenegar.php';
+                    $sms = new Kavenegar();
+                    $smsText = "{$pName} عزیز، {$u1Name} هزینهٔ نسخهٔ تخصصی آزمون سنجش تطابق ({$testTitle}) را برای شما هدیه و پرداخت کرده است.\nمشاهده و شروع آزمون هدیه:\n{$inviteUrl}";
+                    $sms->sendDirect($dyad1['partner_mobile'], $smsText);
+                }
+            }
+
+            $targetAttId = $targetAtt ? (int)$targetAtt['id'] : 0;
+            $dyad2 = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE order2_id=? OR (attempt2_id IS NOT NULL AND attempt2_id=?)', [$orderId, $targetAttId]);
+            if ($dyad2) {
+                DB::update('dyads', [
+                    'order2_id' => $orderId,
+                    'status'    => 'ready',
+                    'updated_at'=> date('Y-m-d H:i:s')
+                ], 'id=?', [$dyad2['id']]);
+                require_once FR_ROOT . '/core/DyadAnalyzer.php';
+                DyadAnalyzer::analyze((int)$dyad2['id']);
+            }
+        } catch (Throwable $e) {
+            error_log('Dyad mark_order_paid error: ' . $e->getMessage());
+        }
     }
 
     $itemTitle = $o['kind'] === 'event' ? ($o['event_title'] ?? 'رویداد') : ($o['test_title'] ?? 'تست روانشناسی');

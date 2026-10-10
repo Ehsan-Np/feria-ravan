@@ -18,6 +18,17 @@ require_once __DIR__ . '/../core/Zarinpal.php';
 fr_bootstrap();
 
 $u    = require_user();
+$activeDyadToken = trim((string)($_GET['dyad_token'] ?? ($_SESSION['active_dyad_token'] ?? '')));
+if ($activeDyadToken !== '') {
+    $_SESSION['active_dyad_token'] = $activeDyadToken;
+}
+
+$dyadContext = null;
+if ($activeDyadToken !== '') {
+    $dyadContext = DB::one('SELECT d.*, u1.first_name AS u1_fn, u1.last_name AS u1_ln FROM ' . DB::t('dyads') . ' d JOIN ' . DB::t('users') . ' u1 ON u1.id=d.user1_id WHERE d.token=?', [$activeDyadToken]);
+}
+$isDyadGift = ($dyadContext && $dyadContext['pay_mode'] === 'self_paid' && (int)$dyadContext['partner_paid'] === 1);
+
 $test = DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [(int)($_GET['id'] ?? 0)]);
 if (!$test) redirect(SITE_URL . '/panel/tests.php');
 $err = '';
@@ -70,6 +81,30 @@ if ($open && $open['os'] === 'paid' && $completedFree) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = (string)($_POST['mode'] ?? 'free');
 
+    // استفاده از هدیه پرداخت‌شده توسط همراه
+    if ($isDyadGift && ($mode === 'gift' || $mode === 'full')) {
+        if ($completedFree) {
+            DB::update('attempts', ['mode' => 'full', 'order_id' => $dyadContext['order1_id']], 'id=?', [$completedFree['id']]);
+            require_once __DIR__ . '/../core/Analyzer.php';
+            Analyzer::scoreAttempt((int)$completedFree['id']);
+            require_once __DIR__ . '/../core/DyadAnalyzer.php';
+            DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$completedFree['id']);
+            flash('آزمون شما با استفاده از هدیهٔ همراهتان به نسخه تخصصی ارتقا یافت! گزارش تطابق آماده است 🎉', 'ok');
+            redirect(SITE_URL . '/panel/dyad-report.php?id=' . $dyadContext['id']);
+        } else {
+            $aid = DB::insert('attempts', [
+                'user_id'    => $u['id'],
+                'test_id'    => $test['id'],
+                'mode'       => 'full',
+                'order_id'   => $dyadContext['order1_id'],
+                'ip'         => client_ip_bin(),
+                'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+            ]);
+            log_activity('test_start', 'attempt', $aid, ['mode' => 'full', 'test' => $test['slug'], 'dyad_gift' => 1]);
+            redirect(SITE_URL . '/panel/take.php?attempt=' . $aid);
+        }
+    }
+
     if ($mode === 'free') {
         if (!$test['free_enabled']) $err = 'نسخهٔ رایگان این تست روانشناسی غیرفعال است.';
         else {
@@ -95,13 +130,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet, $upgradeAttemptId > 0 ? $upgradeAttemptId : null);
         if ($r['error']) $err = $r['error'];
-        elseif ($r['payment_url']) redirect($r['payment_url']);          // → درگاه
         else {
-            $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
-            if ($attRow && $attRow['status'] === 'completed') {
-                redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$r['attempt_id']);
+            if ($dyadContext && !empty($r['order']['id'])) {
+                DB::update('dyads', ['order2_id' => $r['order']['id']], 'id=?', [$dyadContext['id']]);
+            }
+            if ($r['payment_url']) {
+                redirect($r['payment_url']);          // → درگاه
             } else {
-                redirect(SITE_URL . '/panel/take.php?attempt=' . (int)$r['attempt_id']);
+                if ($dyadContext && !empty($r['attempt_id'])) {
+                    require_once __DIR__ . '/../core/DyadAnalyzer.php';
+                    DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$r['attempt_id']);
+                }
+                $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
+                if ($attRow && $attRow['status'] === 'completed') {
+                    if ($dyadContext) {
+                        redirect(SITE_URL . '/panel/dyad-report.php?id=' . $dyadContext['id']);
+                    }
+                    redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$r['attempt_id']);
+                } else {
+                    redirect(SITE_URL . '/panel/take.php?attempt=' . (int)$r['attempt_id']);
+                }
             }
         }
     }
@@ -119,6 +167,11 @@ if ($err) echo '<div class="fr-alert err">' . e($err) . '</div>';
 $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placement='test_form'
   AND (starts_at IS NULL OR starts_at<=NOW()) AND (expires_at IS NULL OR expires_at>=NOW()) ORDER BY sort_order LIMIT 1");
 ?>
+<?php if (!empty($_SESSION['active_dyad_token'])): ?>
+<div class="fr-alert info" style="margin-bottom:16px">
+  👥 <b>شرکت در سنجش تطابق دونفره:</b> پس از پاسخ به سوالات این آزمون، کارنامهٔ تطابق دونفرهٔ شما و همراهتان به صورت خودکار صادر خواهد شد.
+</div>
+<?php endif; ?>
 <?php if ($open): ?>
 <div class="fr-alert warn">
   شما یک جلسهٔ ناتمام از این تست روانشناسی دارید.
@@ -129,6 +182,30 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
     <a href="take.php?attempt=<?= (int)$open['id'] ?>"><b>ادامه از سؤال <?= fa_num($open['progress'] + 1) ?> ←</b></a>
   | <a href="abandon.php?attempt=<?= (int)$open['id'] ?>&back=<?= urlencode($_SERVER['REQUEST_URI']) ?>">انصراف و شروع مجدد</a>
   <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if ($dyadContext):
+  $inviterName = trim(($dyadContext['u1_fn'] ?? '') . ' ' . ($dyadContext['u1_ln'] ?? '')) ?: 'همراه شما';
+?>
+<div class="fr-card" style="background:<?= $isDyadGift ? '#f0fdf4' : '#faf5ff' ?>;border:2px solid <?= $isDyadGift ? '#22c55e' : '#8b5cf6' ?>;margin-bottom:20px;padding:16px 20px">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="font-size:36px"><?= $isDyadGift ? '🎁' : '👥' ?></div>
+    <div style="flex:1">
+      <div style="font-weight:700;font-size:15.5px;color:<?= $isDyadGift ? '#166534' : '#5b21b6' ?>">
+        <?= $isDyadGift ? 'هدیه ویژه آزمون از طرف «' . e($inviterName) . '»' : 'دعوت به سنجش تطابق دونفره توسط «' . e($inviterName) . '»' ?>
+      </div>
+      <p style="margin:4px 0 0;font-size:13px;color:<?= $isDyadGift ? '#15803d' : '#6b21a8' ?>;line-height:1.8">
+        <?php if ($isDyadGift): ?>
+          هزینهٔ نسخهٔ تخصصی و جامع این آزمون توسط همراه شما پرداخت شده است! شما می‌توانید بدون پرداخت هیچ هزینه‌ای، آزمون تخصصی را شروع کنید.
+        <?php elseif ($dyadContext['pay_mode'] === 'partner_paid'): ?>
+          همراه شما این آزمون را انجام داده و شما را به <b>نسخهٔ تخصصی و کامل</b> دعوت کرده است. با تهیهٔ نسخهٔ تخصصی، کارنامه تطابق دونفره فعال خواهد شد.
+        <?php else: ?>
+          شما به سنجش تطابق دونفره دعوت شده‌اید. با تکمیل نسخهٔ رایگان یا ویژه، تحلیل تطابق شما دو نفر آماده می‌شود.
+        <?php endif; ?>
+      </p>
+    </div>
+  </div>
 </div>
 <?php endif; ?>
 
@@ -188,6 +265,18 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
           <?php endif; ?>
           <?= toman($pDeal['final']) ?>
         </div>
+        <?php if ($isDyadGift): ?>
+        <div class="fr-alert ok" style="font-size:13.5px;margin:12px 0;line-height:1.9;background:#dcfce7;border-color:#86efac;color:#166534">
+          🎁 <b>هدیه فعال:</b> هزینه این نسخه توسط همراه شما پرداخت شده است.
+        </div>
+        <form method="post">
+          <?= csrf_field() ?>
+          <input type="hidden" name="mode" value="gift">
+          <button class="fr-btn" style="width:100%;justify-content:center;background:#16a34a">
+            <?= $completedFree ? '🎁 ارتقای رایگان به نسخه تخصصی و مشاهده تحلیل تطابق ←' : '🎁 شروع رایگان نسخه تخصصی (هدیه‌داده‌شده) ←' ?>
+          </button>
+        </form>
+        <?php else: ?>
         <form method="post" id="fullForm">
           <?= csrf_field() ?>
           <input type="hidden" name="mode" value="full">
@@ -214,6 +303,7 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
                 : ($completedFree ? 'پرداخت و دریافت تحلیل ویژه ←' : 'پرداخت و شروع ←') ?>
           </button>
         </form>
+        <?php endif; ?>
       </div>
     </div>
   </div>

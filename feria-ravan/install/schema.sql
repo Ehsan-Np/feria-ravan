@@ -14,24 +14,34 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}settings` (
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}admins` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NULL,
   `username` VARCHAR(60) NOT NULL UNIQUE,
-  `password` VARCHAR(255) NOT NULL,
+  `password` VARCHAR(255) NOT NULL DEFAULT '',
+  `password_hash` VARCHAR(255) NULL,
   `display_name` VARCHAR(120) NOT NULL DEFAULT '',
   `role` VARCHAR(40) NOT NULL DEFAULT 'super',
   `role_id` INT UNSIGNED NULL,
+  `status` ENUM('active','blocked') NOT NULL DEFAULT 'active',
+  `totp_secret` VARCHAR(64) NULL,
   `email` VARCHAR(191) DEFAULT NULL,
   `avatar` VARCHAR(255) DEFAULT NULL,
   `mobile` VARCHAR(11) DEFAULT NULL,
   `last_login` DATETIME NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `last_login_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `ix_admin_user` (`user_id`),
+  KEY `ix_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}users` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `first_name` VARCHAR(80) NOT NULL DEFAULT '',
   `last_name` VARCHAR(80) NOT NULL DEFAULT '',
+  `username` VARCHAR(60) NULL UNIQUE,
+  `password_hash` VARCHAR(255) NULL,
   `national_code` VARCHAR(10) NULL,
   `mobile` VARCHAR(11) NOT NULL UNIQUE,
+  `mobile_verified` TINYINT(1) NOT NULL DEFAULT 0,
   `email` VARCHAR(190) NULL,
   `avatar` VARCHAR(255) NULL,
   `gender` ENUM('male','female','other') NULL,
@@ -41,12 +51,19 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}users` (
   `marital` VARCHAR(30) NULL,
   `status` ENUM('active','inactive','banned') NOT NULL DEFAULT 'active',
   `wallet_balance` INT NOT NULL DEFAULT 0,
+  `bank_card_enc` TEXT DEFAULT NULL,
+  `bank_card_last4` CHAR(4) DEFAULT NULL,
   `telegram_chat_id` VARCHAR(60) NULL,
   `bale_chat_id` VARCHAR(60) NULL,
+  `tg_username` VARCHAR(60) NULL,
+  `bale_username` VARCHAR(60) NULL,
   `notif_prefs` VARCHAR(255) NULL,
   `extra` TEXT NULL,
+  `last_login_at` DATETIME NULL,
+  `last_login_ip` VARBINARY(16) NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP
+  `updated_at` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+  KEY `ix_mobile_status` (`mobile`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}tests` (
@@ -59,6 +76,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}tests` (
   `instructions` TEXT NULL,
   `engine` VARCHAR(30) NOT NULL DEFAULT 'disc',
   `audience` ENUM('general','manager') NOT NULL DEFAULT 'general',
+  `category` ENUM('clinical','personality','intelligence') NOT NULL DEFAULT 'personality',
   `question_count` INT UNSIGNED NOT NULL DEFAULT 0,
   `est_minutes` INT UNSIGNED NOT NULL DEFAULT 15,
   `price_full` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -71,7 +89,8 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}tests` (
   `seo_noindex` TINYINT(1) NOT NULL DEFAULT 0,
   `sort_order` INT NOT NULL DEFAULT 0,
   `status` ENUM('active','inactive','draft','trash') NOT NULL DEFAULT 'active',
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `ix_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}questions` (
@@ -234,9 +253,16 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}dyads` (
   `test_id` INT UNSIGNED NOT NULL,
   `user1_id` BIGINT UNSIGNED NOT NULL,
   `attempt1_id` BIGINT UNSIGNED NOT NULL,
+  `order1_id` BIGINT UNSIGNED NULL,
   `user2_id` BIGINT UNSIGNED NULL,
   `attempt2_id` BIGINT UNSIGNED NULL,
+  `order2_id` BIGINT UNSIGNED NULL,
   `rel_type` ENUM('couple','spouse','coworker','friend','business') NOT NULL DEFAULT 'couple',
+  `pay_mode` ENUM('free','self_paid','partner_paid') NOT NULL DEFAULT 'free',
+  `target_mode` ENUM('free','full') NOT NULL DEFAULT 'free',
+  `partner_paid` TINYINT(1) NOT NULL DEFAULT 0,
+  `partner_name` VARCHAR(150) NULL,
+  `partner_mobile` VARCHAR(20) NULL,
   `status` ENUM('pending','ready','archived') NOT NULL DEFAULT 'pending',
   `synergy_score` INT UNSIGNED NULL,
   `summary_json` MEDIUMTEXT NULL,
@@ -533,6 +559,20 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}otp_codes` (
   KEY `ix_mobile` (`mobile`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}otps` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `mobile` VARCHAR(11) NOT NULL,
+  `code` VARCHAR(10) NOT NULL,
+  `purpose` ENUM('register','login','reset','mobile_change') NOT NULL DEFAULT 'login',
+  `expires_at` DATETIME NOT NULL,
+  `used_at` DATETIME NULL,
+  `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  `ip` VARBINARY(16) NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `ix_mobile_purpose` (`mobile`, `purpose`),
+  KEY `ix_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}field_definitions` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(60) NOT NULL UNIQUE,
@@ -792,6 +832,28 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}test_scales` (
   `color` VARCHAR(20) NULL,
   `sort_order` INT NOT NULL DEFAULT 0,
   KEY `ix_test_code` (`test_id`, `code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}sessions` (
+  `id` VARCHAR(128) NOT NULL PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NULL,
+  `admin_id` INT UNSIGNED NULL,
+  `ip` VARBINARY(16) NULL,
+  `user_agent` VARCHAR(255) NULL,
+  `device` VARCHAR(60) NULL,
+  `login_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `logout_at` DATETIME NULL,
+  KEY `ix_user` (`user_id`, `login_at`),
+  KEY `ix_admin` (`admin_id`, `login_at`),
+  KEY `ix_last_seen` (`last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}rate_limits` (
+  `bucket` VARCHAR(80) NOT NULL PRIMARY KEY,
+  `hits` INT UNSIGNED NOT NULL DEFAULT 1,
+  `reset_at` DATETIME NOT NULL,
+  KEY `ix_reset` (`reset_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}activity_logs` (

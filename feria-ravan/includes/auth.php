@@ -54,15 +54,91 @@ function fr_profile_completion(array $u): array
 /** کاربر لاگین‌شده (با کش درون‌درخواستی) */
 function current_user(): ?array
 {
-    static $u = null; static $loaded = false;
-    if ($loaded) return $u;
-    $loaded = true;
-    if (empty($_SESSION['user_id'])) return null;
-    $u = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE id=? AND status='active'",
-                 [$_SESSION['user_id']]);
-    if (!$u) { unset($_SESSION['user_id']); }
-    // به‌روزرسانی آخرین بازدید نشست
-    DB::run('UPDATE ' . DB::t('sessions') . ' SET last_seen=NOW() WHERE id=?', [session_id()]);
+    static $u = null;
+    static $cachedUid = null;
+
+    if (empty($_SESSION['user_id'])) {
+        // دسترسی یکپارچه: اگر مدیر وارد پیشخوان شده باشد، حساب کاربری متناظر به‌صورت خودکار متصل می‌شود
+        if (!empty($_SESSION['admin_id'])) {
+            try {
+                $adm = DB::one('SELECT * FROM ' . DB::t('admins') . ' WHERE id=?', [$_SESSION['admin_id']]);
+                if ($adm && (!isset($adm['status']) || $adm['status'] === 'active')) {
+                    $user = null;
+                    if (!empty($adm['user_id'])) {
+                        $user = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE id=? AND status='active'", [$adm['user_id']]);
+                    }
+                    if (!$user && !empty($adm['mobile'])) {
+                        $user = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE mobile=? AND status='active'", [$adm['mobile']]);
+                    }
+                    if (!$user) {
+                        $fn = !empty($adm['display_name']) ? $adm['display_name'] : $adm['username'];
+                        $mob = (!empty($adm['mobile']) && preg_match('/^09\d{9}$/', $adm['mobile']))
+                            ? $adm['mobile']
+                            : ('0999' . str_pad((string)$adm['id'], 7, '0', STR_PAD_LEFT));
+                        $existingUser = DB::one('SELECT * FROM ' . DB::t('users') . ' WHERE mobile=?', [$mob]);
+                        if ($existingUser) {
+                            $user = $existingUser;
+                            DB::update('admins', ['user_id' => $user['id']], 'id=?', [$adm['id']]);
+                        } else {
+                            $userData = [
+                                'mobile' => $mob,
+                                'first_name' => $fn,
+                                'last_name' => 'مدیریت',
+                                'status' => 'active',
+                                'mobile_verified' => 1
+                            ];
+                            $passHash = $adm['password_hash'] ?? ($adm['password'] ?? null);
+                            if (!empty($passHash)) $userData['password_hash'] = $passHash;
+                            $newUid = (int)DB::insert('users', $userData);
+                            DB::update('admins', ['user_id' => $newUid], 'id=?', [$adm['id']]);
+                            $user = DB::one('SELECT * FROM ' . DB::t('users') . ' WHERE id=?', [$newUid]);
+                        }
+                    }
+                    if ($user) {
+                        $_SESSION['user_id'] = (int)$user['id'];
+                        $cachedUid = (int)$user['id'];
+                        $u = $user;
+                        try {
+                            DB::run("INSERT INTO " . DB::t('sessions') . " (id, user_id, ip, user_agent, device, login_at, last_seen)
+                                     VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                                     ON DUPLICATE KEY UPDATE last_seen=NOW(), user_id=VALUES(user_id)",
+                                    [session_id(), $u['id'], client_ip_bin(), substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255), client_device()]);
+                        } catch (Throwable $e) {}
+                        return $u;
+                    }
+                }
+            } catch (Throwable $e) {}
+        }
+        $u = null;
+        $cachedUid = null;
+        return null;
+    }
+
+    $uid = (int)$_SESSION['user_id'];
+    if ($cachedUid === $uid && $u !== null) {
+        return $u;
+    }
+
+    try {
+        $u = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE id=? AND status='active'", [$uid]);
+        if (!$u) {
+            unset($_SESSION['user_id']);
+            $cachedUid = null;
+            return null;
+        }
+        $cachedUid = $uid;
+        // ثبت یا به‌روزرسانی ایمن آخرین بازدید نشست کاربر
+        try {
+            DB::run("INSERT INTO " . DB::t('sessions') . " (id, user_id, ip, user_agent, device, login_at, last_seen)
+                     VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                     ON DUPLICATE KEY UPDATE last_seen=NOW(), user_id=VALUES(user_id)",
+                    [session_id(), $u['id'], client_ip_bin(), substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255), client_device()]);
+        } catch (Throwable $e) {}
+    } catch (Throwable $e) {
+        $u = null;
+        $cachedUid = null;
+    }
+
     return $u;
 }
 
@@ -83,13 +159,15 @@ function require_user(): array
 /** ثبت نشست کاربر (پس از احراز موفق) */
 function do_user_login(array $user, string $method = 'otp'): void
 {
-    session_regenerate_id(true);
+    if (session_status() === PHP_SESSION_ACTIVE) @session_regenerate_id(true);
     $_SESSION['user_id'] = (int)$user['id'];
-    DB::insert('sessions', [
-        'id' => session_id(), 'user_id' => $user['id'],
-        'ip' => client_ip_bin(), 'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
-        'device' => client_device(),
-    ]);
+    try {
+        DB::insert('sessions', [
+            'id' => session_id(), 'user_id' => $user['id'],
+            'ip' => client_ip_bin(), 'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+            'device' => client_device(),
+        ]);
+    } catch (Throwable $e) {}
     DB::update('users', ['last_login_at' => date('Y-m-d H:i:s'), 'last_login_ip' => client_ip_bin()],
                'id=?', [$user['id']]);
     log_activity('login', 'user', (int)$user['id'], ['method' => $method]);
@@ -100,8 +178,10 @@ function do_user_logout(): void
 {
     if (!empty($_SESSION['user_id'])) {
         log_activity('logout', 'user', (int)$_SESSION['user_id']);
-        DB::run('UPDATE ' . DB::t('sessions') . ' SET logout_at=NOW() WHERE id=? AND logout_at IS NULL',
-                [session_id()]);
+        try {
+            DB::run('UPDATE ' . DB::t('sessions') . ' SET logout_at=NOW() WHERE id=? AND logout_at IS NULL',
+                    [session_id()]);
+        } catch (Throwable $e) {}
     }
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {

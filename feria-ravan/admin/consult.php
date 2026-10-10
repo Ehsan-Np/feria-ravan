@@ -166,9 +166,12 @@ admin_layout($adm, 'consult', 'کلینیک مشاوره — خدمات و مش�
 
 <?php if ($tab === 'consultants'): ?>
 <!-- ═══════════════ بخش مشاوران ═══════════════ -->
-<div class="fr-grid cols-2">
-  <div class="fr-card" style="margin:0;align-self:start">
-    <h3><?= $editC ? 'ویرایش مشاور' : 'مشاور جدید' ?></h3>
+<?php if ($editC): ?>
+  <div class="fr-card" style="margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0">✏️ ویرایش مشاور: «<?= e($editC['name']) ?>»</h3>
+      <a class="fr-btn ghost sm" href="?tab=consultants">← بازگشت به فهرست مشاوران</a>
+    </div>
     <form method="post" enctype="multipart/form-data">
       <?= csrf_field() ?>
       <input type="hidden" name="act" value="save_consultant">
@@ -195,8 +198,45 @@ admin_layout($adm, 'consult', 'کلینیک مشاوره — خدمات و مش�
         <img src="<?= e(SITE_URL . '/' . $editC['avatar']) ?>" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;margin-bottom:8px">
         <?php endif; ?>
         <input class="fr-input" type="file" name="avatar" accept="image/jpeg,image/png,image/webp"></div>
-      <button class="fr-btn sm">ذخیرهٔ مشاور</button>
-      <?php if ($editC): ?><a class="fr-btn ghost sm" href="?tab=consultants">لغو</a><?php endif; ?>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+        <button class="fr-btn sm" type="submit">ذخیره تغییرات مشاور</button>
+        <a class="fr-btn ghost sm" href="?tab=consultants">انصراف و بازگشت</a>
+      </div>
+    </form>
+  </div>
+<?php
+  admin_layout_end();
+  exit;
+endif;
+?>
+
+<div class="fr-grid cols-2">
+  <div class="fr-card" style="margin:0;align-self:start">
+    <h3>افزودن مشاور جدید</h3>
+    <form method="post" enctype="multipart/form-data">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="save_consultant">
+      <input type="hidden" name="id" value="0">
+      <div class="fr-field"><label>نام و نام خانوادگی <span class="req">*</span></label>
+        <input class="fr-input" name="name" value="" required></div>
+      <div class="fr-field"><label>عنوان تخصصی</label>
+        <input class="fr-input" name="title" value="" placeholder="روانشناس بالینی — عضو سازمان نظام"></div>
+      <div class="fr-field"><label>موبایل (برای پیامک اطلاع رزروها — اختیاری)</label>
+        <input class="fr-input" name="mobile" value="" placeholder="۰۹۱۲xxxxxxx" style="direction:ltr;text-align:left"></div>
+      <div class="fr-field"><label>بیو کوتاه</label>
+        <textarea class="fr-textarea" name="bio" rows="3"></textarea></div>
+      <div class="fr-grid cols-2" style="gap:10px">
+        <div class="fr-field"><label>ترتیب نمایش</label>
+          <input class="fr-input" name="sort" inputmode="numeric" value="0"></div>
+        <div class="fr-field"><label>وضعیت</label>
+          <select class="fr-select" name="active">
+            <option value="1" selected>فعال</option>
+            <option value="0">غیرفعال</option>
+          </select></div>
+      </div>
+      <div class="fr-field"><label>آواتار (اختیاری)</label>
+        <input class="fr-input" type="file" name="avatar" accept="image/jpeg,image/png,image/webp"></div>
+      <div style="margin-top:14px"><button class="fr-btn sm" type="submit">ذخیرهٔ مشاور</button></div>
     </form>
   </div>
 
@@ -233,11 +273,12 @@ admin_layout($adm, 'consult', 'کلینیک مشاوره — خدمات و مش�
 
 <?php else: ?>
 <!-- ═══════════════ بخش خدمات ═══════════════ -->
-<div class="fr-grid <?= $editS || isset($_GET['edit_s']) ? 'cols-2' : '' ?>">
-  <?php if ($editS || isset($_GET['edit_s'])): ?>
-  <div class="fr-card" style="margin:0;align-self:start">
-    <h3><?= $editS ? 'ویرایش خدمت «' . e($editS['title']) . '»' : 'خدمت جدید' ?>
-      <a class="more" href="?tab=services">بازگشت ←</a></h3>
+<?php if ($editS || isset($_GET['edit_s'])): ?>
+  <div class="fr-card" style="margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0"><?= $editS ? '✏️ ویرایش خدمت: «' . e($editS['title']) . '»' : '➕ تعریف خدمت مشاورهٔ جدید' ?></h3>
+      <a class="fr-btn ghost sm" href="?tab=services">← بازگشت به فهرست خدمات</a>
+    </div>
     <form method="post" enctype="multipart/form-data">
       <?= csrf_field() ?>
       <input type="hidden" name="act" value="save_service">
@@ -312,13 +353,20 @@ admin_layout($adm, 'consult', 'کلینیک مشاوره — خدمات و مش�
         </div>
         <?php endif; ?>
         <input class="fr-input" type="file" name="image" accept="image/jpeg,image/png,image/webp"></div>
-      <button class="fr-btn sm">ذخیرهٔ خدمت</button>
-      <?php if ($editS): ?><a class="fr-btn ghost sm" href="?tab=services">لغو</a><?php endif; ?>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
+        <button class="fr-btn sm" type="submit">ذخیرهٔ خدمت</button>
+        <a class="fr-btn ghost sm" href="?tab=services">انصراف و بازگشت</a>
+      </div>
     </form>
   </div>
-  <?php else: ?>
-  <div style="margin-bottom:14px"><a class="fr-btn sm" href="?tab=services&edit_s=new">➕ خدمت جدید</a></div>
-  <?php endif; ?>
+<?php
+  // در حالت ویرایش خدمت، جدول خدمات مخفی می‌ماند
+  admin_layout_end();
+  exit;
+  else:
+?>
+  <div style="margin-bottom:14px"><a class="fr-btn sm" href="?tab=services&edit_s=new">➕ تعریف خدمت جدید</a></div>
+<?php endif; ?>
 
   <?php if (!$editS && !isset($_GET['edit_s'])): ?>
   <div class="fr-card" style="margin:0">

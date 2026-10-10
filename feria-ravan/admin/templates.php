@@ -52,8 +52,13 @@ echo flash();
 </div>
 
 <!-- فرم افزودن/ویرایش تحلیل -->
-<div class="fr-card">
-  <h3><?= $editT ? 'ویرایش تحلیل' : 'تحلیل جدید دستی ✍️' ?></h3>
+<div class="fr-card" style="margin:0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+    <h3 style="margin:0"><?= $editT ? '✏️ ویرایش قالب تحلیل (' . e($test['title']) . ')' : '➕ تحلیل جدید دستی (' . e($test['title']) . ')' ?></h3>
+    <?php if ($editT): ?>
+      <a class="fr-btn ghost sm" href="?test=<?= $testId ?>">← بازگشت به فهرست تحلیل‌ها</a>
+    <?php endif; ?>
+  </div>
   <form method="post" onsubmit="document.getElementById('hd-body').value=document.getElementById('rte-body').innerHTML">
     <?= csrf_field() ?>
     <input type="hidden" name="act" value="save"><input type="hidden" name="id" value="<?= $editT['id'] ?? 0 ?>">
@@ -83,10 +88,21 @@ echo flash();
       <div class="rte-toolbar" data-rte="body"></div>
       <div class="rte-area" id="rte-body" contenteditable="true"><?= $editT['body'] ?? '' ?></div>
       <input type="hidden" name="body" id="hd-body"></div>
-    <button class="fr-btn sm">ذخیره تحلیل</button>
-    <?php if ($editT): ?><a class="fr-btn ghost sm" href="?test=<?= $testId ?>">لغو</a><?php endif; ?>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+      <button class="fr-btn sm" type="submit"><?= $editT ? 'ذخیره تغییرات تحلیل' : 'ذخیره تحلیل' ?></button>
+      <?php if ($editT): ?>
+        <a class="fr-btn ghost sm" href="?test=<?= $testId ?>">انصراف و بازگشت</a>
+      <?php endif; ?>
+    </div>
   </form>
 </div>
+<?php
+// در حالت ویرایش، فقط فرم همان قالب نمایش داده می‌شود و جدول تحلیل‌ها مخفی می‌ماند
+if ($editT) {
+    admin_layout_end();
+    exit;
+}
+?>
 
 <!-- فهرست تحلیل‌ها -->
 <div class="fr-card">

@@ -82,6 +82,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($id && in_array(post('audience'), ['general','manager'], true)) {
         try { DB::update('tests', ['audience' => post('audience')], 'id=?', [$id]); } catch (Throwable $e) {}
     }
+    if ($id && in_array(post('category'), ['clinical','personality','intelligence'], true)) {
+        try { DB::update('tests', ['category' => post('category')], 'id=?', [$id]); } catch (Throwable $e) {}
+    }
     // اسلاگ + سئو (۱٫۷): بازتولید خودکار پیوندهای یکتا در صورت تغییر اسلاگ
     $oldSlug = $id ? (string)DB::val('SELECT slug FROM ' . DB::t('tests') . ' WHERE id=?', [$id]) : '';
     require_once __DIR__ . '/../includes/sanitize.php';
@@ -146,19 +149,29 @@ $edit = (int)($_GET['edit'] ?? 0);
 
 /* ── تب «فعال‌ها» (غیرِ زباله‌دان) و «زباله‌دان» (۱٫۹) ── */
 $view = (string)($_GET['view'] ?? 'active') === 'trash' ? 'trash' : 'active';
+$filterCat = (string)($_GET['cat'] ?? 'all');
+$whereSql = "t.status " . ($view === 'trash' ? "='trash'" : "<>'trash'");
+$params = [];
+if (in_array($filterCat, ['clinical','personality','intelligence'], true)) {
+    $whereSql .= " AND t.category=?";
+    $params[] = $filterCat;
+}
 $tests = DB::all("SELECT t.*, (SELECT COUNT(*) FROM " . DB::t('questions') . " q WHERE q.test_id=t.id) AS qc,
                          (SELECT COUNT(*) FROM " . DB::t('attempts') . " a WHERE a.test_id=t.id AND a.status!='in_progress') AS done_count
                   FROM " . DB::t('tests') . " t
-                  WHERE t.status " . ($view === 'trash' ? "='trash'" : "<>'trash'") .
-                  " ORDER BY t.sort_order");
+                  WHERE {$whereSql}
+                  ORDER BY t.sort_order", $params);
 $activeCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('tests') . " WHERE status<>'trash'");
 $trashCount  = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('tests') . " WHERE status='trash'");
 admin_layout($adm, 'tests', 'مدیریت تست‌های روانشناسی');
 echo flash();
 ?>
 <?php if ($edit && $t = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$edit])): ?>
-<div class="fr-card">
-  <h3>ویرایش: <?= e($t['title']) ?> <?= $t['status']==='trash' ? '<span class="fr-chip warn">در زباله‌دان</span>' : '' ?></h3>
+<div class="fr-card" style="margin:0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+    <h3 style="margin:0">✏️ ویرایش تست روانشناسی: <?= e($t['title']) ?> <?= $t['status']==='trash' ? '<span class="fr-chip warn">در زباله‌دان</span>' : '' ?></h3>
+    <a class="fr-btn ghost sm" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>">← بازگشت به فهرست تست‌ها</a>
+  </div>
   <form method="post" enctype="multipart/form-data" class="fr-grid cols-2">
     <?= csrf_field() ?>
     <input type="hidden" name="id" value="<?= $t['id'] ?>"><input type="hidden" name="edit_page" value="1">
@@ -201,6 +214,12 @@ echo flash();
           <small class="hint">اگر معتبر باشد، درصد تخفیف به‌صورت خودکار روی کارت تست روانشناسی نمایش داده می‌شود.</small></div>
         <div class="fr-field"><label>زمان تقریبی (دقیقه)</label>
           <input class="fr-input" name="est_minutes" value="<?= fa_num($t['est_minutes']) ?>"></div>
+        <div class="fr-field"><label>دسته‌بندی روان‌سنجی</label>
+          <select class="fr-select" name="category">
+            <option value="clinical" <?= ($t['category'] ?? '')==='clinical'?'selected':'' ?>>🩺 بالینی و سلامت روان</option>
+            <option value="personality" <?= ($t['category'] ?? 'personality')==='personality'?'selected':'' ?>>🎭 شخصیت و خودشناسی</option>
+            <option value="intelligence" <?= ($t['category'] ?? '')==='intelligence'?'selected':'' ?>>💡 هوش، استعداد و پیشرفت شغلی</option>
+          </select></div>
         <div class="fr-field"><label>مخاطب</label>
           <select class="fr-select" name="audience">
             <option value="general" <?= ($t['audience'] ?? 'general')==='general'?'selected':'' ?>>👥 افراد عادی</option>
@@ -247,20 +266,32 @@ echo flash();
         <div class="rte-area" id="rte-teaser" contenteditable="true"><?= $t['free_teaser'] ?? '' ?></div>
         <input type="hidden" name="free_teaser" id="hd-teaser">
         <small style="color:var(--muted)">این متن ته گزارش رایگان نشان داده می‌شود تا کاربر را به خرید نسخهٔ ویژه ترغیب کند. اگر خالی بماند، متن پیش‌فرض سیستم چاپ می‌شود.</small></div>
-      <br><button class="fr-btn" onclick="syncRte()" style="margin-top:14px">ذخیره تغییرات</button>
-      <button type="button" class="fr-btn danger" style="margin-top:14px" onclick="frDeleteTest(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')">🗑 حذف کامل این تست</button>
-      <a class="fr-btn ghost" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>" style="margin-top:14px">بازگشت</a>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
+        <button class="fr-btn" type="submit" onclick="syncRte()">ذخیره تغییرات تست</button>
+        <a class="fr-btn ghost" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>">انصراف و بازگشت</a>
+        <button type="button" class="fr-btn danger" onclick="frDeleteTest(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')" style="margin-right:auto">🗑 حذف این تست</button>
+      </div>
     </div>
   </form>
 </div>
 <script>function syncRte(){['desc','inst','teaser'].forEach(function(k){document.getElementById('hd-'+k).value=document.getElementById('rte-'+k).innerHTML;});}</script>
-<?php endif; ?>
+<?php
+// حالت ویرایش اختصاصی: وقتی کاربر در حال ویرایش تست است، فقط فرم ویرایش نمایش داده می‌شود و جدول سایر تست‌ها مخفی می‌ماند
+admin_layout_end();
+exit;
+endif;
+?>
 
 <div class="fr-card">
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     <h3 style="margin:0">تست‌های روانشناسی سیستم</h3>
     <a class="fr-chip <?= $view==='active'?'purple':'info' ?>" href="?view=active" style="text-decoration:none">لیست اصلی (<?= fa_num($activeCount) ?>)</a>
     <a class="fr-chip <?= $view==='trash'?'purple':'info' ?>" href="?view=trash" style="text-decoration:none">🗑 زباله‌دان (<?= fa_num($trashCount) ?>)</a>
+    <span style="border-right:1px solid var(--line);margin:0 4px;height:16px;display:inline-block"></span>
+    <a class="fr-chip <?= $filterCat==='all'?'purple':'info' ?>" href="?view=<?= $view ?>&cat=all" style="text-decoration:none">همه دسته‌ها</a>
+    <a class="fr-chip <?= $filterCat==='clinical'?'purple':'info' ?>" href="?view=<?= $view ?>&cat=clinical" style="text-decoration:none">🩺 بالینی</a>
+    <a class="fr-chip <?= $filterCat==='personality'?'purple':'info' ?>" href="?view=<?= $view ?>&cat=personality" style="text-decoration:none">🎭 شخصیت</a>
+    <a class="fr-chip <?= $filterCat==='intelligence'?'purple':'info' ?>" href="?view=<?= $view ?>&cat=intelligence" style="text-decoration:none">💡 هوش و شغل</a>
     <small style="color:var(--muted);margin-right:auto">
       <?= $view==='trash'
           ? 'بازگردانی → پیش‌نویس می‌شود؛ حذف نهایی فقط برای تست‌های روانشناسی بدون سابقهٔ کاربر/مالی'
@@ -287,7 +318,7 @@ echo flash();
       <span class="hint" id="selCount"></span>
     </div>
     <div style="overflow-x:auto"><table class="fr-table">
-      <thead><tr><th style="width:36px"><input type="checkbox" id="allChk" title="انتخاب همه"></th><th>تست روانشناسی</th><th>موتور</th><th>سؤال‌ها</th><th>انجام‌شده</th><th>قیمت ویژه</th><th>رایگان</th><th>وضعیت</th><th></th></tr></thead>
+      <thead><tr><th style="width:36px"><input type="checkbox" id="allChk" title="انتخاب همه"></th><th>تست روانشناسی</th><th>دسته‌بندی</th><th>موتور</th><th>سؤال‌ها</th><th>انجام‌شده</th><th>قیمت ویژه</th><th>رایگان</th><th>وضعیت</th><th></th></tr></thead>
       <tbody>
       <?php if (!$tests): ?>
       <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:26px 0"><?= $view==='trash' ? 'زباله‌دان خالی است 🎉' : 'هنوز تستی ثبت نشده است.' ?></td></tr>
@@ -306,9 +337,20 @@ echo flash();
             </div>
           </div>
         </td>
+        <td>
+          <?php
+          $c = $t['category'] ?? 'personality';
+          echo match($c) {
+              'clinical'     => '<span class="fr-chip" style="background:#ffe4e6;color:#be123c;font-size:11px;font-weight:600">🩺 بالینی</span>',
+              'personality'  => '<span class="fr-chip" style="background:#ede9fe;color:#6d28d9;font-size:11px;font-weight:600">🎭 شخصیت</span>',
+              'intelligence' => '<span class="fr-chip" style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:600">💡 هوش/شغل</span>',
+              default        => '<span class="fr-chip">' . e($c) . '</span>',
+          };
+          ?>
+        </td>
         <td><span class="fr-chip purple"><?= e($t['engine']) ?></span></td>
         <td><?= fa_num($t['qc']) ?></td>
-        <td><?= fa_num($t['done_count']) ?></td>
+        <td><a href="attempts.php?test_id=<?= $t['id'] ?>" title="مشاهده تحلیل‌ها و کارنامه‌های این تست" style="font-weight:700;color:var(--c-primary)"><?= fa_num($t['done_count']) ?></a></td>
         <td style="white-space:nowrap"><?php $tDeal = fr_price_deal((int)$t['price_full'], isset($t['price_sale']) ? (int)$t['price_sale'] : null);
           if ($tDeal['has_sale']): ?><del style="color:#94a3b8;font-size:11.5px"><?= toman($tDeal['list']) ?></del><br><b style="color:#b91c1c"><?= toman($tDeal['final']) ?></b> <span class="fr-chip" style="background:#fef2f2;color:#b91c1c;font-size:10px">٪<?= fa_num($tDeal['percent']) ?></span><?php else: ?><?= toman((int)$t['price_full']) ?><?php endif; ?></td>
         <td><?= $t['free_enabled'] ? '<span class="fr-chip ok">فعال</span>' : '<span class="fr-chip err">غیرفعال</span>' ?></td>
@@ -316,10 +358,11 @@ echo flash();
               : ($t['status']==='trash' ? '<span class="fr-chip warn">زباله‌دان</span>'
               : '<span class="fr-chip warn">'.e($t['status']).'</span>') ?></td>
         <td class="actions" style="white-space:nowrap">
-          <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?><?= $view==='trash'?'&view=trash':'' ?>" target="_blank" title="ویرایش تست در برگهٔ جدید">ویرایش ↗</a>
-          <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>" target="_blank" title="مدیریت سوالات">سوالات ↗</a>
-          <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>" target="_blank" title="قالب‌های تحلیل">تحلیل‌ها ↗</a>
-          <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" target="_blank" title="مدیریت شرکت‌کنندگان — ۱٫۹">👥</a>
+          <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?><?= $view==='trash'?'&view=trash':'' ?>" title="ویرایش تست روانشناسی">ویرایش</a>
+          <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>" title="مدیریت سوالات">سوالات</a>
+          <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>" title="قالب‌های تحلیل">الگوها</a>
+          <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?test_id=<?= $t['id'] ?>" title="مشاهده نتایج و تحلیل‌های مراجعین">📊 تحلیل مراجعین</a>
+          <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" title="مدیریت شرکت‌کنندگان">👥</a>
           <button type="button" class="fr-btn sm danger" onclick="frDeleteTest(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')" title="حذف این تست روانشناسی">🗑</button>
         </td>
       </tr>

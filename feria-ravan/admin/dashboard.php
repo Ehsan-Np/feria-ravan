@@ -93,14 +93,15 @@ echo flash();      // مثلاً بنر «🚀 به‌روزرسانی خودک�
     </table>
   </div>
   <div class="fr-card" style="margin:0">
-    <h3>آخرین تست‌های روانشناسی تکمیل‌شده</h3>
+    <h3>آخرین تست‌های روانشناسی تکمیل‌شده <a class="more" href="attempts.php">همه ←</a></h3>
     <table class="fr-table">
-      <tr><th>کاربر</th><th>تست روانشناسی</th><th>نوع</th><th>تاریخ</th></tr>
+      <tr><th>کاربر</th><th>تست روانشناسی</th><th>نوع</th><th>تاریخ</th><th></th></tr>
       <?php foreach ($lastAttempts as $a): ?>
       <tr><td><?= e(trim($a['first_name'].' '.$a['last_name']) ?: '—') ?></td>
           <td style="font-size:12px"><?= e($a['ttitle']) ?></td>
           <td><span class="fr-chip <?= $a['mode']==='full'?'purple':'info' ?>"><?= $a['mode']==='full'?'ویژه':'رایگان' ?></span></td>
-          <td><?= fa_num(jdate('j F', strtotime($a['completed_at'] ?? $a['started_at']))) ?></td></tr>
+          <td><?= fa_num(jdate('j F', strtotime($a['completed_at'] ?? $a['started_at']))) ?></td>
+          <td><a class="fr-btn sm ghost" style="padding:3px 8px;font-size:11px" href="attempts.php?report=<?= $a['id'] ?>" title="مشاهده تحلیل روان‌سنجی">تحلیل 👁</a></td></tr>
       <?php endforeach; ?>
     </table>
   </div>

@@ -138,8 +138,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
                 $p = $d['db_prefix'];
                 // ایجاد مدیر ارشد
                 $hash = password_hash($adminPass, PASSWORD_ARGON2ID);
-                $stmt = $pdo->prepare("INSERT INTO `{$p}admins`(username,password_hash,display_name,mobile,role) VALUES(?,?,?,?,'superadmin')");
-                $stmt->execute([$adminUser, $hash, $adminName, $adminMob]);
+                $stmt = $pdo->prepare("INSERT INTO `{$p}admins`(username,password,password_hash,display_name,mobile,role,status) VALUES(?,?,?,?,?,'superadmin','active')");
+                $stmt->execute([$adminUser, $hash, $hash, $adminName, $adminMob]);
                 // حساب کاربری مدیر هم از ابتدا ساخته می‌شود تا «پنل کاربری من» برایش فعال باشد (ورود به پیشخوان فقط از /admin و با احراز هویت مدیر)
                 if (preg_match('/^09\d{9}$/', $adminMob)) {
                     $parts = preg_split('/\s+/u', $adminName);

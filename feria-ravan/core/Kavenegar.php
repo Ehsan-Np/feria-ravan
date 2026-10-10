@@ -52,6 +52,11 @@ final class Kavenegar
     /**
      * ارسال پیامک ساده (متن دلخواه)
      */
+    public function sendDirect(string $mobile, string $message, ?string $event = null): bool
+    {
+        return $this->send($mobile, $message, $event);
+    }
+
     public function send(string $mobile, string $message, ?string $event = null): bool
     {
         [$ok] = $this->sendDetailed($mobile, $message, $event);

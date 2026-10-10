@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         'admin_notify_mobiles','seo_home_desc',
         // نسخهٔ ۱٫۷: شخصی‌سازی کامل پنل کاربری (نمایش/پنهان‌سازی بخش‌ها + یادداشت داشبورد)
         'panel_menu_wallet','panel_menu_payments','panel_menu_history','panel_menu_tickets',
-        'panel_dashboard_note','panel_sidebar_note',
+        'panel_title','panel_url','panel_slug','panel_dashboard_note','panel_sidebar_note',
         // نسخهٔ ۲٫۰: دیدگاهها + بارکد QR گزارش چاپی
         'reviews_auto_approve',
         'report_qr_link','report_qr_show',
@@ -378,6 +378,26 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
 </div>
 
 <?php elseif ($tab === 'panel'): ?>
+<!-- ═════════ تب شخصی‌سازی پنل کاربری (نسخهٔ ۳٫۴) ═════════ -->
+<div class="fr-card">
+  <h3>🔗 عنوان و پیوند ورودی پنل کاربری</h3>
+  <p style="font-size:13px;color:var(--muted);margin-top:0;line-height:2">
+    می‌توانید عنوان دکمه و لینک هدایت کاربر به پنل کاربری را در هدر، فوتر و سایر بخش‌های سایت به دلخواه خود تغییر دهید.
+  </p>
+  <div class="fr-grid cols-2">
+    <div class="fr-field">
+      <label>عنوان دکمه / لینک پنل کاربری</label>
+      <input class="fr-input" name="panel_title" value="<?= e($s('panel_title', 'پنل کاربری')) ?>" placeholder="مثلاً: پنل کاربری، میز کار، حساب کاربری...">
+      <small class="hint">عنوانی که در دکمه بالای سایت و ناوبری فوتر نمایش داده می‌شود.</small>
+    </div>
+    <div class="fr-field">
+      <label>نشانی (لینک) ورودی پنل کاربری</label>
+      <input class="fr-input" name="panel_url" value="<?= e($s('panel_url', '/panel/')) ?>" dir="ltr" style="text-align:left" placeholder="/panel/">
+      <small class="hint">مسیر ورود کاربر به پنل (پیش‌فرض: <code>/panel/</code> یا نشانی سفارشی دیگر).</small>
+    </div>
+  </div>
+</div>
+
 <!-- ═════════ تب شخصی‌سازی پنل کاربری (نسخهٔ ۱٫۷) ═════════ -->
 <div class="fr-card">
   <h3>🧩 نمایش بخش‌های پنل کاربری</h3>

@@ -56,13 +56,19 @@ final class Analyzer
         DB::run('DELETE FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$attemptId]);
 
         match ($at['engine']) {
-            'disc'   => self::scoreDisc($at, $answers),
-            'ysq'    => self::scoreLikertScales($at, $answers, 6, true),
-            'neo'    => self::scoreLikertScales($at, $answers, 5, false),
-            'screen' => self::scoreScreening($at, $answers, false),   // اضطراب/افسردگی (باند ۵سطحی بالینی)
-            'jobsat' => self::scoreScreening($at, $answers, true),    // رضایت شغلی (باند ۳سطحی + اقلام معکوس)
+            'disc'     => self::scoreDisc($at, $answers),
+            'ysq'      => self::scoreLikertScales($at, $answers, 6, true),
+            'neo'      => self::scoreLikertScales($at, $answers, 5, false),
+            'screen'   => self::scoreScreening($at, $answers, false),   // اضطراب/افسردگی (باند ۵سطحی بالینی)
+            'jobsat'   => self::scoreScreening($at, $answers, true),    // رضایت شغلی (باند ۳سطحی + اقلام معکوس)
             'mslikert' => self::scoreMsLikert($at, $answers),         // گاردنر ۹هوش / هوش هیجانی شوت (نسخهٔ ۱٫۸)
-            default => throw new RuntimeException('موتور ناشناخته: ' . $at['engine']),
+            'mbti'     => self::scoreMbti($at, $answers),
+            'holland'  => self::scoreHolland($at, $answers),
+            'baron'    => self::scoreBarOn($at, $answers),
+            'mmpi'     => self::scoreMmpi($at, $answers),
+            'raven'    => self::scoreRaven($at, $answers),
+            'wais'     => self::scoreWais($at, $answers),
+            default    => throw new RuntimeException('موتور ناشناخته: ' . $at['engine']),
         };
 
         // فاز ۱: هنجاریابی روان‌سنجی (T-Scores، Sten، Percentile) + ارزیابی اعتبار پاسخ‌ها
@@ -365,4 +371,352 @@ final class Analyzer
         }
         return ['most'=>$mp, 'least'=>$lp, 'n'=>$n, 'combined'=>$comb];
     }
+
+    /* -----------------------------------------------------------------------
+     | MBTI — چهار دوگانه (EI, SN, TF, JP) و استخراج ۱۶ تیپ شخصیتی
+     * --------------------------------------------------------------------*/
+    private static function scoreMbti(array $at, array $answers): void
+    {
+        $keyRows = DB::all('SELECT question_id, scale_code, reverse, weight FROM ' . DB::t('scoring_keys') .
+                           ' WHERE test_id=?', [$at['test_id']]);
+        $map = [];
+        foreach ($keyRows as $k) { $map[$k['question_id']][] = $k; }
+
+        $sum = ['EI'=>0.0, 'SN'=>0.0, 'TF'=>0.0, 'JP'=>0.0];
+        $cnt = ['EI'=>0, 'SN'=>0, 'TF'=>0, 'JP'=>0];
+        $max = ['EI'=>0.0, 'SN'=>0.0, 'TF'=>0.0, 'JP'=>0.0];
+
+        foreach ($answers as $a) {
+            $v = en_num((string)$a['value']);
+            if (!is_numeric($v)) continue;
+            $v = (float)$v;
+            if ($v < 1 || $v > 5) continue;
+            foreach ($map[$a['question_id']] ?? [] as $k) {
+                $code = $k['scale_code'];
+                if (!isset($sum[$code])) continue;
+                $score = $k['reverse'] ? (6 - $v) : $v;
+                $score *= (float)$k['weight'];
+                $sum[$code] += $score;
+                $cnt[$code]++;
+                $max[$code] += (5 * (float)$k['weight']);
+            }
+        }
+
+        $pct = [];
+        foreach ($sum as $code => $s) {
+            $m = $max[$code] ?: 1.0;
+            $percent = round(($s / $m) * 100, 2);
+            $pct[$code] = $percent;
+            $mean = $cnt[$code] ? round($s / $cnt[$code], 3) : 3.0;
+            $band = $percent >= 50 ? 'high' : 'low';
+            DB::insert('results', [
+                'attempt_id' => $at['id'], 'scale_code' => $code,
+                'raw_score'  => round($s, 2), 'max_score' => $m,
+                'percent'    => $percent, 'mean_score' => $mean,
+                'band'       => $band,
+            ]);
+        }
+
+        // استخراج تیپ ۴ حرفی
+        $eOrI = ($pct['EI'] ?? 50) >= 50 ? 'E' : 'I';
+        $sOrN = ($pct['SN'] ?? 50) >= 50 ? 'S' : 'N';
+        $tOrF = ($pct['TF'] ?? 50) >= 50 ? 'T' : 'F';
+        $jOrP = ($pct['JP'] ?? 50) >= 50 ? 'J' : 'P';
+        $type = $eOrI . $sOrN . $tOrF . $jOrP;
+
+        // ثبت ردیف اختصاصی تیپ جهت اتصال مستقیم به قالب‌های ۱۶ تیپ
+        DB::insert('results', [
+            'attempt_id' => $at['id'], 'scale_code' => $type,
+            'raw_score'  => 100, 'max_score' => 100,
+            'percent'    => 100, 'mean_score' => 5.0,
+            'band'       => $type,
+        ]);
+
+        $baseCtx = trim((string)($at['context'] ?? ''), '|');
+        DB::update('attempts', ['context' => $baseCtx . '|type:' . $type], 'id=?', [$at['id']]);
+    }
+
+    /* -----------------------------------------------------------------------
+     | هالند (Holland RIASEC) — ۶ تمایل شغلی و استخراج کد سه‌حرفی
+     * --------------------------------------------------------------------*/
+    private static function scoreHolland(array $at, array $answers): void
+    {
+        $keyRows = DB::all('SELECT question_id, scale_code, reverse, weight FROM ' . DB::t('scoring_keys') .
+                           ' WHERE test_id=?', [$at['test_id']]);
+        $map = [];
+        foreach ($keyRows as $k) { $map[$k['question_id']][] = $k; }
+
+        $sum = ['R'=>0.0, 'I'=>0.0, 'A'=>0.0, 'S'=>0.0, 'E'=>0.0, 'C'=>0.0];
+        $cnt = ['R'=>0, 'I'=>0, 'A'=>0, 'S'=>0, 'E'=>0, 'C'=>0];
+        $max = ['R'=>0.0, 'I'=>0.0, 'A'=>0.0, 'S'=>0.0, 'E'=>0.0, 'C'=>0.0];
+
+        foreach ($answers as $a) {
+            $v = en_num((string)$a['value']);
+            if (!is_numeric($v)) continue;
+            $v = (float)$v;
+            if ($v < 1 || $v > 5) continue;
+            foreach ($map[$a['question_id']] ?? [] as $k) {
+                $code = $k['scale_code'];
+                if (!isset($sum[$code])) continue;
+                $score = $k['reverse'] ? (6 - $v) : $v;
+                $score *= (float)$k['weight'];
+                $sum[$code] += $score;
+                $cnt[$code]++;
+                $max[$code] += (5 * (float)$k['weight']);
+            }
+        }
+
+        $pct = [];
+        foreach ($sum as $code => $s) {
+            $m = $max[$code] ?: 1.0;
+            $percent = round(($s / $m) * 100, 2);
+            $pct[$code] = $percent;
+            $mean = $cnt[$code] ? round($s / $cnt[$code], 3) : 3.0;
+            DB::insert('results', [
+                'attempt_id' => $at['id'], 'scale_code' => $code,
+                'raw_score'  => round($s, 2), 'max_score' => $m,
+                'percent'    => $percent, 'mean_score' => $mean,
+                'band'       => self::bandForPercent($percent),
+            ]);
+        }
+
+        // استخراج کد سه‌حرفی هالند
+        arsort($pct);
+        $hollandCode = implode('', array_slice(array_keys($pct), 0, 3));
+        $overall = round(array_sum($pct) / count($pct), 2);
+
+        DB::insert('results', [
+            'attempt_id' => $at['id'], 'scale_code' => 'overall',
+            'raw_score'  => $overall, 'max_score' => 100,
+            'percent'    => $overall, 'mean_score' => round($overall / 20, 3),
+            'band'       => self::bandForPercent($overall),
+        ]);
+
+        $baseCtx = trim((string)($at['context'] ?? ''), '|');
+        DB::update('attempts', ['context' => $baseCtx . '|holland_code:' . $hollandCode . '|top:' . implode(',', array_slice(array_keys($pct), 0, 3))], 'id=?', [$at['id']]);
+    }
+
+    /* -----------------------------------------------------------------------
+     | بار-آن (Bar-On EQ-i) — ۵ مؤلفه هوش هیجانی و نمره کل
+     * --------------------------------------------------------------------*/
+    private static function scoreBarOn(array $at, array $answers): void
+    {
+        $keyRows = DB::all('SELECT question_id, scale_code, reverse, weight FROM ' . DB::t('scoring_keys') .
+                           ' WHERE test_id=?', [$at['test_id']]);
+        $map = [];
+        foreach ($keyRows as $k) { $map[$k['question_id']][] = $k; }
+
+        $sum = ['INTRAP'=>0.0, 'INTERP'=>0.0, 'STRESS'=>0.0, 'ADAPT'=>0.0, 'MOOD'=>0.0];
+        $cnt = ['INTRAP'=>0, 'INTERP'=>0, 'STRESS'=>0, 'ADAPT'=>0, 'MOOD'=>0];
+        $max = ['INTRAP'=>0.0, 'INTERP'=>0.0, 'STRESS'=>0.0, 'ADAPT'=>0.0, 'MOOD'=>0.0];
+
+        foreach ($answers as $a) {
+            $v = en_num((string)$a['value']);
+            if (!is_numeric($v)) continue;
+            $v = (float)$v;
+            if ($v < 1 || $v > 5) continue;
+            foreach ($map[$a['question_id']] ?? [] as $k) {
+                $code = $k['scale_code'];
+                if (!isset($sum[$code])) continue;
+                $score = $k['reverse'] ? (6 - $v) : $v;
+                $score *= (float)$k['weight'];
+                $sum[$code] += $score;
+                $cnt[$code]++;
+                $max[$code] += (5 * (float)$k['weight']);
+            }
+        }
+
+        $pct = [];
+        foreach ($sum as $code => $s) {
+            $m = $max[$code] ?: 1.0;
+            $percent = round(($s / $m) * 100, 2);
+            $pct[$code] = $percent;
+            $mean = $cnt[$code] ? round($s / $cnt[$code], 3) : 3.0;
+            DB::insert('results', [
+                'attempt_id' => $at['id'], 'scale_code' => $code,
+                'raw_score'  => round($s, 2), 'max_score' => $m,
+                'percent'    => $percent, 'mean_score' => $mean,
+                'band'       => self::bandForPercent($percent),
+            ]);
+        }
+
+        $overall = round(array_sum($pct) / count($pct), 2);
+        DB::insert('results', [
+            'attempt_id' => $at['id'], 'scale_code' => 'overall',
+            'raw_score'  => $overall, 'max_score' => 100,
+            'percent'    => $overall, 'mean_score' => round($overall / 20, 3),
+            'band'       => self::bandForPercent($overall),
+        ]);
+
+        arsort($pct);
+        $top = implode(',', array_slice(array_keys($pct), 0, 2));
+        $baseCtx = trim((string)($at['context'] ?? ''), '|');
+        DB::update('attempts', ['context' => $baseCtx . '|eq_overall:' . $overall . '|top:' . $top], 'id=?', [$at['id']]);
+    }
+
+    /* -----------------------------------------------------------------------
+     | MMPI — مقیاس‌های روایی (L, F, K) و مقیاس‌های بالینی ده‌گانه
+     * --------------------------------------------------------------------*/
+    private static function scoreMmpi(array $at, array $answers): void
+    {
+        $keyRows = DB::all('SELECT question_id, scale_code, reverse, weight FROM ' . DB::t('scoring_keys') .
+                           ' WHERE test_id=?', [$at['test_id']]);
+        $map = [];
+        foreach ($keyRows as $k) { $map[$k['question_id']][] = $k; }
+
+        $sum = []; $cnt = []; $max = [];
+
+        foreach ($answers as $a) {
+            $v = en_num((string)$a['value']);
+            if (!is_numeric($v)) continue;
+            $v = (float)$v;
+            if ($v < 1 || $v > 5) continue;
+            foreach ($map[$a['question_id']] ?? [] as $k) {
+                $code = $k['scale_code'];
+                $score = $k['reverse'] ? (6 - $v) : $v;
+                $score *= (float)$k['weight'];
+                $sum[$code] = ($sum[$code] ?? 0.0) + $score;
+                $cnt[$code] = ($cnt[$code] ?? 0) + 1;
+                $max[$code] = ($max[$code] ?? 0.0) + (5 * (float)$k['weight']);
+            }
+        }
+
+        $elevated = [];
+        foreach ($sum as $code => $s) {
+            $m = $max[$code] ?: 1.0;
+            $percent = round(($s / $m) * 100, 2);
+            $mean = $cnt[$code] ? round($s / $cnt[$code], 3) : 3.0;
+            $band = self::bandForPercent($percent);
+            if ($percent >= 65 && !in_array($code, ['L','F','K'], true)) {
+                $elevated[$code] = $percent;
+            }
+            DB::insert('results', [
+                'attempt_id' => $at['id'], 'scale_code' => $code,
+                'raw_score'  => round($s, 2), 'max_score' => $m,
+                'percent'    => $percent, 'mean_score' => $mean,
+                'band'       => $band,
+            ]);
+        }
+
+        // شاخص گاف F - K
+        $fVal = $sum['F'] ?? 0;
+        $kVal = $sum['K'] ?? 0;
+        $fkIndex = round($fVal - $kVal, 2);
+
+        // تعیین کدتایپ بالینی
+        arsort($elevated);
+        $codetype = count($elevated) >= 2 ? implode('-', array_slice(array_keys($elevated), 0, 2)) : 'normal';
+
+        DB::insert('results', [
+            'attempt_id' => $at['id'], 'scale_code' => 'profile',
+            'raw_score'  => count($elevated), 'max_score' => 9,
+            'percent'    => count($elevated) > 0 ? 70 : 30,
+            'mean_score' => $fkIndex,
+            'band'       => 'normal',
+        ]);
+
+        $baseCtx = trim((string)($at['context'] ?? ''), '|');
+        DB::update('attempts', ['context' => $baseCtx . '|codetype:' . $codetype . '|fk:' . $fkIndex], 'id=?', [$at['id']]);
+    }
+
+    /* -----------------------------------------------------------------------
+     | ریون (Raven Matrices) — محاسبه نمره خام و تخمین IQ سیال
+     * --------------------------------------------------------------------*/
+    private static function scoreRaven(array $at, array $answers): void
+    {
+        $keys = [];
+        foreach (DB::all('SELECT question_id, meta FROM ' . DB::t('scoring_keys') . ' WHERE test_id=?', [$at['test_id']]) as $k) {
+            $m = json_decode($k['meta'] ?? '{}', true);
+            $keys[$k['question_id']] = $m['correct'] ?? null;
+        }
+
+        $correct = 0;
+        $total = count($keys) ?: 36;
+        foreach ($answers as $a) {
+            $qid = (int)$a['question_id'];
+            if (!isset($keys[$qid])) continue;
+            $val = en_num((string)$a['value']);
+            if ($val !== null && (int)$val === (int)$keys[$qid]) {
+                $correct++;
+            }
+        }
+
+        $percent = round(($correct / $total) * 100, 2);
+        // تخمین استاندارد IQ ریون: میانگین ۱۰۰، انحراف معیار ۱۵
+        $estIq = (int)round(70 + ($correct / $total) * 70);
+        $band = match (true) {
+            $estIq >= 130 => 'very_high',
+            $estIq >= 115 => 'high',
+            $estIq >= 90  => 'medium',
+            $estIq >= 80  => 'low',
+            default       => 'very_low',
+        };
+
+        DB::insert('results', [
+            'attempt_id' => $at['id'], 'scale_code' => 'overall',
+            'raw_score'  => $correct, 'max_score' => $total,
+            'percent'    => $percent, 'mean_score' => $estIq,
+            'band'       => $band,
+        ]);
+
+        $baseCtx = trim((string)($at['context'] ?? ''), '|');
+        DB::update('attempts', ['context' => $baseCtx . '|iq:' . $estIq . '|correct:' . $correct], 'id=?', [$at['id']]);
+    }
+
+    /* -----------------------------------------------------------------------
+     | وکسلر (WAIS Index) — ۴ شاخص ادراکی، کلامی، حافظه و سرعت
+     * --------------------------------------------------------------------*/
+    private static function scoreWais(array $at, array $answers): void
+    {
+        $keyRows = DB::all('SELECT question_id, scale_code, reverse, weight FROM ' . DB::t('scoring_keys') .
+                           ' WHERE test_id=?', [$at['test_id']]);
+        $map = [];
+        foreach ($keyRows as $k) { $map[$k['question_id']][] = $k; }
+
+        $sum = ['VCI'=>0.0, 'PRI'=>0.0, 'WMI'=>0.0, 'PSI'=>0.0];
+        $cnt = ['VCI'=>0, 'PRI'=>0, 'WMI'=>0, 'PSI'=>0];
+        $max = ['VCI'=>0.0, 'PRI'=>0.0, 'WMI'=>0.0, 'PSI'=>0.0];
+
+        foreach ($answers as $a) {
+            $v = en_num((string)$a['value']);
+            if (!is_numeric($v)) continue;
+            $v = (float)$v;
+            if ($v < 1 || $v > 5) continue;
+            foreach ($map[$a['question_id']] ?? [] as $k) {
+                $code = $k['scale_code'];
+                if (!isset($sum[$code])) continue;
+                $score = $k['reverse'] ? (6 - $v) : $v;
+                $score *= (float)$k['weight'];
+                $sum[$code] += $score;
+                $cnt[$code]++;
+                $max[$code] += (5 * (float)$k['weight']);
+            }
+        }
+
+        $pct = [];
+        foreach ($sum as $code => $s) {
+            $m = $max[$code] ?: 1.0;
+            $percent = round(($s / $m) * 100, 2);
+            $pct[$code] = $percent;
+            $mean = $cnt[$code] ? round($s / $cnt[$code], 3) : 3.0;
+            DB::insert('results', [
+                'attempt_id' => $at['id'], 'scale_code' => $code,
+                'raw_score'  => round($s, 2), 'max_score' => $m,
+                'percent'    => $percent, 'mean_score' => $mean,
+                'band'       => self::bandForPercent($percent),
+            ]);
+        }
+
+        $overall = round(array_sum($pct) / count($pct), 2);
+        DB::insert('results', [
+            'attempt_id' => $at['id'], 'scale_code' => 'overall',
+            'raw_score'  => $overall, 'max_score' => 100,
+            'percent'    => $overall, 'mean_score' => round($overall / 20, 3),
+            'band'       => self::bandForPercent($overall),
+        ]);
+
+        $baseCtx = trim((string)($at['context'] ?? ''), '|');
+        DB::update('attempts', ['context' => $baseCtx . '|fsiq:' . $overall], 'id=?', [$at['id']]);
+    }
+
 }

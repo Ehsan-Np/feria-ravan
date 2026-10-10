@@ -330,4 +330,54 @@
     }
     sel.addEventListener('change', sync); sync();
   });
+
+  /* ── دکمهٔ خودکار و هوشمند بازگشت به بالای صفحه (Back to Top) ── */
+  (function initBackToTop() {
+    function setup() {
+      if (document.getElementById('frBackToTop')) return;
+      var btn = document.createElement('button');
+      btn.id = 'frBackToTop';
+      btn.className = 'fr-back-to-top';
+      btn.setAttribute('type', 'button');
+      btn.setAttribute('aria-label', 'بازگشت به بالای صفحه');
+      btn.setAttribute('title', 'بازگشت به بالای صفحه');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>';
+      document.body.appendChild(btn);
+
+      var timer = null;
+      var checkScroll = function () {
+        var top = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        if (top > 240) {
+          btn.classList.add('show');
+        } else {
+          btn.classList.remove('show');
+        }
+      };
+
+      window.addEventListener('scroll', function () {
+        if (!timer) {
+          timer = setTimeout(function () {
+            timer = null;
+            checkScroll();
+          }, 35);
+        }
+      }, { passive: true });
+
+      checkScroll();
+
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setup);
+    } else {
+      setup();
+    }
+  })();
 })();

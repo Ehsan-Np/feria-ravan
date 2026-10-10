@@ -97,8 +97,13 @@ echo flash();
 </div>
 
 <!-- فرم افزودن/ویرایش -->
-<div class="fr-card">
-  <h3><?= $editQ ? 'ویرایش سؤال #' . fa_num($editQ['number']) : 'افزودن سؤال جدید' ?></h3>
+<div class="fr-card" style="margin:0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+    <h3 style="margin:0"><?= $editQ ? '✏️ ویرایش سؤال شماره ' . fa_num($editQ['number']) . ' (' . e($test['title']) . ')' : '➕ افزودن سؤال جدید به ' . e($test['title']) ?></h3>
+    <?php if ($editQ): ?>
+      <a class="fr-btn ghost sm" href="?test=<?= $testId ?>&page=<?= $page ?>">← بازگشت به فهرست سوالات</a>
+    <?php endif; ?>
+  </div>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="act" value="save">
@@ -146,8 +151,12 @@ echo flash();
       </div>
     </div>
 
-    <button class="fr-btn sm"><?= $editQ ? 'ذخیره ویرایش' : 'افزودن سؤال' ?></button>
-    <?php if ($editQ): ?><a class="fr-btn ghost sm" href="?test=<?= $testId ?>">لغو ویرایش</a><?php endif; ?>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+      <button class="fr-btn sm" type="submit"><?= $editQ ? 'ذخیره تغییرات سؤال' : 'افزودن سؤال' ?></button>
+      <?php if ($editQ): ?>
+        <a class="fr-btn ghost sm" href="?test=<?= $testId ?>&page=<?= $page ?>">انصراف و بازگشت</a>
+      <?php endif; ?>
+    </div>
   </form>
 </div>
 <script>
@@ -159,6 +168,13 @@ function toggleFmt(){
 }
 document.addEventListener('DOMContentLoaded', toggleFmt);
 </script>
+<?php
+// در حالت ویرایش سؤال، فقط فرم همان سؤال نمایش داده می‌شود و فهرست سوالات زیر آن مخفی می‌ماند
+if ($editQ) {
+    admin_layout_end();
+    exit;
+}
+?>
 
 <!-- فهرست سوالات -->
 <div class="fr-card">

@@ -126,17 +126,47 @@ switch ($action) {
         Analyzer::scoreAttempt($attemptId);
         log_activity('test_done', 'attempt', $attemptId, ['mode'=>$at['mode'],'test'=>$at['slug']]);
 
-        // بررسی و اتصال خودکار به پیوند تطابق دونفره معلق (فاز ۲)
+        // بررسی و اتصال خودکار به پیوند تطابق دونفره معلق (فاز ۲ و فاز ۳ مدل‌های مالی)
         try {
-            $pendingDyad = DB::one('SELECT id FROM ' . DB::t('dyads') .
-                ' WHERE user2_id=? AND test_id=? AND status="pending" ORDER BY id DESC LIMIT 1',
-                [$u['id'], $at['test_id']]);
-            if ($pendingDyad) {
-                require_once FR_ROOT . '/core/DyadAnalyzer.php';
-                DB::update('dyads', ['attempt2_id' => $attemptId, 'status' => 'ready'], 'id=?', [$pendingDyad['id']]);
-                DyadAnalyzer::analyze((int)$pendingDyad['id']);
+            $pendingDyad = null;
+            $dyadToken = (string)($_SESSION['active_dyad_token'] ?? '');
+            if ($dyadToken !== '') {
+                $pendingDyad = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE token=? AND status="pending"', [$dyadToken]);
             }
-        } catch (Throwable $e) {}
+            if (!$pendingDyad) {
+                $cleanMob = clean_mobile((string)$u['mobile']);
+                $pendingDyad = DB::one('SELECT * FROM ' . DB::t('dyads') .
+                    ' WHERE (user2_id=? OR (partner_mobile IS NOT NULL AND partner_mobile=?)) AND test_id=? AND status="pending" ORDER BY id DESC LIMIT 1',
+                    [$u['id'], $cleanMob, $at['test_id']]);
+            }
+            if ($pendingDyad) {
+                $targetMode = $pendingDyad['target_mode'] ?? 'free';
+                $payMode    = $pendingDyad['pay_mode'] ?? 'free';
+                $isGiftPaid = ($payMode === 'self_paid' && (int)$pendingDyad['partner_paid'] === 1);
+                $isFullAtt  = ($at['mode'] === 'full');
+
+                if ($targetMode === 'full' && !$isFullAtt && $isGiftPaid) {
+                    // ارتقای خودکار تلاش هدیه به full
+                    DB::update('attempts', ['mode' => 'full', 'order_id' => $pendingDyad['order1_id']], 'id=?', [$attemptId]);
+                    Analyzer::scoreAttempt($attemptId);
+                    $isFullAtt = true;
+                }
+
+                if ($targetMode !== 'full' || $isFullAtt) {
+                    require_once FR_ROOT . '/core/DyadAnalyzer.php';
+                    DB::update('dyads', [
+                        'user2_id'    => $u['id'],
+                        'attempt2_id' => $attemptId,
+                        'status'      => 'ready',
+                        'updated_at'  => date('Y-m-d H:i:s'),
+                    ], 'id=?', [$pendingDyad['id']]);
+                    DyadAnalyzer::analyze((int)$pendingDyad['id']);
+                    unset($_SESSION['active_dyad_token']);
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('dyad auto-link error: ' . $e->getMessage());
+        }
 
         $name = user_fullname($u);
         $link = SITE_URL . '/panel/report.php?attempt=' . $attemptId;

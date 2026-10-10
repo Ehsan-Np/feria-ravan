@@ -148,7 +148,7 @@ function render(){
     const labels = (q.labels && q.labels.length) ? q.labels : (LABELS[q.scale_max] || LABELS[5]);
     for(let v=q.scale_min; v<=q.scale_max; v++){
       const b=document.createElement('button');
-      b.textContent = labels[v-1] || ('گزینه '+faNum(v));
+      b.textContent = (q.options && q.options[v] !== undefined) ? q.options[v] : (labels[v-1] || ('گزینه '+faNum(v)));
       b.dataset.v=v;
       if (q.prev && String(q.prev.value)===String(v)) b.classList.add('sel');
       b.onclick=()=>pickLikert(q,v,b);

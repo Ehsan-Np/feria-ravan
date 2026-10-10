@@ -40,6 +40,11 @@ if (!$data || empty($data['delta_matrix'])) {
     $data = DyadAnalyzer::analyze($dyadId);
 }
 
+if (!$data) {
+    flash('گزارش تطابق هنوز تکمیل نشده یا اطلاعات آزمون دوم پردازش نشده است.', 'warn');
+    redirect(SITE_URL . '/panel/dyad.php');
+}
+
 $u1 = $data['user1'] ?? [];
 $u2 = $data['user2'] ?? [];
 $synergy = (int)($data['synergy_score'] ?? 75);
@@ -259,6 +264,12 @@ panel_layout($u, 'history');
   </div>
   <?php endif; ?>
 
+</div>
+
+<div style="text-align:center;margin:32px 0 16px">
+  <button type="button" class="fr-btn ghost sm" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="border-radius:99px;padding:8px 20px">
+    ↑ بازگشت به بالای کارنامه تطابق
+  </button>
 </div>
 <?php
 panel_layout_end();

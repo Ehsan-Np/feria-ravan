@@ -161,10 +161,27 @@ function valid_national_code(string $code): bool
     $c = (int)$code[9];
     return ($r < 2 && $c === $r) || ($r >= 2 && $c === 11-$r);
 }
+/** پاک‌سازی و استانداردسازی شماره موبایل ایران */
+function clean_mobile(string $m): string
+{
+    $m = en_num(trim($m));
+    $m = (string)preg_replace('/[\s\-\_\(\)\.]+/', '', $m);
+    if (str_starts_with($m, '+98')) {
+        $m = '0' . substr($m, 3);
+    } elseif (str_starts_with($m, '0098')) {
+        $m = '0' . substr($m, 4);
+    } elseif (str_starts_with($m, '98') && strlen($m) === 12) {
+        $m = '0' . substr($m, 2);
+    } elseif (str_starts_with($m, '9') && strlen($m) === 10) {
+        $m = '0' . $m;
+    }
+    return $m;
+}
+
 /** صحت موبایل ایران */
 function valid_mobile(string $m): bool
 {
-    return (bool)preg_match('/^09\d{9}$/', en_num($m));
+    return (bool)preg_match('/^09\d{9}$/', clean_mobile($m));
 }
 
 /* ---------------------------------------------------------------------------
@@ -231,6 +248,32 @@ function fr_token(int $len = 12): string
 }
 
 /** اعتبارسنجی نشانی بازگشت (back) — فقط مسیر داخلی سایت؛ در غیر اینصورت رشتهٔ خالی */
+/** تبدیل نشانی نسبی یا ناقص به نشانی کامل با توجه به SITE_URL */
+/** دریافت عنوان سفارشی‌شدهٔ پنل کاربری */
+function fr_panel_title(): string
+{
+    $title = trim((string)DB::setting('panel_title', ''));
+    if ($title !== '') return $title;
+    return function_exists('T') ? T('nav.panel') : 'پنل کاربری';
+}
+
+/** دریافت نشانی سفارشی‌شدهٔ پنل کاربری */
+function fr_panel_url(): string
+{
+    $url = trim((string)DB::setting('panel_url', '/panel/'));
+    return fr_format_url($url !== '' ? $url : '/panel/');
+}
+
+function fr_format_url(?string $url): string
+{
+    $url = trim((string)$url);
+    if ($url === '' || $url === '#') return '#';
+    if (preg_match('#^(https?:)?//#i', $url) || str_starts_with($url, 'mailto:') || str_starts_with($url, 'tel:')) {
+        return $url;
+    }
+    return rtrim(SITE_URL, '/') . '/' . ltrim($url, '/');
+}
+
 function fr_safe_back(?string $back): string
 {
     $back = trim((string)$back);
@@ -424,13 +467,24 @@ function fr_test_kind_fa(array $t): string
         'ysq'    => 'واکاوی عمیق طرحواره‌ها',
         'neo'    => 'نقشهٔ پنج عامل شخصیت',
         'screen' => 'غربالگری آگاهانه',
-        'jobsat' => 'سنجش سازمانی',
+        'jobsat' => 'سنجش سازمانی', 'mbti' => 'تیپ‌شناسی ۱۶گانه مایرز-بریگز', 'holland' => 'رغبت‌سنجی شغلی و تحصیلی', 'baron' => 'ارزیابی هوش هیجانی بار-آن', 'mmpi' => 'غربالگری آسیب‌شناسی بالینی', 'raven' => 'سنجش هوش عمومی و سیال', 'wais' => 'شاخص هوش شناختی وکسلر',
     ][(string)($t['engine'] ?? '')] ?? 'تست روانشناسی';
 }
 
 /**
  * پاکسازی کامل و حذف نهایی یک تست روانشناسی و تمام داده‌های وابستهٔ آن
  */
+
+function fr_test_category_fa(string $cat): string
+{
+    return match ($cat) {
+        'clinical'     => 'بالینی و سلامت روان',
+        'personality'  => 'شخصیت و خودشناسی',
+        'intelligence' => 'هوش، استعداد و پیشرفت شغلی',
+        default        => 'شخصیت و خودشناسی',
+    };
+}
+
 function fr_purge_test(int $tid): bool
 {
     $row = DB::one('SELECT id, title FROM ' . DB::t('tests') . ' WHERE id=?', [$tid]);

@@ -24,10 +24,11 @@ function admin_layout(array $admin, string $active, string $title): void
         ['profile','👤 پروفایل من','/admin/profile.php'],
         // نسخهٔ ۱٫۵: دسترسی سریع مدیر به پنل کاربری خودش (سشن کاربر در ورود مدیر ساخته می‌شود)
         // لینک پنل کاربری (اگر مدیر هنوز از صفحهٔ ورودِ سایت وارد نشده باشد، خود صفحهٔ کاربر احراز می‌خواهد)
-        ['userpanel','🦢 پنل کاربری من','/panel/'],
+        ['userpanel','🦢 ' . (function_exists('fr_panel_title') ? fr_panel_title() : 'پنل کاربری'), (function_exists('fr_panel_url') ? fr_panel_url() : '/panel/')],
         ['tests','🧠 تست‌های روانشناسی','/admin/tests.php'],
         ['questions','❓ سوالات','/admin/questions.php'],
         ['templates','📝 قالب‌های تحلیل','/admin/templates.php'],
+        ['attempts','📊 نتایج و تحلیل مراجعین','/admin/attempts.php'],
         ['users','👥 کاربران','/admin/users.php'],
         ['fields','🧩 فیلدهای ثبت‌نام','/admin/fields.php'],
         ['discounts','🏷 کدهای تخفیف','/admin/discounts.php'],
@@ -53,6 +54,7 @@ function admin_layout(array $admin, string $active, string $title): void
         ['texts','✏️ متن‌های سایت','/admin/texts.php'],
         ['roles','🛂 نقش‌ها و مدیران','/admin/roles.php'],
         ['settings','⚙️ تنظیمات','/admin/settings.php'],
+        ['updater','🚀 به‌روزرسانی سامانه','/admin/updater.php'],
     ];
     /* نسخهٔ ۲٫۱: منو بر اساس capهای مؤثر نقشِ مدیر فیلتر می‌شود */
     require_once __DIR__ . '/../includes/roles.php';
@@ -75,14 +77,14 @@ function admin_layout(array $admin, string $active, string $title): void
 
     $singlesTop = ['dashboard', 'profile', 'userpanel'];      // آیتم‌های تکی بالای منو
     $groupDefs  = [
-        ['id' => 'grp-tests',    'label' => '🧠 تست‌های روانشناسی',      'keys' => ['tests', 'questions', 'templates']],
+        ['id' => 'grp-tests',    'label' => '🧠 تست‌های روانشناسی',      'keys' => ['tests', 'questions', 'templates', 'attempts']],
         ['id' => 'grp-users',    'label' => '👥 کاربران و ثبت‌نام',      'keys' => ['users', 'fields', 'registrants', 'reviews']],
         ['id' => 'grp-events',   'label' => '🎓 رویدادها',               'keys' => ['workshops', 'courses']],
         ['id' => 'grp-consult',  'label' => '🛋 مشاوره',                 'keys' => ['consult', 'consult-schedule', 'consult-bookings']],
         ['id' => 'grp-sales',    'label' => '💳 فروش و مالی',            'keys' => ['orders', 'discounts', 'refunds', 'tickets']],
         ['id' => 'grp-marketing','label' => '📨 بازاریابی و اطلاع‌رسانی', 'keys' => ['newsletter', 'contacts', 'campaigns', 'notifications', 'planner', 'sms']],
         ['id' => 'grp-content',  'label' => '🖼 محتوا و سئو',            'keys' => ['banners', 'texts', 'permalinks']],
-        ['id' => 'grp-system',   'label' => '⚙️ سیستم',                  'keys' => ['monitor', 'roles', 'settings']],
+        ['id' => 'grp-system',   'label' => '⚙️ سیستم',                  'keys' => ['monitor', 'roles', 'settings', 'updater']],
     ];
 
     /* هر کلیدِ باقی‌مانده (تعریف‌نشده در گروه‌ها) به‌صورت تکی نمایش داده می‌شود */
@@ -93,7 +95,9 @@ function admin_layout(array $admin, string $active, string $title): void
     $renderItem = function (array $m) use ($active, $openTickets): string {
         [$key, $label, $url] = $m;
         $cnt = $key === 'tickets' && $openTickets ? '<span class="cnt">' . fa_num($openTickets) . '</span>' : '';
-        return '<a class="adm-side ' . ($active === $key ? 'active' : '') . '" href="' . SITE_URL . $url . '">' . $label . $cnt . '</a>';
+        $finalUrl = (preg_match('#^https?://#i', $url)) ? $url : rtrim(SITE_URL, '/') . '/' . ltrim($url, '/');
+        $target = ($key === 'userpanel') ? ' target="_blank"' : '';
+        return '<a class="adm-side ' . ($active === $key ? 'active' : '') . '" href="' . e($finalUrl) . '"' . $target . '>' . $label . $cnt . '</a>';
     };
     ?>
 <!DOCTYPE html>

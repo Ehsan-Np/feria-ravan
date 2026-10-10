@@ -550,10 +550,13 @@ echo flash();
   </form>
 </div>
 
-<!-- ════════════ پنل ویرایش عضو (در صورت انتخاب) ════════════ -->
+<!-- ════════════ پنل ویرایش اختصاصی عضو (در صورت انتخاب) ════════════ -->
 <?php if ($eReg): ?>
-<div class="fr-card" style="border:2px solid var(--c-primary)">
-  <h3>✏️ ویرایش عضو #<?= fa_num((int)$eReg['id']) ?> — <?= e(trim($eReg['first_name'] . ' ' . $eReg['last_name']) ?: 'بدون نام') ?></h3>
+<div class="fr-card" style="margin:0;border:2px solid var(--c-primary)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+    <h3 style="margin:0">✏️ ویرایش عضو #<?= fa_num((int)$eReg['id']) ?> — <?= e(trim($eReg['first_name'] . ' ' . $eReg['last_name']) ?: 'بدون نام') ?></h3>
+    <a class="fr-btn ghost sm" href="<?= e($back(['edit_reg' => null])) ?>">← بازگشت به لیست اعضا</a>
+  </div>
   <form method="post" class="fr-grid cols-2">
     <?= csrf_field() ?>
     <input type="hidden" name="act" value="reg_save"><input type="hidden" name="reg_id" value="<?= (int)$eReg['id'] ?>">
@@ -578,12 +581,19 @@ echo flash();
           <input class="fr-input" name="companion_count" inputmode="numeric" value="<?= fa_num($eReg['companion_count']) ?>">
           <small class="hint">مبلغ سفارش‌های قبلی به‌صورت اسنپ‌شات حفظ می‌شود و تغییر نمی‌کند.</small></div>
       </div>
-      <button class="fr-btn">ذخیره تغییرات ✅</button>
-      <a class="fr-btn ghost" href="<?= e($back(['edit_reg' => null])) ?>">انصراف</a>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+        <button class="fr-btn">ذخیره تغییرات ✅</button>
+        <a class="fr-btn ghost" href="<?= e($back(['edit_reg' => null])) ?>">انصراف و بازگشت</a>
+      </div>
     </div>
   </form>
 </div>
-<?php endif; ?>
+<?php
+// در حالت ویرایش عضو رویداد، فقط فرم ویرایش نمایش داده می‌شود
+admin_layout_end();
+exit;
+endif;
+?>
 
 <!-- ════════════ لیست اعضای رویداد ════════════ -->
 <div class="fr-card">
@@ -759,7 +769,10 @@ echo flash();
       </td>
       <td><?= fa_num(jdate('j F Y', strtotime($r['started_at']))) ?></td>
       <td class="actions" style="white-space:nowrap">
-        <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= (int)$r['id'] ?>" target="_blank" title="مشاهده و ویرایش سؤالات و پاسخ‌های کاربر در برگهٔ جدید">📝 پاسخ‌ها ↗</a>
+        <?php if ($r['status'] !== 'in_progress'): ?>
+        <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?report=<?= (int)$r['id'] ?>" target="_blank" title="مشاهده کارنامه و تحلیل کامل روان‌سنجی">👁 کارنامه و تحلیل</a>
+        <?php endif; ?>
+        <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= (int)$r['id'] ?>" title="مشاهده و ویرایش سؤالات و پاسخ‌های کاربر">📝 پاسخ‌ها</a>
         <a class="fr-btn sm ghost" href="<?= e($back(['edit_att' => (int)$r['id']])) ?>">ویرایش</a>
         <?php if ($r['status'] === 'in_progress'): ?>
         <form method="post" style="display:inline" onsubmit="return confirm('پیامک یادآوری به همراه لینک ادامهٔ آزمون ارسال شود؟')">

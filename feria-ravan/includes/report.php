@@ -375,6 +375,11 @@ final class ReportBuilder
   <?php if ($ft = DB::setting('report_footer', '')): ?>
   <div style="font-size:12.5px;color:var(--muted);text-align:center;line-height:1.9"><?= nl2br(e((string)$ft)) ?></div>
   <?php endif; ?>
+  <div style="text-align:center;margin:28px 0 16px">
+    <button type="button" class="fr-btn ghost sm" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="border-radius:99px;padding:8px 20px">
+      ↑ بازگشت به بالای کارنامه
+    </button>
+  </div>
   <?= self::creditBox() ?>
 </div>
         <?php
@@ -391,7 +396,7 @@ final class ReportBuilder
         }
         return ['disc'=>'مدل رفتاری DISC مرستن','neo'=>'مدل پنج عامل بزرگ شخصیت (NEO — Costa & McCrae)',
                 'ysq'=>'درمان‌گرایی طرحواره (Young)','screen'=>'غربالگری بالینی (هم‌راستا با BAI/BDI-II)',
-                'jobsat'=>'مقیاس رضایت شغلی اسپکتور (JSS)'][$e] ?? $e;
+                'jobsat'=>'مقیاس رضایت شغلی اسپکتور (JSS)', 'mbti'=>'تیپ‌شناسی شخصیت مایرز-بریگز (MBTI)', 'holland'=>'مدل رغبت شغلی هالند (RIASEC)', 'baron'=>'پرسشنامه هوش هیجانی بار-آن (Bar-On EQ-i)', 'mmpi'=>'پرسشنامه چندوجهی شخصیتی مینه سوتا (MMPI)', 'raven'=>'ماتریس‌های پیش‌رونده ریون (Raven IQ)', 'wais'=>'شاخص هوش وکسلر (WAIS Index)'][$e] ?? $e;
     }
 
     /* =========================================================================

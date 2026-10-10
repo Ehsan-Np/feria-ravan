@@ -49,9 +49,12 @@ $types = ['text'=>'متن کوتاه','number'=>'عدد','select'=>'انتخاب
 admin_layout($adm, 'fields', 'فیلدهای فرم ثبت‌نام و پروفایل');
 echo flash();
 ?>
-<div class="fr-grid cols-2">
+<?php if ($editF): ?>
   <div class="fr-card" style="margin:0">
-    <h3><?= $editF ? 'ویرایش فیلد' : 'افزودن فیلد جدید' ?></h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:gap:10px">
+      <h3 style="margin:0">✏️ ویرایش فیلد: «<?= e($editF['label']) ?>»</h3>
+      <a class="fr-btn ghost sm" href="fields.php">← بازگشت به فهرست فیلدها</a>
+    </div>
     <form method="post">
       <?= csrf_field() ?>
       <input type="hidden" name="act" value="save"><input type="hidden" name="id" value="<?= $editF['id'] ?? 0 ?>">
@@ -79,8 +82,49 @@ echo flash();
         <label class="tog"><input type="checkbox" name="show_in_register" <?= ($editF['show_in_register'] ?? 1)?'checked':'' ?>> در ثبت‌نام</label>
         <label class="tog"><input type="checkbox" name="show_in_profile" <?= ($editF['show_in_profile'] ?? 1)?'checked':'' ?>> در پروفایل</label>
       </div>
-      <button class="fr-btn sm">ذخیره فیلد</button>
-      <?php if ($editF): ?><a class="fr-btn ghost sm" href="fields.php">لغو</a><?php endif; ?>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+        <button class="fr-btn sm" type="submit">ذخیره تغییرات فیلد</button>
+        <a class="fr-btn ghost sm" href="fields.php">انصراف و بازگشت</a>
+      </div>
+    </form>
+  </div>
+<?php
+  admin_layout_end();
+  exit;
+endif;
+?>
+
+<div class="fr-grid cols-2">
+  <div class="fr-card" style="margin:0">
+    <h3>افزودن فیلد جدید</h3>
+    <form method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="save"><input type="hidden" name="id" value="0">
+      <div class="fr-field"><label>نام ماشینی (لاتین، فقط حروف و _)</label>
+        <input class="fr-input" name="name" value="" style="direction:ltr" required></div>
+      <div class="fr-field"><label>عنوان نمایشی</label>
+        <input class="fr-input" name="label" value="" required></div>
+      <div class="fr-grid cols-2" style="gap:10px">
+        <div class="fr-field"><label>نوع فیلد</label>
+          <select class="fr-select" name="type">
+            <?php foreach ($types as $k=>$v): ?>
+            <option value="<?= $k ?>"><?= $v ?></option>
+            <?php endforeach; ?>
+          </select></div>
+        <div class="fr-field"><label>ترتیب نمایش</label>
+          <input class="fr-input" name="sort_order" value="0"></div>
+      </div>
+      <div class="fr-field"><label>گزینه‌ها برای لیست (هر خط یک گزینه)</label>
+        <textarea class="fr-textarea" name="options" rows="3"></textarea></div>
+      <div class="fr-field"><label>متن راهنما (placeholder)</label>
+        <input class="fr-input" name="placeholder" value=""></div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px">
+        <label class="tog"><input type="checkbox" name="required"> اجباری</label>
+        <label class="tog"><input type="checkbox" name="active" checked> فعال</label>
+        <label class="tog"><input type="checkbox" name="show_in_register" checked> در ثبت‌نام</label>
+        <label class="tog"><input type="checkbox" name="show_in_profile" checked> در پروفایل</label>
+      </div>
+      <div style="margin-top:14px"><button class="fr-btn sm" type="submit">افزودن فیلد</button></div>
     </form>
   </div>
 

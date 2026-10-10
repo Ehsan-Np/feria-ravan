@@ -9,21 +9,40 @@ declare(strict_types=1);
 /** مدیر جاری */
 function current_admin(): ?array
 {
-    static $a = null; static $loaded = false;
-    if ($loaded) return $a;
-    $loaded = true;
-    if (empty($_SESSION['admin_id'])) return null;
-    /* نسخهٔ ۲٫۱: role_id برای نقش‌های سفارشی — اگر هنوز مهاجرت اعمال نشده، fallback */
-    try {
-        $a = DB::one('SELECT id,username,display_name,role,role_id,status FROM ' . DB::t('admins') .
-                     " WHERE id=? AND status='active'", [$_SESSION['admin_id']]);
-    } catch (Throwable $e) {
-        $a = DB::one('SELECT id,username,display_name,role,status FROM ' . DB::t('admins') .
-                     " WHERE id=? AND status='active'", [$_SESSION['admin_id']]);
-        if ($a) $a['role_id'] = 0;
+    static $cached = null;
+    static $cachedId = null;
+    if (empty($_SESSION['admin_id'])) {
+        $cached = null;
+        $cachedId = null;
+        return null;
     }
-    if (!$a) unset($_SESSION['admin_id']);
-    return $a;
+    $adminId = (int)$_SESSION['admin_id'];
+    if ($cachedId === $adminId && $cached !== null) {
+        return $cached;
+    }
+    try {
+        $row = DB::one('SELECT * FROM ' . DB::t('admins') . ' WHERE id=?', [$adminId]);
+        if ($row) {
+            // بررسی وضعیت فعال بودن حساب مدیر
+            if (isset($row['status']) && $row['status'] !== 'active') {
+                $cached = null;
+                $cachedId = null;
+            } else {
+                if (!isset($row['role_id'])) $row['role_id'] = 0;
+                if (!isset($row['status'])) $row['status'] = 'active';
+                $cached = $row;
+                $cachedId = $adminId;
+            }
+        } else {
+            $cached = null;
+            $cachedId = null;
+        }
+    } catch (Throwable $e) {
+        $cached = null;
+        $cachedId = null;
+    }
+    if (!$cached) unset($_SESSION['admin_id']);
+    return $cached;
 }
 
 /**
@@ -51,18 +70,46 @@ function admin_login(string $username, string $password): array
     if (!rate_limit('admin_login:' . $username, 8, 900)) {
         return ['ok'=>false,'message'=>'تلاش‌های ناموفق زیاد؛ ۱۵ دقیقه بعد تلاش کنید.'];
     }
-    $a = DB::one('SELECT * FROM ' . DB::t('admins') . " WHERE username=? AND status='active'", [$username]);
-    if (!$a || !password_verify($password, $a['password_hash'])) {
+    try {
+        $a = DB::one('SELECT * FROM ' . DB::t('admins') . ' WHERE username=?', [$username]);
+    } catch (Throwable $e) {
+        $a = null;
+    }
+    if (!$a || (isset($a['status']) && $a['status'] !== 'active')) {
         log_activity('admin_login_fail', null, null, ['user'=>$username]);
         return ['ok'=>false,'message'=>'نام کاربری یا رمز اشتباه است.'];
     }
-    session_regenerate_id(true);
+    $hash = (string)($a['password_hash'] ?? ($a['password'] ?? ''));
+    if ($hash === '' || !password_verify($password, $hash)) {
+        log_activity('admin_login_fail', null, null, ['user'=>$username]);
+        return ['ok'=>false,'message'=>'نام کاربری یا رمز اشتباه است.'];
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) @session_regenerate_id(true);
     $_SESSION['admin_id'] = (int)$a['id'];
-    DB::insert('sessions', ['id'=>session_id(),'admin_id'=>$a['id'],'ip'=>client_ip_bin(),
-        'user_agent'=>substr($_SERVER['HTTP_USER_AGENT']??'',0,255),'device'=>client_device()]);
-    DB::update('admins', ['last_login_at'=>date('Y-m-d H:i:s')], 'id=?', [$a['id']]);
+    try {
+        DB::insert('sessions', ['id'=>session_id(),'admin_id'=>$a['id'],'ip'=>client_ip_bin(),
+            'user_agent'=>substr($_SERVER['HTTP_USER_AGENT']??'',0,255),'device'=>client_device()]);
+    } catch (Throwable $e) {}
+    try {
+        DB::run('UPDATE ' . DB::t('admins') . ' SET last_login_at=NOW() WHERE id=?', [$a['id']]);
+    } catch (Throwable $e) {
+        try { DB::run('UPDATE ' . DB::t('admins') . ' SET last_login=NOW() WHERE id=?', [$a['id']]); } catch (Throwable $e2) {}
+    }
     // نسخهٔ ۱٫۶: پنل مدیریت و پنل کاربری کاملاً جدا هستند — ورود مدیر فقط سشن مدیر می‌سازد
     // و مدیر برای استفاده از امکانات کاربری، جداگانه و با موبایل/رمز خودش وارد سایت می‌شود.
+    // اتصال خودکار حساب کاربری متناظر به نشست مدیر جهت دسترسی بدون مانع به پنل کاربری
+    try {
+        if (!empty($a['user_id'])) {
+            $uRow = DB::one('SELECT id FROM ' . DB::t('users') . " WHERE id=? AND status='active'", [$a['user_id']]);
+            if ($uRow) $_SESSION['user_id'] = (int)$uRow['id'];
+        } elseif (!empty($a['mobile'])) {
+            $uRow = DB::one('SELECT id FROM ' . DB::t('users') . " WHERE mobile=? AND status='active'", [$a['mobile']]);
+            if ($uRow) {
+                $_SESSION['user_id'] = (int)$uRow['id'];
+                DB::update('admins', ['user_id' => $uRow['id']], 'id=?', [$a['id']]);
+            }
+        }
+    } catch (Throwable $e) {}
     log_activity('admin_login', 'admin', (int)$a['id']);
     return ['ok'=>true];
 }

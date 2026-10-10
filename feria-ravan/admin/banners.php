@@ -47,9 +47,12 @@ $places = ['dashboard'=>'داشبورد کاربر','test_form'=>'هنگام ف�
 admin_layout($adm, 'banners', 'بنرهای تبلیغاتی');
 echo flash();
 ?>
-<div class="fr-grid cols-2">
+<?php if ($editB): ?>
   <div class="fr-card" style="margin:0">
-    <h3><?= $editB ? 'ویرایش بنر' : 'افزودن بنر' ?></h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0">✏️ ویرایش بنر: «<?= e($editB['title']) ?>»</h3>
+      <a class="fr-btn ghost sm" href="banners.php">← بازگشت به فهرست بنرها</a>
+    </div>
     <form method="post" enctype="multipart/form-data">
       <?= csrf_field() ?>
       <input type="hidden" name="act" value="save"><input type="hidden" name="id" value="<?= $editB['id'] ?? 0 ?>">
@@ -71,8 +74,44 @@ echo flash();
           <input class="fr-input" name="sort_order" value="<?= fa_num($editB['sort_order'] ?? 0) ?>"></div>
       </div>
       <label class="tog"><input type="checkbox" name="active" <?= ($editB['active'] ?? 1)?'checked':'' ?>> فعال</label>
-      <br><button class="fr-btn sm" style="margin-top:12px">ذخیره بنر</button>
-      <?php if ($editB): ?><a class="fr-btn ghost sm" href="banners.php">لغو</a><?php endif; ?>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+        <button class="fr-btn sm" type="submit">ذخیره تغییرات بنر</button>
+        <a class="fr-btn ghost sm" href="banners.php">انصراف و بازگشت</a>
+      </div>
+    </form>
+  </div>
+<?php
+  // در حالت ویرایش بنر، جدول بنرها زیر آن نمایش داده نمی‌شود
+  admin_layout_end();
+  exit;
+endif;
+?>
+
+<div class="fr-grid cols-2">
+  <div class="fr-card" style="margin:0">
+    <h3>افزودن بنر جدید</h3>
+    <form method="post" enctype="multipart/form-data">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="save"><input type="hidden" name="id" value="0">
+      <div class="fr-field"><label>عنوان بنر</label>
+        <input class="fr-input" name="title" value="" required></div>
+      <div class="fr-field"><label>آدرس تصویر (یا آپلود)</label>
+        <input class="fr-input" name="image" value="" style="direction:ltr">
+        <input type="file" name="file" accept="image/*" style="margin-top:8px;font-size:12px"></div>
+      <div class="fr-field"><label>لینک مقصد (اختیاری)</label>
+        <input class="fr-input" name="link" value="" style="direction:ltr"></div>
+      <div class="fr-grid cols-2" style="gap:10px">
+        <div class="fr-field"><label>محل نمایش</label>
+          <select class="fr-select" name="placement">
+            <?php foreach ($places as $k=>$v): ?>
+            <option value="<?= $k ?>"><?= $v ?></option>
+            <?php endforeach; ?>
+          </select></div>
+        <div class="fr-field"><label>ترتیب</label>
+          <input class="fr-input" name="sort_order" value="0"></div>
+      </div>
+      <label class="tog"><input type="checkbox" name="active" checked> فعال</label>
+      <div style="margin-top:14px"><button class="fr-btn sm" type="submit">افزودن بنر</button></div>
     </form>
   </div>
   <div class="fr-card" style="margin:0">

@@ -310,12 +310,13 @@ function admin_events_page(array $adm, string $kind): void
 </div>
 <?php endif; ?>
 
-<div class="fr-grid <?= $editE ? 'cols-2' : '' ?>">
-  <?php if ($editE || isset($_GET['edit_e'])): ?>
-  <!-- ═══════════════════ فرم ساخت/ویرایش ═══════════════════ -->
-  <div class="fr-card" style="margin:0;align-self:start">
-    <h3><?= $editE ? 'ویرایش «' . e($editE['title']) . '»' : $kindFa . ' جدید' ?>
-      <a class="more" href="<?= $self ?>">بازگشت به فهرست ←</a></h3>
+<?php if ($editE || isset($_GET['edit_e'])): ?>
+  <!-- ═══════════════════ فرم اختصاصی ساخت/ویرایش ═══════════════════ -->
+  <div class="fr-card" style="margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0"><?= $editE ? '✏️ ویرایش ' . $kindFa . ': «' . e($editE['title']) . '»' : '➕ تعریف ' . $kindFa . ' جدید' ?></h3>
+      <a class="fr-btn ghost sm" href="<?= $self ?>">← بازگشت به فهرست <?= $kindFa ?>‌ها</a>
+    </div>
 
     <form method="post" enctype="multipart/form-data" id="evForm">
       <?= csrf_field() ?>
@@ -532,11 +533,19 @@ function admin_events_page(array $adm, string $kind): void
       <label class="tog"><input type="checkbox" name="seo_noindex" value="1" <?= !empty($editE['seo_noindex']) ? 'checked' : '' ?>>
         این صفحه در موتورهای جست‌وجو نمایش داده نشود (noindex)</label>
 
-      <button class="fr-btn sm" style="margin-top:16px">ذخیرهٔ <?= $kindFa ?></button>
-      <a class="fr-btn ghost sm" href="<?= $self ?>">لغو</a>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:20px;flex-wrap:wrap">
+        <button class="fr-btn" type="submit">ذخیرهٔ <?= $kindFa ?></button>
+        <a class="fr-btn ghost" href="<?= $self ?>">انصراف و بازگشت</a>
+      </div>
     </form>
   </div>
-  <?php endif; ?>
+  <script src="<?= SITE_URL ?>/assets/js/editor.js?v=<?= FR_VERSION ?>"></script>
+<?php
+  // در حالت ویرایش رویداد، فقط فرم نمایش داده می‌شود و فهرست کلی رویدادها مخفی می‌ماند
+  admin_layout_end();
+  return;
+  endif;
+?>
 
   <!-- ═══════════════════ فهرست + عملیات گروهی (۱٫۷) ═══════════════════ -->
   <?php if (!$editE && !isset($_GET['edit_e'])): ?>
@@ -588,12 +597,12 @@ function admin_events_page(array $adm, string $kind): void
         <td><?= fa_num((int)$e['views']) ?></td>
         <td style="font-size:11.5px;white-space:nowrap"><?= $e['starts_at'] ? fa_num(jdate('j F', strtotime($e['starts_at']))) : '—' ?></td>
         <td class="actions" style="white-space:nowrap">
-          <a class="fr-btn sm ghost" href="?edit_e=<?= $e['id'] ?>" target="_blank" title="ویرایش در برگهٔ جدید">ویرایش ↗</a>
+          <a class="fr-btn sm ghost" href="?edit_e=<?= $e['id'] ?>" title="ویرایش <?= $kindFa ?>">ویرایش</a>
           <?php if ($e['slug']): ?>
           <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/<?= $public ?>.php?s=<?= urlencode($e['slug']) ?>" target="_blank" rel="noopener" title="مشاهدهٔ صفحهٔ عمومی">🌐</a>
           <?php endif; ?>
           <a class="fr-btn sm accent" href="?export_regs=<?= $e['id'] ?>" title="خروجی اکسل ثبت‌نام‌شدگان و همراهان">📊</a>
-          <a class="fr-btn sm ghost" href="registrants.php?ctx=<?= urlencode($kind) ?>&id=<?= $e['id'] ?>" target="_blank" title="مدیریت ثبت‌نام‌شدگان (افزودن/ویرایش/حذف) — ۱٫۹">👥</a>
+          <a class="fr-btn sm ghost" href="registrants.php?ctx=<?= urlencode($kind) ?>&id=<?= $e['id'] ?>" title="مدیریت ثبت‌نام‌شدگان">👥</a>
           <button type="button" class="fr-btn sm ghost" onclick="frCopyEvent(<?= (int)$e['id'] ?>)" title="کپی کردن با همهٔ تنظیمات">📋</button>
           <button type="button" class="fr-btn sm danger" onclick="frDeleteEvent(<?= (int)$e['id'] ?>, '<?= e(addslashes($e['title'])) ?>')" title="حذف">حذف</button>
         </td>

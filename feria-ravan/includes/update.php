@@ -14,14 +14,71 @@
  */
 declare(strict_types=1);
 
+/**
+ * اجرای فوق‌العاده ایمن دستورات DDL (سازگار با همهٔ نگارش‌های MySQL 5.7 / 8.0 / 8.4 و MariaDB)
+ * دستورات ADD COLUMN IF NOT EXISTS و ADD KEY IF NOT EXISTS که در MySQL 8.0 خطای سینتکس می‌دهند را
+ * با بررسی پیشین SHOW COLUMNS / SHOW INDEX به‌صورت ۱۰۰٪ ایمن و idempotent اجرا می‌کند.
+ */
+function fr_db_run_safe_ddl(string $sql): void
+{
+    $sql = trim($sql);
+    if ($sql === '') return;
+
+    // ۱. بررسی ADD COLUMN IF NOT EXISTS
+    if (preg_match('/^ALTER\s+TABLE\s+[`]?([\w${}]+)[`]?\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+[`]?(\w+)[`]?\s+(.*)$/is', $sql, $m)) {
+        $table = trim($m[1], '`');
+        $col = trim($m[2], '`');
+        $defn = trim($m[3]);
+        try {
+            $cols = array_column(DB::all("SHOW COLUMNS FROM `{$table}`"), 'Field');
+            if (!in_array($col, $cols, true)) {
+                DB::run("ALTER TABLE `{$table}` ADD COLUMN `{$col}` {$defn}");
+            }
+        } catch (Throwable $e) {
+            error_log("fr_db_run_safe_ddl col ({$table}.{$col}): " . $e->getMessage());
+        }
+        return;
+    }
+
+    // ۲. بررسی ADD KEY IF NOT EXISTS
+    if (preg_match('/^ALTER\s+TABLE\s+[`]?([\w${}]+)[`]?\s+ADD\s+KEY\s+IF\s+NOT\s+EXISTS\s+[`]?(\w+)[`]?\s*\((.*)\)$/is', $sql, $m)) {
+        $table = trim($m[1], '`');
+        $indexName = trim($m[2], '`');
+        $indexCols = trim($m[3]);
+        try {
+            $indexes = array_column(DB::all("SHOW INDEX FROM `{$table}`"), 'Key_name');
+            if (!in_array($indexName, $indexes, true)) {
+                DB::run("ALTER TABLE `{$table}` ADD KEY `{$indexName}` ({$indexCols})");
+            }
+        } catch (Throwable $e) {
+            error_log("fr_db_run_safe_ddl key ({$table}.{$indexName}): " . $e->getMessage());
+        }
+        return;
+    }
+
+    // ۳. سایر دستورات SQL به صورت ایمن درون try/catch
+    try {
+        DB::run($sql);
+    } catch (Throwable $e) {
+        $msg = $e->getMessage();
+        if (!str_contains($msg, 'Duplicate column') && !str_contains($msg, 'Duplicate key') && !str_contains($msg, 'already exists')) {
+            error_log("fr_db_run_safe_ddl error: " . $msg);
+        }
+    }
+}
+
 /** اجرای خودکار به‌روزرسانی‌ها در اولین ریکوئست پس از آپلود نسخهٔ جدید */
 function fr_update_pipeline(bool $force = false): void
 {
     // قبل از نصب کامل، settings وجود ندارد — بی‌صدا رد می‌شویم
     static $tried = false;
     /* منبع حقیقت نگارش، کد است (FR_RELEASE از includes/version.php) */
-    $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : null);
-    if ((!$force && $tried) || $codeVer === null) return;
+    if (!defined('FR_RELEASE')) {
+        $verFile = dirname(__DIR__) . '/includes/version.php';
+        if (file_exists($verFile)) require_once $verFile;
+    }
+    $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : '3.4.2');
+    if (!$force && $tried) return;
     $tried = true;
 
     $cur = '';
@@ -40,6 +97,78 @@ function fr_update_pipeline(bool $force = false): void
     if (!$got) return;                          // پروسهٔ دیگر در حال اجراست
 
     try {
+        /* ─── پایدارسازی و هماهنگ‌سازی جداول کلیدی admins و otps در تمام نسخه‌های MySQL ─── */
+        try {
+            $p = DB_PREFIX;
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD COLUMN IF NOT EXISTS `user_id` BIGINT UNSIGNED NULL AFTER `id`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD COLUMN IF NOT EXISTS `password_hash` VARCHAR(255) NULL AFTER `username`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD COLUMN IF NOT EXISTS `role_id` INT UNSIGNED NULL AFTER `role`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD COLUMN IF NOT EXISTS `status` ENUM('active','blocked') NOT NULL DEFAULT 'active' AFTER `role_id`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD COLUMN IF NOT EXISTS `totp_secret` VARCHAR(64) NULL AFTER `status`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD COLUMN IF NOT EXISTS `last_login_at` DATETIME NULL AFTER `last_login`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD KEY IF NOT EXISTS `ix_admin_user` (`user_id`)");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}admins` ADD KEY IF NOT EXISTS `ix_status` (`status`)");
+
+            // ستون‌های احراز هویت و دسترسی پنل کاربری در جدول users
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` ADD COLUMN IF NOT EXISTS `password_hash` VARCHAR(255) NULL AFTER `mobile`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` ADD COLUMN IF NOT EXISTS `mobile_verified` TINYINT(1) NOT NULL DEFAULT 0 AFTER `password_hash`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` ADD COLUMN IF NOT EXISTS `last_login_at` DATETIME NULL AFTER `extra`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` ADD COLUMN IF NOT EXISTS `last_login_ip` VARBINARY(16) NULL AFTER `last_login_at`");
+
+            // هماهنگ‌سازی فیلدهای رمز عبور و آخرین ورود
+            try { DB::run("UPDATE `{$p}admins` SET `password_hash`=`password` WHERE (`password_hash` IS NULL OR `password_hash`='') AND `password` IS NOT NULL AND `password`<>''"); } catch (Throwable $e) {}
+            try { DB::run("UPDATE `{$p}admins` SET `password`=`password_hash` WHERE (`password` IS NULL OR `password`='') AND `password_hash` IS NOT NULL AND `password_hash`<>''"); } catch (Throwable $e) {}
+            try { DB::run("UPDATE `{$p}admins` SET `last_login_at`=`last_login` WHERE `last_login_at` IS NULL AND `last_login` IS NOT NULL"); } catch (Throwable $e) {}
+            try { DB::run("UPDATE `{$p}admins` SET `last_login`=`last_login_at` WHERE `last_login` IS NULL AND `last_login_at` IS NOT NULL"); } catch (Throwable $e) {}
+
+            // ایجاد جدول sessions در صورت عدم وجود (تضمین پایداری نشست‌های کاربر و مدیر)
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}sessions` (
+              `id` VARCHAR(128) NOT NULL PRIMARY KEY,
+              `user_id` BIGINT UNSIGNED NULL,
+              `admin_id` INT UNSIGNED NULL,
+              `ip` VARBINARY(16) NULL,
+              `user_agent` VARCHAR(255) NULL,
+              `device` VARCHAR(60) NULL,
+              `login_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `last_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              `logout_at` DATETIME NULL,
+              KEY `ix_user` (`user_id`, `login_at`),
+              KEY `ix_admin` (`admin_id`, `login_at`),
+              KEY `ix_last_seen` (`last_seen`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // ایجاد جدول rate_limits در صورت عدم وجود
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}rate_limits` (
+              `bucket` VARCHAR(80) NOT NULL PRIMARY KEY,
+              `hits` INT UNSIGNED NOT NULL DEFAULT 1,
+              `reset_at` DATETIME NOT NULL,
+              KEY `ix_reset` (`reset_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // ایجاد جدول otps در صورت عدم وجود (تضمین کارکرد سیستم پیامک و OTP ورود)
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}otps` (
+              `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              `mobile` VARCHAR(11) NOT NULL,
+              `code` VARCHAR(10) NOT NULL,
+              `purpose` ENUM('register','login','reset','mobile_change') NOT NULL DEFAULT 'login',
+              `expires_at` DATETIME NOT NULL,
+              `used_at` DATETIME NULL,
+              `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+              `ip` VARBINARY(16) NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              KEY `ix_mobile_purpose` (`mobile`, `purpose`),
+              KEY `ix_expires` (`expires_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            try {
+                $hasOtpCodes = (bool)DB::val("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{$p}otp_codes'");
+                if ($hasOtpCodes) {
+                    DB::run("INSERT IGNORE INTO `{$p}otps` (`mobile`,`code`,`purpose`,`expires_at`,`created_at`)
+                             SELECT `mobile`,`code`,`purpose`,`expires_at`,`created_at` FROM `{$p}otp_codes`");
+                }
+            } catch (Throwable $e) {}
+        } catch (Throwable $e) { error_log('feria: admins & otps hardening: ' . $e->getMessage()); }
+
         /* ─── ۱٫۹: زباله‌دانِ تست‌های روانشناسی (status='trash') ─── */
         try {
             DB::run("ALTER TABLE " . DB::t('tests') .
@@ -850,7 +979,7 @@ function fr_update_pipeline(bool $force = false): void
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
-        log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
+        if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
 
         /* اگر مدیر لاگین است، خبرش بدهیم */
         if (function_exists('current_admin') && current_admin() && function_exists('flash')) {

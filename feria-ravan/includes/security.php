@@ -79,6 +79,11 @@ function csrf_guard(): void
         exit('نشست امنیتی منقضی شده است. صفحه را تازه‌سازی کنید.');
     }
 }
+/** نام مستعار برای سازگاری فراخوانی‌های قدیمی یا افزونه‌ها */
+function check_csrf(): void
+{
+    csrf_guard();
+}
 
 /* ---------------------------------------------------------------------------
  | محدودکنندهٔ نرخ درخواست (Rate Limit) بر مبنای دیتابیس
@@ -86,18 +91,23 @@ function csrf_guard(): void
  * -------------------------------------------------------------------------*/
 function rate_limit(string $bucket, int $maxHits, int $windowSec): bool
 {
-    $t = DB::t('rate_limits');
-    $bucket = substr($bucket . '|' . client_ip(), 0, 80);
-    $row = DB::one("SELECT * FROM $t WHERE bucket=?", [$bucket]);
-    $now = date('Y-m-d H:i:s');
-    if (!$row || strtotime($row['reset_at']) < time()) {
-        DB::run("REPLACE INTO $t (bucket,hits,reset_at) VALUES (?,?,?)",
-            [$bucket, 1, date('Y-m-d H:i:s', time()+$windowSec)]);
+    try {
+        $t = DB::t('rate_limits');
+        $bucket = substr($bucket . '|' . client_ip(), 0, 80);
+        $row = DB::one("SELECT * FROM $t WHERE bucket=?", [$bucket]);
+        $now = date('Y-m-d H:i:s');
+        if (!$row || strtotime($row['reset_at']) < time()) {
+            DB::run("REPLACE INTO $t (bucket,hits,reset_at) VALUES (?,?,?)",
+                [$bucket, 1, date('Y-m-d H:i:s', time()+$windowSec)]);
+            return true;
+        }
+        if ((int)$row['hits'] >= $maxHits) return false;
+        DB::run("UPDATE $t SET hits=hits+1 WHERE bucket=?", [$bucket]);
+        return true;
+    } catch (Throwable $e) {
+        // در صورت عدم وجود جدول در مراحل اولیه نصب یا خطا، درخواست مسدود نشود
         return true;
     }
-    if ((int)$row['hits'] >= $maxHits) return false;
-    DB::run("UPDATE $t SET hits=hits+1 WHERE bucket=?", [$bucket]);
-    return true;
 }
 
 /* ---------------------------------------------------------------------------
@@ -114,17 +124,19 @@ function log_activity(string $action, ?string $entity = null, ?int $entityId = n
     if (!empty($_SESSION['user_id']))  { $actorType = 'user';  $actorId = $_SESSION['user_id']; }
     if (!empty($_SESSION['admin_id'])) { $actorType = 'admin'; $actorId = $_SESSION['admin_id']; }
 
-    DB::insert('activity_logs', [
-        'actor_type' => $actorType === 'guest' ? 'user' : $actorType,
-        'actor_id'   => $actorId,
-        'action'     => $action,
-        'entity'     => $entity,
-        'entity_id'  => $entityId,
-        'meta'       => $meta ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null,
-        'ip'         => client_ip_bin(),
-        'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
-        'device'     => client_device(),
-    ]);
+    try {
+        DB::insert('activity_logs', [
+            'actor_type' => $actorType === 'guest' ? 'user' : $actorType,
+            'actor_id'   => $actorId,
+            'action'     => $action,
+            'entity'     => $entity,
+            'entity_id'  => $entityId,
+            'meta'       => $meta ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null,
+            'ip'         => client_ip_bin(),
+            'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+            'device'     => client_device(),
+        ]);
+    } catch (Throwable $e) {}
 }
 
 /* ---------------------------------------------------------------------------

@@ -60,6 +60,47 @@ if (!$ver['ok']) {
 /* پرداخت موفق */
 mark_order_paid((int)$pay['order_id'], (string)$ver['ref_id'], $ver['card_pan'] ?? null);
 
+// آیا پرداخت بابت هدیهٔ سنجش تطابق زوجین بوده است؟
+$dyadGift = DB::one('SELECT d.*, t.title AS test_title FROM ' . DB::t('dyads') . ' d
+                     JOIN ' . DB::t('tests') . ' t ON t.id=d.test_id
+                     WHERE d.order1_id=?', [(int)$pay['order_id']]);
+if ($dyadGift) {
+    render_header('پرداخت موفق هدیه تطابق');
+    echo '<div style="max-width:540px;margin:60px auto" class="fr-card" style="text-align:center">';
+    echo '<div style="font-size:48px;margin-bottom:8px">🎁</div><h3>پرداخت هدیه سنجش تطابق با موفقیت انجام شد!</h3>';
+    echo '<p style="color:var(--muted)">کد رهگیری: <b style="direction:ltr;display:inline-block">' . e((string)$ver['ref_id']) . '</b></p>';
+    echo '<div class="fr-alert ok" style="margin:16px 0;font-size:14px;text-align:right;line-height:1.9">';
+    echo '✨ هزینهٔ نسخهٔ تخصصی آزمون <b>' . e($dyadGift['test_title']) . '</b> برای همراه شما (<b>' . e($dyadGift['partner_name'] ?: 'همراه') . '</b>) پرداخت گردید.<br>';
+    if (!empty($dyadGift['partner_mobile'])) {
+        echo '📱 پیامک حاوی لینک آزمون هدیه برای شماره <b>' . fa_num($dyadGift['partner_mobile']) . '</b> ارسال شد.';
+    }
+    echo '</div>';
+    echo '<div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap">';
+    echo '<a class="fr-btn" style="background:#6d28d9" href="' . SITE_URL . '/panel/dyad.php">مدیریت پیوندهای تطابق ←</a> ';
+    echo '<a class="fr-btn ghost" href="' . SITE_URL . '/panel/payments.php">مشاهده فاکتور</a>';
+    echo '</div></div>';
+    render_footer();
+    exit;
+}
+
+// آیا پرداخت بابت خرید نسخهٔ تخصصی همراه در حالت partner_paid بوده است؟
+$dyadPartner = DB::one('SELECT d.*, t.title AS test_title FROM ' . DB::t('dyads') . ' d
+                        JOIN ' . DB::t('tests') . ' t ON t.id=d.test_id
+                        WHERE d.order2_id=?', [(int)$pay['order_id']]);
+if ($dyadPartner && $dyadPartner['status'] === 'ready') {
+    render_header('پرداخت موفق و فعال‌سازی سنجش تطابق');
+    echo '<div style="max-width:540px;margin:60px auto" class="fr-card" style="text-align:center">';
+    echo '<div style="font-size:48px;margin-bottom:8px">🎉</div><h3>پرداخت و ارزیابی تطابق با موفقیت انجام شد!</h3>';
+    echo '<p style="color:var(--muted)">کد رهگیری: <b style="direction:ltr;display:inline-block">' . e((string)$ver['ref_id']) . '</b></p>';
+    echo '<div class="fr-alert ok" style="margin:16px 0;font-size:14px">✨ نسخهٔ تخصصی شما فعال و گزارش تطابق دونفره و زوجین شما آماده مشاهده است.</div>';
+    echo '<div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap">';
+    echo '<a class="fr-btn" style="background:#6d28d9" href="' . SITE_URL . '/panel/dyad-report.php?id=' . (int)$dyadPartner['id'] . '">مشاهده کارنامه تطابق دونفره ←</a> ';
+    echo '<a class="fr-btn ghost" href="' . SITE_URL . '/panel/payments.php">مشاهده فاکتور</a>';
+    echo '</div></div>';
+    render_footer();
+    exit;
+}
+
 // یافتن جلسهٔ تست روانشناسی یا ثبت‌نام رویداد مرتبط
 $order = DB::one('SELECT kind, event_id, test_id, user_id FROM ' . DB::t('orders') . ' WHERE id=?', [(int)$pay['order_id']]);
 $attempt = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE order_id=? ORDER BY id DESC', [(int)$pay['order_id']]);

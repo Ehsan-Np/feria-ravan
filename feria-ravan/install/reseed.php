@@ -19,11 +19,23 @@ require_once FR_ROOT . '/core/seed-content.php';
 
 fr_bootstrap();
 
-// نسخهٔ ۱٫۶: این اسکریپت اسکیما را تغییر می‌دهد — اجرا فقط با نشست مدیر فعال ممکن است
+// نسخهٔ ۱٫۶: این اسکریپت اسکیما را تغییر می‌دهد — اجرا با نشست مدیر فعال یا کلید سیستمی ممکن است
 if (!current_admin()) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=utf-8');
-    exit("⛔ دسترسی غیرمجاز\nابتدا از مسیر /admin/login.php وارد شوید، سپس همین نشانی را دوباره باز کنید.");
+    $adminCount = 0;
+    try { $adminCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('admins')); } catch (Throwable $e) {}
+    $cronSecret = '';
+    try { $cronSecret = (string)DB::setting('cron_secret', ''); } catch (Throwable $e) {}
+    $providedKey = (string)($_GET['key'] ?? ($_GET['secret'] ?? ''));
+    $keyMatches = ($cronSecret !== '' && $providedKey !== '' && hash_equals($cronSecret, $providedKey));
+
+    if ($adminCount > 0 && !$keyMatches) {
+        if (PHP_SAPI !== 'cli' && !headers_sent()) {
+            redirect(SITE_URL . '/admin/login.php?back=' . urlencode($_SERVER['REQUEST_URI'] ?? '/install/reseed.php?force=1'));
+        }
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        exit("⛔ دسترسی غیرمجاز\nابتدا از مسیر /admin/login.php وارد شوید، سپس همین نشانی را دوباره باز کنید.");
+    }
 }
 
 header('Content-Type: text/plain; charset=utf-8');
@@ -34,17 +46,24 @@ header('Content-Type: text/plain; charset=utf-8');
  * -------------------------------------------------------------------------*/
 function fr_has_col(string $table, string $col): bool
 {
-    // توجه: DB::t نام را با بک‌تیک برمی‌گرداند که با دادهٔ INFORMATION_SCHEMA برابر نمی‌شود؛
-    // این‌جا نام خام با پیشوند لازم است (بدون این رفع، همیشه false برمی‌گشت و
-    // ALTER دوباره اجرا می‌شد → خطای «Duplicate column»)
-    return (bool)DB::val(
-        'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',
-        [DB_PREFIX . $table, $col]);
+    try {
+        $p = DB_PREFIX;
+        $raw = str_starts_with($table, $p) ? $table : $p . $table;
+        $cols = array_column(DB::all("SHOW COLUMNS FROM `{$raw}`"), 'Field');
+        return in_array($col, $cols, true);
+    } catch (Throwable $e) {
+        return false;
+    }
 }
 function fr_add_col(string $table, string $col, string $ddl): void
 {
-    if (!fr_has_col($table, $col)) DB::run('ALTER TABLE ' . DB::t($table) . ' ADD ' . $ddl);
+    if (!fr_has_col($table, $col)) {
+        try {
+            DB::run('ALTER TABLE ' . DB::t($table) . ' ADD ' . $ddl);
+        } catch (Throwable $e) {
+            error_log("reseed fr_add_col ({$table}.{$col}): " . $e->getMessage());
+        }
+    }
 }
 
 if (!fr_has_col('tests', 'audience')) {
@@ -64,11 +83,52 @@ DB::run("ALTER TABLE " . DB::t('events') .
     " MODIFY `ws_discount_type` ENUM('none','percent','fixed','tiered') NOT NULL DEFAULT 'none'");
 echo "✓ اسکیمای نسخهٔ ۱٫۲ آماده است\n";
 
+try {
+    if (!DB::val("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='" . DB_PREFIX . "sessions'")) {
+        DB::run("CREATE TABLE IF NOT EXISTS " . DB::t('sessions') . " (
+          `id` VARCHAR(128) NOT NULL PRIMARY KEY,
+          `user_id` BIGINT UNSIGNED NULL,
+          `admin_id` INT UNSIGNED NULL,
+          `ip` VARBINARY(16) NULL,
+          `user_agent` VARCHAR(255) NULL,
+          `device` VARCHAR(60) NULL,
+          `login_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          `last_seen` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          `logout_at` DATETIME NULL,
+          KEY `ix_user` (`user_id`, `login_at`),
+          KEY `ix_admin` (`admin_id`, `login_at`),
+          KEY `ix_last_seen` (`last_seen`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    }
+} catch (Throwable $e) {}
+
 /* ── نسخهٔ ۱٫۳: پروفایل کامل + OTP تغییر موبایل + آواتار/ایمیل مدیر ── */
-DB::run("ALTER TABLE " . DB::t('otps') .
-    " MODIFY `purpose` ENUM('register','login','reset','mobile_change') NOT NULL DEFAULT 'login'");
+try {
+    if (!DB::val("SHOW TABLES LIKE ?", [DB_PREFIX . 'otps'])) {
+        DB::run("CREATE TABLE IF NOT EXISTS " . DB::t('otps') . " (
+          `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          `mobile` VARCHAR(11) NOT NULL,
+          `code` VARCHAR(10) NOT NULL,
+          `purpose` ENUM('register','login','reset','mobile_change') NOT NULL DEFAULT 'login',
+          `expires_at` DATETIME NOT NULL,
+          `used_at` DATETIME NULL,
+          `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+          `ip` VARBINARY(16) NULL,
+          `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          KEY `ix_mobile_purpose` (`mobile`, `purpose`),
+          KEY `ix_expires` (`expires_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } else {
+        DB::run("ALTER TABLE " . DB::t('otps') .
+            " MODIFY `purpose` ENUM('register','login','reset','mobile_change') NOT NULL DEFAULT 'login'");
+    }
+} catch (Throwable $e) {}
 fr_add_col('admins', 'email',  "`email` VARCHAR(191) DEFAULT NULL AFTER `mobile`");
 fr_add_col('admins', 'avatar', "`avatar` VARCHAR(255) DEFAULT NULL AFTER `email`");
+fr_add_col('users', 'password_hash', "`password_hash` VARCHAR(255) DEFAULT NULL AFTER `mobile`");
+fr_add_col('users', 'mobile_verified', "`mobile_verified` TINYINT(1) NOT NULL DEFAULT 0 AFTER `password_hash`");
+fr_add_col('users', 'last_login_at', "`last_login_at` DATETIME DEFAULT NULL AFTER `extra`");
+fr_add_col('users', 'last_login_ip', "`last_login_ip` VARBINARY(16) DEFAULT NULL AFTER `last_login_at`");
 echo "✓ اسکیمای نسخهٔ ۱٫۳ آماده است\n";
 
 /* ---------------------------------------------------------------------------
@@ -421,7 +481,7 @@ try {
         "ALTER TABLE `{$p}reviews` MODIFY `badge_auto` ENUM('participant','admin','guest') NULL",
         "ALTER TABLE `{$p}reviews` ADD COLUMN IF NOT EXISTS `admin_reply` TEXT NULL AFTER `status`",
         "ALTER TABLE `{$p}reviews` ADD COLUMN IF NOT EXISTS `replied_at` DATETIME NULL AFTER `admin_reply`",
-    ] as $q) { DB::run($q); }
+    ] as $q) { if (function_exists('fr_db_run_safe_ddl')) { fr_db_run_safe_ddl($q); } else { try { DB::run($q); } catch (Throwable $e) {} } }
     try { DB::run("ALTER TABLE `{$p}users` ADD UNIQUE KEY `uq_username` (`username`)"); } catch (Throwable $e) {}
     try { DB::run("ALTER TABLE `{$p}admins` ADD KEY `ix_admin_user` (`user_id`)"); } catch (Throwable $e) {}
     foreach (['footer_badge4_img' => '', 'footer_badge4_url' => '', 'footer_badge4_html' => '', 'footer_badge4_alt' => 'انجمن روانشناسی'] as $k => $v) {
@@ -467,7 +527,7 @@ try {
             `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`),
             KEY `ix_user` (`user_id`,`active`)
          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    ] as $q) { DB::run($q); }
+    ] as $q) { if (function_exists('fr_db_run_safe_ddl')) { fr_db_run_safe_ddl($q); } else { try { DB::run($q); } catch (Throwable $e) {} } }
     foreach ([
         'notif_daily_count' => '3', 'notif_times' => '["08:30","13:00","20:30"]',
         'notif_test_msg' => "✅ اتصال شما به ربات با موفقیت انجام شد!\nاز این لحظه به بعد، اطلاع‌رسانی‌های «{site}» به‌صورت کامل و خودکار برای شما ارسال می‌شود. 🦢",
@@ -538,6 +598,10 @@ fr_seed_content();
 /* نسخهٔ ۱٫۸: بذر دو تست روانشناسی جدید حتی بدون force هم اجرا می‌شود (idempotent)؛
    کاربران نسخه‌های قبلی فقط با بازکردن همین صفحه، تست‌های روانشناسی تازه را می‌گیرند */
 if (function_exists('fr_seed_mseq_tests')) fr_seed_mseq_tests();
+if (file_exists(FR_ROOT . '/core/seed-comprehensive-tests.php')) {
+    require_once FR_ROOT . '/core/seed-comprehensive-tests.php';
+    if (function_exists('fr_seed_comprehensive_tests')) fr_seed_comprehensive_tests(isset($_GET['force']));
+}
 
 /* نسخهٔ ۲٫۹: بازتولید تحلیل‌های عمیق نسخهٔ ویژه (دکتری روان‌شناسی بالینی) —
    idempotent؛ قالب‌های بانددار + فصل پایانی هر آزمون از پایگاه دانش علمی

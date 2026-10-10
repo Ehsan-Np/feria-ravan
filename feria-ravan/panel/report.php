@@ -60,6 +60,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'inject_growth') {
 render_header('گزارش تست روانشناسی');
 panel_layout($u, 'history');
 ?>
+<?php
+$assocDyad = DB::one('SELECT id FROM ' . DB::t('dyads') . ' WHERE (attempt1_id=? OR attempt2_id=?) AND status="ready" ORDER BY id DESC LIMIT 1', [$attemptId, $attemptId]);
+if ($assocDyad): ?>
+<div class="fr-alert ok" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+  <span>✨ <b>تحلیل تطابق دونفره و زوجین</b> شما و همراهتان آماده مشاهده است!</span>
+  <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="dyad-report.php?id=<?= (int)$assocDyad['id'] ?>">مشاهده گزارش تطابق دونفره ←</a>
+</div>
+<?php endif; ?>
 <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
   <a class="fr-btn ghost sm" href="history.php">→ بازگشت</a>
   <a class="fr-btn sm" href="report-pdf.php?attempt=<?= $attemptId ?>&auto=1" target="_blank">📄 دریافت / چاپ PDF</a>

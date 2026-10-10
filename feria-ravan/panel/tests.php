@@ -1,9 +1,11 @@
 <?php
 /**
  * =============================================================================
- *  فهرست تست‌های روانشناسی — دو بخش کاملاً جدا از هم (نسخهٔ ۱٫۸)
- *  ۱) تست‌های روانشناسی عمومی   ۲) تست‌های روانشناسی ویژهٔ مدیران و کسب‌وکار
- *  ─ کارت حرفه‌ای pc-card + نوار ابزار نمایش (شبکه‌ای/فهرستی با حافظهٔ کاربر)
+ *  فهرست تست‌های روانشناسی پنل کاربری — تفکیک سه‌گانه روان‌سنجی (نسخهٔ ۳٫۳)
+ *  ۱) بالینی و سلامت روان (clinical)
+ *  ۲) شخصیت و خودشناسی (personality)
+ *  ۳) هوش، استعداد و پیشرفت شغلی (intelligence)
+ *  ─ کارت حرفه‌ای pc-card + نوار ابزار نمایش (شبکه‌ای/فهرستی) + تب‌های تفکیک
  * =============================================================================
  */
 declare(strict_types=1);
@@ -12,29 +14,70 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/view.php';
-require_once __DIR__ . '/../includes/panel-cards.php';   // نسخهٔ ۲٫۰: کارت مشترک پنل
+require_once __DIR__ . '/../includes/panel-cards.php';
 fr_bootstrap();
 
 $u = require_user();
 
-// ستون audience ممکن است در نصب‌های خیلی قدیمی نباشد → سازگار
-$groups = [];
-try {
-    foreach (['general','manager'] as $a) {
-        $groups[$a] = DB::all("SELECT * FROM " . DB::t('tests') . " WHERE status='active' AND audience=? ORDER BY sort_order", [$a]);
-    }
-} catch (Throwable $e) {
-    $all = DB::all("SELECT * FROM " . DB::t('tests') . " WHERE status='active' ORDER BY sort_order");
-    $groups = ['general' => $all, 'manager' => []];
+$currentCat = (string)($_GET['cat'] ?? 'all');
+if (!in_array($currentCat, ['all', 'clinical', 'personality', 'intelligence'], true)) {
+    $currentCat = 'all';
 }
 
-// نسخهٔ ۲٫۰: کارت تست روانشناسی پنل به includes/panel-cards.php منتقل شد (یک طراحی واحد در همهٔ پنل)
+$allTests = DB::all("SELECT * FROM " . DB::t('tests') . " WHERE status='active' ORDER BY sort_order");
+
+$counts = [
+    'all'          => count($allTests),
+    'clinical'     => 0,
+    'personality'  => 0,
+    'intelligence' => 0,
+];
+
+$byCat = [
+    'clinical'     => [],
+    'personality'  => [],
+    'intelligence' => [],
+];
+
+foreach ($allTests as $t) {
+    $c = $t['category'] ?? 'personality';
+    if (!isset($byCat[$c])) $c = 'personality';
+    $byCat[$c][] = $t;
+    $counts[$c]++;
+}
+
+$categoryMeta = [
+    'clinical' => [
+        'title' => 'آزمون‌های بالینی و سلامت روان',
+        'icon'  => '🩺',
+        'badge' => 'تشخیصی و درمانی',
+        'bg'    => 'linear-gradient(135deg,#fff1f2,#ffe4e6)',
+        'color' => '#be123c',
+        'desc'  => 'آزمون‌های استاندارد تشخیصی جهت سنجش اختلالات خلقی، اضطراب، طرحواره‌ها (تله‌های زندگی) و نیمرخ شخصیتی MMPI زیر نظر متخصصین سلامت روان.',
+    ],
+    'personality' => [
+        'title' => 'آزمون‌های شخصیت‌شناسی و خودشناسی',
+        'icon'  => '🎭',
+        'badge' => 'رشد و روابط فردی',
+        'bg'    => 'linear-gradient(135deg,#f5f3ff,#ede9fe)',
+        'color' => '#6d28d9',
+        'desc'  => 'شناسایی لایه‌های رفتاری و تیپ‌های شخصیتی با آزمون‌های بین‌المللی MBTI (۱۶ تیپ)، مدل ۵ عاملی نئو (NEO) و مدل رفتارشناسی کاربردی DISC.',
+    ],
+    'intelligence' => [
+        'title' => 'آزمون‌های هوش، استعداد و پیشرفت شغلی',
+        'icon'  => '💡',
+        'badge' => 'هدایت تحصیلی و شغلی',
+        'bg'    => 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
+        'color' => '#15803d',
+        'desc'  => 'سنجش جامع هوش عمومی ریون (Raven IQ)، شاخص‌های وکسلر (WAIS)، هوش هیجانی بار-آن، رغبت‌سنجی شغلی هالند و هوش‌های چندگانه گاردنر.',
+    ],
+];
+
 $pcCard = fn(array $t) => fr_panel_test_card($t);
 
-// نوار ابزار محلی پنل (نسخهٔ سبک fr_pc_toolbar بدون لینک خارجی)
 $pcBar = function(string $id, int $count, string $unit): void {
     ?>
-<div class="pc-toolbar">
+<div class="pc-toolbar" style="margin:14px 0">
   <span class="pc-count"><?= fa_num($count) ?> <?= e($unit) ?></span>
   <span class="pc-sp"></span>
   <span class="pc-view-tgl" role="group" aria-label="حالت نمایش فهرست">
@@ -49,40 +92,65 @@ $pcBar = function(string $id, int $count, string $unit): void {
 render_header('تست‌های روانشناسی');
 panel_layout($u, 'tests');
 ?>
-<!-- ── بخش اول: تست‌های روانشناسی عمومی ─────────────────────────── -->
-<div class="fr-card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-  <div style="width:44px;height:44px;border-radius:14px;background:var(--p1);display:flex;align-items:center;justify-content:center;font-size:22px">👥</div>
-  <div style="flex:1;min-width:220px">
-    <b style="font-size:16px">تست‌های روانشناسی عمومی</b>
-    <div style="font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.9">
-      تست‌های روانشناسی استاندارد برای همه؛ نقطهٔ شروع خودشناسی و رشد فردی — با تحلیل روان، عمیق و قابل‌اعتماد.
-    </div>
-  </div>
-  <span class="fr-chip purple"><?= fa_num(count($groups['general'])) ?> تست روانشناسی</span>
-</div>
-<?php if (!$groups['general']): ?>
-<div class="fr-card" style="margin:0"><p class="fr-alert info" style="margin:0">فعلاً تست روانشناسی فعالی در این بخش نیست.</p></div>
-<?php else: $pcBar('panel-tests-g', count($groups['general']), 'تست روانشناسی'); ?>
-  <?php foreach ($groups['general'] as $t) $pcCard($t); ?>
-</div>
-<?php endif; ?>
 
-<!-- ── بخش دوم: تست‌های روانشناسی ویژهٔ مدیران ───────────────────── -->
-<div class="fr-card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(135deg,#eef4ff,#e7edff);border-color:#dfe8ff">
-  <div style="width:44px;height:44px;border-radius:14px;background:#dbe7ff;display:flex;align-items:center;justify-content:center;font-size:22px">💼</div>
-  <div style="flex:1;min-width:220px">
-    <b style="font-size:16px">تست‌های روانشناسی ویژهٔ مدیران و کسب‌وکار</b>
-    <div style="font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.9">
-      طراحی‌شده با زبان و تحلیل مخصوص صاحبان کسب‌وکار، مدیران و تیم‌سازها؛ تمرکزشان روی تصمیم‌گیری،
-      رهبری، تعامل با تیم و فشارهای مدیریتی است — کاملاً جدا از نسخه‌های عمومی.
+<!-- تب‌های دسته‌بندی سه‌گانه روان‌سنجی -->
+<div class="fr-card" style="padding:14px 18px;margin-bottom:18px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:700;color:var(--muted);margin-left:6px">دسته‌بندی تخصصی:</span>
+      <a href="?cat=all" class="fr-chip <?= $currentCat==='all'?'purple':'info' ?>" style="text-decoration:none;font-weight:600">
+        همه آزمون‌ها (<?= fa_num($counts['all']) ?>)
+      </a>
+      <a href="?cat=clinical" class="fr-chip <?= $currentCat==='clinical'?'purple':'info' ?>" style="text-decoration:none;font-weight:600">
+        🩺 بالینی و سلامت روان (<?= fa_num($counts['clinical']) ?>)
+      </a>
+      <a href="?cat=personality" class="fr-chip <?= $currentCat==='personality'?'purple':'info' ?>" style="text-decoration:none;font-weight:600">
+        🎭 شخصیت و خودشناسی (<?= fa_num($counts['personality']) ?>)
+      </a>
+      <a href="?cat=intelligence" class="fr-chip <?= $currentCat==='intelligence'?'purple':'info' ?>" style="text-decoration:none;font-weight:600">
+        💡 هوش و پیشرفت شغلی (<?= fa_num($counts['intelligence']) ?>)
+      </a>
     </div>
   </div>
-  <span class="fr-chip purple"><?= fa_num(count($groups['manager'])) ?> تست روانشناسی</span>
 </div>
-<?php if (!$groups['manager']): ?>
-<div class="fr-card" style="margin:0"><p class="fr-alert info" style="margin:0">فعلاً تست روانشناسی فعالی در این بخش نیست.</p></div>
-<?php else: $pcBar('panel-tests-m', count($groups['manager']), 'تست روانشناسی'); ?>
-  <?php foreach ($groups['manager'] as $t) $pcCard($t); ?>
+
+<?php
+$renderCategories = $currentCat === 'all'
+    ? ['clinical', 'personality', 'intelligence']
+    : [$currentCat];
+
+foreach ($renderCategories as $catKey):
+    $meta = $categoryMeta[$catKey];
+    $testsInCat = $byCat[$catKey];
+?>
+<div class="fr-card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:<?= $meta['bg'] ?>;border:1px solid rgba(0,0,0,0.06);margin-top:20px">
+  <div style="width:48px;height:48px;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 2px 8px rgba(0,0,0,0.05)">
+    <?= $meta['icon'] ?>
+  </div>
+  <div style="flex:1;min-width:240px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <b style="font-size:16px;color:<?= $meta['color'] ?>"><?= e($meta['title']) ?></b>
+      <span class="fr-chip" style="background:#fff;color:<?= $meta['color'] ?>;font-size:11px"><?= e($meta['badge']) ?></span>
+    </div>
+    <div style="font-size:12.5px;color:var(--text);margin-top:4px;line-height:1.9;opacity:.88">
+      <?= e($meta['desc']) ?>
+    </div>
+  </div>
+  <span class="fr-chip" style="background:<?= $meta['color'] ?>;color:#fff;font-weight:700">
+    <?= fa_num(count($testsInCat)) ?> تست تخصصی
+  </span>
 </div>
-<?php endif; ?>
+
+<?php if (!$testsInCat): ?>
+  <div class="fr-card" style="margin:0"><p class="fr-alert info" style="margin:0">فعلاً تستی در این دسته‌بندی فعال نشده است.</p></div>
+<?php else:
+    $pcBar('panel-tests-' . $catKey, count($testsInCat), 'تست تخصصی');
+    foreach ($testsInCat as $t) {
+        $pcCard($t);
+    }
+    echo '</div>';
+endif;
+endforeach;
+?>
+
 <?php panel_layout_end(); render_footer(); ?>

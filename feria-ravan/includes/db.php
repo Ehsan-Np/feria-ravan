@@ -119,4 +119,9 @@ final class DB
         );
         if (self::$settingsCache !== null) self::$settingsCache[$key] = $value;
     }
+
+    public static function setting_set(string $key, $value): void
+    {
+        self::setSetting($key, $value);
+    }
 }

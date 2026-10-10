@@ -39,7 +39,7 @@ function fr_page_cap_map(): array
 {
     return [
         'index.php' => null, 'dashboard.php' => null, 'profile.php' => null,
-        'tests.php' => 'tests', 'questions.php' => 'tests', 'templates.php' => 'tests', 'attempt-answers.php' => 'tests',
+        'tests.php' => 'tests', 'questions.php' => 'tests', 'templates.php' => 'tests', 'attempts.php' => 'tests', 'attempt-answers.php' => 'tests',
         'events.php' => 'events', 'workshops.php' => 'events', 'courses.php' => 'events',
         'registrants.php' => 'registrants',
         'consult.php' => 'consult', 'consult-bookings.php' => 'consult', 'consult-schedule.php' => 'consult', 'clinical-case.php' => 'consult',
@@ -51,7 +51,7 @@ function fr_page_cap_map(): array
         'notifications.php' => 'newsletter',
         'contacts.php' => 'newsletter', 'campaigns.php' => 'newsletter',
         'settings.php' => 'settings', 'texts.php' => 'texts',
-        'roles.php' => 'roles', 'admins.php' => 'roles',
+        'roles.php' => 'roles', 'admins.php' => 'roles', 'updater.php' => 'roles',
     ];
 }
 

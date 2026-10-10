@@ -4,7 +4,8 @@
  *  موتور سنجش تطابق دونفره و زوجین فریا روان (Dyadic & Couples Synergy Engine)
  *  ─ تحلیل ماتریس سازگاری، نقاط قوت هم‌افزا و کانون‌های اصطکاک رابطه
  *  ─ پروتکل گفت‌وگوی امن اختصاصی متناسب با تیپ رفتاری و شخصیتی دو طرف
- *  ─ پوشش آزمون‌های DISC، NEO، گاردنر و طرحواره‌های یانگ
+ *  ─ دریافت مشخصات و موبایل همراه + ارسال پیامک خودکار دعوت
+ *  ─ پوشش جامع آزمون‌های DISC، MBTI، NEO، گاردنر، بار-آن و طرحواره‌های یانگ
  * ============================================================================
  */
 declare(strict_types=1);
@@ -21,37 +22,109 @@ final class DyadAnalyzer
     ];
 
     /**
-     * ایجاد پیوند دونفره جدید و تولید توکن دعوت
+     * ایجاد پیوند دونفره جدید با پشتیبانی از مدل‌های سه‌گانه مالی و تجاری
+     * pay_mode: 'free' | 'self_paid' | 'partner_paid'
      */
-    public static function createDyad(int $userId, int $attemptId, string $relType = 'couple'): array
-    {
-        $at = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=? AND user_id=? AND status="completed"', [$attemptId, $userId]);
+    public static function createDyad(
+        int $userId,
+        int $attemptId,
+        string $relType = 'couple',
+        string $partnerName = '',
+        string $partnerMobile = '',
+        string $payMode = 'free',
+        ?int $orderId = null
+    ): array {
+        $at = DB::one('SELECT a.*, t.title AS test_title, t.price_full, t.price_sale FROM ' . DB::t('attempts') . ' a
+                       JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
+                       WHERE a.id=? AND a.user_id=? AND a.status="completed"', [$attemptId, $userId]);
         if (!$at) {
             return ['ok' => false, 'message' => 'جلسهٔ تست تکمیل‌شده یافت نشد.'];
         }
 
         $rel = array_key_exists($relType, self::$REL_TYPES) ? $relType : 'couple';
+        $partnerName = trim($partnerName);
+        $partnerMobile = clean_mobile($partnerMobile);
+
+        if ($partnerName === '') {
+            return ['ok' => false, 'message' => 'لطفاً نام و نام خانوادگی همراه را وارد نمایید.'];
+        }
+
+        if ($partnerMobile !== '' && !valid_mobile($partnerMobile)) {
+            return ['ok' => false, 'message' => 'شماره موبایل همراه واردشده معتبر نیست (باید ۱۱ رقمی و با ۰۹ شروع شود).'];
+        }
+
+        if (!in_array($payMode, ['free', 'self_paid', 'partner_paid'], true)) {
+            $payMode = 'free';
+        }
+
+        $targetMode = in_array($payMode, ['self_paid', 'partner_paid'], true) ? 'full' : 'free';
+        $partnerPaid = ($payMode === 'free') ? 1 : (($payMode === 'self_paid' && $orderId) ? 0 : 0);
+
+        // اگر قیمت تست صفر باشد در حالت self_paid مستقیماً پرداخت‌شده تلقی می‌شود
+        if ($payMode === 'self_paid') {
+            $deal = fr_price_deal((int)$at['price_full'], isset($at['price_sale']) ? (int)$at['price_sale'] : null);
+            if ($deal['final'] === 0) {
+                $partnerPaid = 1;
+            }
+        }
+
         $token = fr_token(16);
 
         $dyadId = (int)DB::insert('dyads', [
-            'token'       => $token,
-            'test_id'     => $at['test_id'],
-            'user1_id'    => $userId,
-            'attempt1_id' => $attemptId,
-            'rel_type'    => $rel,
-            'status'      => 'pending',
+            'token'          => $token,
+            'test_id'        => $at['test_id'],
+            'user1_id'       => $userId,
+            'attempt1_id'    => $attemptId,
+            'order1_id'      => $orderId,
+            'rel_type'       => $rel,
+            'pay_mode'       => $payMode,
+            'target_mode'    => $targetMode,
+            'partner_paid'   => $partnerPaid,
+            'partner_name'   => $partnerName !== '' ? $partnerName : null,
+            'partner_mobile' => $partnerMobile !== '' ? $partnerMobile : null,
+            'status'         => 'pending',
+            'created_at'     => date('Y-m-d H:i:s'),
         ]);
 
+        $inviteUrl = SITE_URL . '/panel/dyad.php?token=' . $token;
+
+        // پیامک فقط زمانی که آزمون پرداخت‌شده (هدیه قطعی یا رایگان) یا پرداخت بر عهده همراه است ارسال می‌شود
+        if ($partnerMobile !== '' && ($partnerPaid === 1 || $payMode === 'partner_paid')) {
+            try {
+                $user1 = DB::one('SELECT first_name, last_name FROM ' . DB::t('users') . ' WHERE id=?', [$userId]);
+                $u1Name = trim(($user1['first_name'] ?? '') . ' ' . ($user1['last_name'] ?? '')) ?: 'همراه شما';
+                $pName = $partnerName !== '' ? $partnerName : 'همراه گرامی';
+
+                require_once FR_ROOT . '/core/Kavenegar.php';
+                $sms = new Kavenegar();
+                if ($payMode === 'self_paid') {
+                    $smsText = "{$pName} عزیز، {$u1Name} هزینهٔ نسخهٔ تخصصی آزمون سنجش تطابق ({$at['test_title']}) را برای شما هدیه و پرداخت کرده است.\nمشاهده و شروع آزمون هدیه:\n{$inviteUrl}";
+                } elseif ($payMode === 'partner_paid') {
+                    $smsText = "{$pName} عزیز، {$u1Name} شما را به آزمون سنجش تطابق دونفره ({$at['test_title']} - نسخهٔ تخصصی) در فریا روان دعوت کرده است.\nمشاهده و شروع:\n{$inviteUrl}";
+                } else {
+                    $smsText = "{$pName} عزیز، {$u1Name} شما را به آزمون سنجش تطابق دونفره ({$at['test_title']}) در فریا روان دعوت کرده است.\nمشاهده و شروع:\n{$inviteUrl}";
+                }
+                $sms->sendDirect($partnerMobile, $smsText);
+            } catch (Throwable $e) {
+                error_log('feria dyad sms error: ' . $e->getMessage());
+            }
+        }
+
         return [
-            'ok'        => true,
-            'dyad_id'   => $dyadId,
-            'token'     => $token,
-            'invite_url'=> SITE_URL . '/panel/dyad.php?token=' . $token,
+            'ok'             => true,
+            'dyad_id'        => $dyadId,
+            'token'          => $token,
+            'invite_url'     => $inviteUrl,
+            'partner_name'   => $partnerName,
+            'partner_mobile' => $partnerMobile,
+            'pay_mode'       => $payMode,
+            'target_mode'    => $targetMode,
+            'partner_paid'   => $partnerPaid,
         ];
     }
 
     /**
-     * اتصال طرف دوم به پیوند با توکن
+     * اتصال طرف دوم به پیوند با توکن دعوت و بررسی مدل پرداخت
      */
     public static function joinDyad(string $token, int $user2Id, ?int $attempt2Id = null): array
     {
@@ -61,36 +134,114 @@ final class DyadAnalyzer
             return ['ok' => false, 'message' => 'پیوند دعوت نامعتبر یا منقضی شده است.'];
         }
 
+        // اگر خود سازنده پیوند روی لینک کلیک کرد:
         if ((int)$dyad['user1_id'] === $user2Id) {
-            return ['ok' => false, 'message' => 'نمی‌توانید با حساب کاربری خودتان پیوند تطابق بسازید.'];
-        }
-
-        // اگر شناسه آزمون مشخص نشده، آخرین تلاش تکمیل‌شده طرف دوم برای همین تست را برمی‌داریم
-        if (!$attempt2Id) {
-            $lastAt = DB::one('SELECT id FROM ' . DB::t('attempts') .
-                ' WHERE user_id=? AND test_id=? AND status="completed" ORDER BY id DESC LIMIT 1',
-                [$user2Id, $dyad['test_id']]);
-            if ($lastAt) {
-                $attempt2Id = (int)$lastAt['id'];
+            if ($dyad['status'] === 'ready') {
+                return [
+                    'ok'         => true,
+                    'status'     => 'ready',
+                    'dyad_id'    => (int)$dyad['id'],
+                    'report_url' => SITE_URL . '/panel/dyad-report.php?id=' . $dyad['id'],
+                ];
             }
-        }
-
-        if (!$attempt2Id) {
-            // طرف دوم باید ابتدا آزمون را انجام دهد
-            DB::update('dyads', ['user2_id' => $user2Id], 'id=?', [$dyad['id']]);
             return [
-                'ok'          => true,
-                'status'      => 'needs_test',
-                'test_id'     => (int)$dyad['test_id'],
-                'message'     => 'ابتدا آزمون را تکمیل کنید تا گزارش تطابق آماده شود.',
-                'redirect_url'=> SITE_URL . '/panel/test-start.php?id=' . $dyad['test_id'] . '&dyad_token=' . $token,
+                'ok'         => true,
+                'status'     => 'waiting_partner',
+                'is_owner'   => true,
+                'dyad_id'    => (int)$dyad['id'],
+                'message'    => 'این پیوند دعوت اختصاصی شماست و در انتظار تکمیل تست توسط همراه شما است.',
+                'invite_url' => SITE_URL . '/panel/dyad.php?token=' . $token,
             ];
         }
 
+        // ذخیره توکن در نشست برای ردیابی در پایان آزمون
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['active_dyad_token'] = $token;
+            $_SESSION['dyad_id'] = (int)$dyad['id'];
+        }
+
+        if (empty($dyad['user2_id'])) {
+            DB::update('dyads', ['user2_id' => $user2Id], 'id=?', [$dyad['id']]);
+            $dyad['user2_id'] = $user2Id;
+        }
+
+        // وضعیت آماده بودن پیوند از قبل
+        if ($dyad['status'] === 'ready' && !empty($dyad['attempt2_id'])) {
+            return [
+                'ok'         => true,
+                'status'     => 'ready',
+                'dyad_id'    => (int)$dyad['id'],
+                'report_url' => SITE_URL . '/panel/dyad-report.php?id=' . $dyad['id'],
+            ];
+        }
+
+        $targetMode = $dyad['target_mode'] ?? 'free';
+        $payMode    = $dyad['pay_mode'] ?? 'free';
+        $isGiftPaid = ($payMode === 'self_paid' && (int)$dyad['partner_paid'] === 1);
+
+        // ۱. اگر attempt2Id مشخص نشده، آزمون‌های تکمیل‌شده قبلی کاربر بررسی شود
+        if (!$attempt2Id) {
+            if ($targetMode === 'full') {
+                // الف) تلاش تخصصی تکمیل‌شده موجود
+                $fullAt = DB::one('SELECT id FROM ' . DB::t('attempts') .
+                    ' WHERE user_id=? AND test_id=? AND mode="full" AND status="completed" ORDER BY id DESC LIMIT 1',
+                    [$user2Id, $dyad['test_id']]);
+                if ($fullAt) {
+                    $attempt2Id = (int)$fullAt['id'];
+                } elseif ($isGiftPaid) {
+                    // ب) هدیه پرداخت شده است؛ اگر تلاش رایگان دارد به full ارتقا دهیم
+                    $freeAt = DB::one('SELECT id FROM ' . DB::t('attempts') .
+                        ' WHERE user_id=? AND test_id=? AND status="completed" ORDER BY id DESC LIMIT 1',
+                        [$user2Id, $dyad['test_id']]);
+                    if ($freeAt) {
+                        $attempt2Id = (int)$freeAt['id'];
+                        DB::update('attempts', ['mode' => 'full', 'order_id' => $dyad['order1_id']], 'id=?', [$attempt2Id]);
+                        require_once FR_ROOT . '/core/Analyzer.php';
+                        Analyzer::scoreAttempt($attempt2Id);
+                    }
+                }
+            } else {
+                // حالت رایگان: هر آزمون تکمیل‌شده‌ای قابل قبول است
+                $anyAt = DB::one('SELECT id FROM ' . DB::t('attempts') .
+                    ' WHERE user_id=? AND test_id=? AND status="completed" ORDER BY id DESC LIMIT 1',
+                    [$user2Id, $dyad['test_id']]);
+                if ($anyAt) {
+                    $attempt2Id = (int)$anyAt['id'];
+                }
+            }
+        }
+
+        // اگر هنوز تستی انجام نداده یا برای partner_paid نیاز به ارتقا/خرید دارد:
+        if (!$attempt2Id) {
+            $hasFree = DB::one('SELECT id FROM ' . DB::t('attempts') .
+                ' WHERE user_id=? AND test_id=? AND status="completed" ORDER BY id DESC LIMIT 1',
+                [$user2Id, $dyad['test_id']]);
+
+            $redirectUrl = SITE_URL . '/panel/test-start.php?id=' . $dyad['test_id'] . '&dyad_token=' . urlencode($token);
+            if ($hasFree && $targetMode === 'full' && $payMode === 'partner_paid') {
+                $redirectUrl .= '&upgrade_attempt=' . (int)$hasFree['id'];
+            }
+
+            return [
+                'ok'          => true,
+                'status'      => 'needs_test',
+                'target_mode' => $targetMode,
+                'pay_mode'    => $payMode,
+                'test_id'     => (int)$dyad['test_id'],
+                'dyad_id'     => (int)$dyad['id'],
+                'message'     => ($targetMode === 'full' && $payMode === 'partner_paid')
+                    ? 'شما به نسخهٔ تخصصی سنجش تطابق دعوت شدید. لطفاً نسخهٔ تخصصی را تهیه فرمایید.'
+                    : 'شما به سنجش تطابق دونفره متصل شدید. لطفاً ابتدا آزمون را تکمیل کنید.',
+                'redirect_url'=> $redirectUrl,
+            ];
+        }
+
+        // پیوند آزمون با موفقیت
         DB::update('dyads', [
             'user2_id'    => $user2Id,
             'attempt2_id' => $attempt2Id,
             'status'      => 'ready',
+            'updated_at'  => date('Y-m-d H:i:s'),
         ], 'id=?', [$dyad['id']]);
 
         // تحلیل و محاسبهٔ فوری شاخص‌های تطابق
@@ -105,7 +256,7 @@ final class DyadAnalyzer
     }
 
     /**
-     * اجرای کامل تحلیل روان‌شناختی تطابق دونفره
+     * اجرای کامل تحلیل روان‌شناختی تطابق دونفره با گارد امنیتی
      */
     public static function analyze(int $dyadId): ?array
     {
@@ -113,13 +264,24 @@ final class DyadAnalyzer
                       FROM ' . DB::t('dyads') . ' d
                       JOIN ' . DB::t('tests') . ' t ON t.id=d.test_id
                       WHERE d.id=?', [$dyadId]);
-        if (!$d || empty($d['attempt1_id']) || empty($d['attempt2_id'])) return null;
+        if (!$d) return null;
 
-        $u1 = DB::one('SELECT id, first_name, last_name, mobile FROM ' . DB::t('users') . ' WHERE id=?', [$d['user1_id']]);
-        $u2 = DB::one('SELECT id, first_name, last_name, mobile FROM ' . DB::t('users') . ' WHERE id=?', [$d['user2_id']]);
+        $u1 = DB::one('SELECT id, first_name, last_name, mobile FROM ' . DB::t('users') . ' WHERE id=?', [$d['user1_id']]) ?: [];
+        $u2 = !empty($d['user2_id']) ? (DB::one('SELECT id, first_name, last_name, mobile FROM ' . DB::t('users') . ' WHERE id=?', [$d['user2_id']]) ?: []) : [];
 
-        $at1 = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=?', [$d['attempt1_id']]);
-        $at2 = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=?', [$d['attempt2_id']]);
+        // استفاده از نام همسر/همراه ذخیره‌شده در صورت نبود کاربر ۲
+        if (empty($u2['first_name']) && !empty($d['partner_name'])) {
+            $u2['first_name'] = $d['partner_name'];
+            $u2['last_name']  = '';
+            $u2['mobile']     = $d['partner_mobile'] ?? '';
+        }
+
+        $at1 = !empty($d['attempt1_id']) ? (DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=?', [$d['attempt1_id']]) ?: []) : [];
+        $at2 = !empty($d['attempt2_id']) ? (DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=?', [$d['attempt2_id']]) ?: []) : [];
+
+        if (empty($at1) || empty($at2)) {
+            return null; // هر دو آزمون باید تکمیل شده باشند
+        }
 
         $res1 = DB::all('SELECT * FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$d['attempt1_id']]);
         $res2 = DB::all('SELECT * FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$d['attempt2_id']]);
@@ -127,7 +289,7 @@ final class DyadAnalyzer
         $map1 = []; foreach ($res1 as $r) { $map1[$r['scale_code']] = $r; }
         $map2 = []; foreach ($res2 as $r) { $map2[$r['scale_code']] = $r; }
 
-        $engine = (string)$d['test_engine'];
+        $engine = (string)($d['test_engine'] ?? 'disc');
         $analysis = match ($engine) {
             'disc'  => self::analyzeDiscDyad($d, $u1, $u2, $at1, $at2, $map1, $map2),
             default => self::analyzeGenericDyad($d, $u1, $u2, $at1, $at2, $map1, $map2),
@@ -138,6 +300,7 @@ final class DyadAnalyzer
             'synergy_score' => $analysis['synergy_score'],
             'summary_json'  => json_encode($analysis, JSON_UNESCAPED_UNICODE),
             'status'        => 'ready',
+            'updated_at'    => date('Y-m-d H:i:s'),
         ], 'id=?', [$dyadId]);
 
         return $analysis;
@@ -153,8 +316,8 @@ final class DyadAnalyzer
         $totalDelta = 0;
 
         foreach ($dims as $code => $title) {
-            $p1 = (int)round($m1[$code]['percent'] ?? 50);
-            $p2 = (int)round($m2[$code]['percent'] ?? 50);
+            $p1 = (int)round((float)($m1[$code]['percent'] ?? 50));
+            $p2 = (int)round((float)($m2[$code]['percent'] ?? 50));
             $diff = abs($p1 - $p2);
             $totalDelta += $diff;
 
@@ -174,16 +337,12 @@ final class DyadAnalyzer
             ];
         }
 
-        // استخراج تیپ و الگوی دو طرف
-        $pat1 = self::extractPattern($at1['context'] ?? '', $m1);
-        $pat2 = self::extractPattern($at2['context'] ?? '', $m2);
+        $pat1 = self::extractPattern((string)($at1['context'] ?? ''), $m1);
+        $pat2 = self::extractPattern((string)($at2['context'] ?? ''), $m2);
 
-        // محاسبهٔ نمره هم‌افزایی (Synergy Score 0-100)
-        // همبستگی مثبت میانگین تعادل با جریمهٔ تصادم‌های پرخطر
         $avgDiff = $totalDelta / 4;
         $baseScore = 95 - ($avgDiff * 0.7);
 
-        // تصادم‌های خاص DISC
         $clashFriction = 0;
         $synergyBonus  = 0;
         $frictionPoints = [];
@@ -194,13 +353,12 @@ final class DyadAnalyzer
         $s1 = $deltaMatrix['S']['p1']; $s2 = $deltaMatrix['S']['p2'];
         $c1 = $deltaMatrix['C']['p1']; $c2 = $deltaMatrix['C']['p2'];
 
-        // ۱. جنگ قدرت (Dual High D)
         if ($d1 >= 65 && $d2 >= 65) {
             $clashFriction += 12;
             $frictionPoints[] = [
                 'area'  => 'کنترل و تصمیم‌گیری سریع',
                 'title' => 'چالش بر سر سکان هدایت (Dual Dominance)',
-                'desc'  => 'هر دو طرف تمایل ذاتی به تصمیم‌گیری سریع، قاطع و هدایت اوضاع دارند. در مواقع تنش ممکن است گفت‌وگو به میدان رقابت یا برد-باخت تبدیل شود.',
+                'desc'  => 'هر دو طرف تمایل ذاتی به تصمیم‌گیری سریع، قاطع و هدایت اوضاع دارند. در مواقع تنش ممکن است گفت‌وگو به میدان رقابت تبدیل شود.',
             ];
         } elseif (($d1 >= 65 && $s2 >= 65) || ($d2 >= 65 && $s1 >= 65)) {
             $synergyBonus += 10;
@@ -212,16 +370,15 @@ final class DyadAnalyzer
             $frictionPoints[] = [
                 'area'  => 'ریتم و سرعت اقدام',
                 'title' => 'تفاوت گام حرکتی (عجله در برابر تأمل)',
-                'desc'  => 'طرف با D بالا ممکن است صبوری طرف S را به «تعلل» تعبیر کند؛ در حالی که طرف S قاطعیت طرف D را گاهی «سخت‌گیرانه و تند» احساس می‌کند.',
+                'desc'  => 'طرف با D بالا ممکن است صبوری طرف S را به «تعلل» تعبیر کند؛ در حالی که طرف S قاطعیت طرف D را گاهی «سخت‌گیرانه» احساس می‌کند.',
             ];
         }
 
-        // ۲. هیجان و جزئیات (High I + High C)
         if (($i1 >= 65 && $c2 >= 65) || ($i2 >= 65 && $c1 >= 65)) {
             $frictionPoints[] = [
                 'area'  => 'سبک نگاه به واقعیت',
                 'title' => 'شور و کل‌نگری در برابر منطق و جزئیات (I + C)',
-                'desc'  => 'طرف I بر مبنای احساس، ارتباط و تصویر بزرگ سخن می‌گوید، اما طرف C شواهد منطقی، عدد و داده‌های دقیق می‌طلبد. نیاز به درک ارزش هر دو رویکرد وجود دارد.',
+                'desc'  => 'طرف I بر مبنای احساس و ارتباط سخن می‌گوید، اما طرف C شواهد منطقی و داده‌های دقیق می‌طلبد.',
             ];
             $synergyStrengths[] = [
                 'area'  => 'ایده و اجرا',
@@ -230,21 +387,19 @@ final class DyadAnalyzer
             ];
         }
 
-        // ۳. ارتباط اجتماعی بالا (Dual High I)
         if ($i1 >= 60 && $i2 >= 60) {
             $synergyStrengths[] = [
                 'area'  => 'شادی و گرمای رابطه',
                 'title' => 'شور، نشاط و لذت مشترک از همراهی',
-                'desc'  => 'هر دو طرف روحیه‌ای اجتماعی، پرانرژی و مشتاق دارند. خانه یا فضای مشترک شما معمولاً سرشار از حس زندگی و مراودات اجتماعی است.',
+                'desc'  => 'هر دو طرف روحیه‌ای اجتماعی، پرانرژی و مشتاق دارند. فضای مشترک شما معمولاً سرشار از حس زندگی و مراودات اجتماعی است.',
             ];
         }
 
-        // ۴. نظم و دقت مشترک (Dual High C)
         if ($c1 >= 60 && $c2 >= 60) {
             $synergyStrengths[] = [
                 'area'  => 'استاندارد و پیش‌بینی‌پذیری',
                 'title' => 'پایهٔ عقلانی و مدیریت منظم امور',
-                'desc'  => 'تصمیم‌گیری‌های مالی و اداری با حداقل ریسک و خطای محاسباتی مدیریت می‌شوند و هیچ‌یک از دو طرف اهل اقدامات نسنجیده نیستند.',
+                'desc'  => 'تصمیم‌گیری‌های مالی و اداری با حداقل ریسک مدیریت می‌شوند و هیچ‌یک از دو طرف اهل اقدامات نسنجیده نیستند.',
             ];
         }
 
@@ -252,7 +407,7 @@ final class DyadAnalyzer
             $synergyStrengths[] = [
                 'area'  => 'توازن عمومی',
                 'title' => 'سازگاری انعطاف‌پذیر و متعادل',
-                'desc'  => 'شدت قطبی در ابعاد شما وجود ندارد؛ این امر انعطاف‌پذیری بالایی برای گفت‌وگو و سازش در موقعیت‌های مختلف فراهم می‌کند.',
+                'desc'  => 'شدت قطبی در ابعاد شما وجود ندارد؛ این امر انعطاف‌پذیری بالایی برای گفت‌وگو و سازش فراهم می‌کند.',
             ];
         }
 
@@ -273,14 +428,16 @@ final class DyadAnalyzer
             default             => 'تفاوت‌های بنیادی سبک رفتاری؛ نیازمند توافق‌نامه‌های ساختاریافته',
         };
 
-        // پروتکل گفت‌وگوی امن دونفره
+        $p1Name = trim(($u1['first_name'] ?? '') . ' ' . ($u1['last_name'] ?? '')) ?: 'کاربر ۱';
+        $p2Name = trim(($u2['first_name'] ?? '') . ' ' . ($u2['last_name'] ?? '')) ?: ($d['partner_name'] ?: 'کاربر ۲');
+
         $safeProtocols = [
-            'to_p1' => "هنگام گفت‌وگو با {$u2['first_name']}: " . self::discCommAdvice($pat2, $u2['first_name']),
-            'to_p2' => "هنگام گفت‌وگو با {$u1['first_name']}: " . self::discCommAdvice($pat1, $u1['first_name']),
+            'to_p1' => "هنگام گفت‌وگو با {$p2Name}: " . self::discCommAdvice($pat2, $p2Name),
+            'to_p2' => "هنگام گفت‌وگو با {$p1Name}: " . self::discCommAdvice($pat1, $p1Name),
             'rules' => [
                 'قانون توقف ۵ ثانیه‌ای: پیش از پاسخ‌گویی در لحظهٔ عصبانیت، ۳ تنفس عمیق شکمی بکشید.',
                 'بیان بر مبنای حس خود: به‌جای «تو همیشه…» از عبارت «من در این لحظه این احساس را دارم که…» استفاده کنید.',
-                'تفکیک نیاز به شنیدن از حل مسئله: ابتدا مشخص کنید «آیا فقط همدلی و شنیده‌شدن می‌خواهید یا راهکار عملی؟»',
+                'تفکیک نیاز به شنیدن از حل مسئله: ابتدا مشخص کنید «آیا فقط همدلی می‌خواهید یا راهکار عملی؟»',
                 'جلسهٔ هفتگی ۲۰ دقیقه‌ای «تخلیهٔ امن»: بدون قضاوت و سرزنش، هر طرف دو نیاز محقق‌نشدهٔ خود را بیان کند.',
             ],
         ];
@@ -289,8 +446,8 @@ final class DyadAnalyzer
             'synergy_score'   => $synergyScore,
             'rating_fa'       => $ratingFa,
             'rel_type_fa'     => self::$REL_TYPES[$d['rel_type']] ?? 'رابطه دونفره',
-            'user1'           => ['id' => $u1['id'], 'name' => trim($u1['first_name'] . ' ' . $u1['last_name']), 'pattern' => $pat1],
-            'user2'           => ['id' => $u2['id'], 'name' => trim($u2['first_name'] . ' ' . $u2['last_name']), 'pattern' => $pat2],
+            'user1'           => ['id' => $u1['id'] ?? 0, 'name' => $p1Name, 'pattern' => $pat1],
+            'user2'           => ['id' => $u2['id'] ?? 0, 'name' => $p2Name, 'pattern' => $pat2],
             'delta_matrix'    => $deltaMatrix,
             'synergy_strengths'=> $synergyStrengths,
             'friction_points' => $frictionPoints,
@@ -298,13 +455,13 @@ final class DyadAnalyzer
             'growth_contract' => [
                 'week1' => 'شناسایی و نام‌گذاری کانون تعارض اصلی در یک مکالمهٔ آرام ۱۰ دقیقه‌ای',
                 'week2' => 'تمرین تفویض دو تصمیم مهم خانوادگی/کاری به طرف مکمل',
-                'week3' => 'تمرین بازخورد مثبت روزانه (قدردانی صریح از یک ویژگی شخصیتی همسر)',
+                'week3' => 'تمرین بازخورد مثبت روزانه (قدردانی صریح از یک ویژگی شخصیتی همراه)',
             ],
         ];
     }
 
     /**
-     * تحلیل تطابق عمومی (برای سایر تست‌های چندعاملی مانند NEO و گاردنر)
+     * تحلیل تطابق عمومی (برای سایر تست‌های چندعاملی مانند MBTI، NEO، گاردنر و ...)
      */
     private static function analyzeGenericDyad(array $d, array $u1, array $u2, array $at1, array $at2, array $m1, array $m2): array
     {
@@ -314,16 +471,18 @@ final class DyadAnalyzer
         $cnt = 0;
 
         foreach ($allCodes as $code) {
-            if ($code === 'overall') continue;
-            $p1 = (int)round($m1[$code]['percent'] ?? 50);
-            $p2 = (int)round($m2[$code]['percent'] ?? 50);
+            if ($code === 'overall' || in_array($code, ['profile','FK'], true)) continue;
+            $p1 = (int)round((float)($m1[$code]['percent'] ?? 50));
+            $p2 = (int)round((float)($m2[$code]['percent'] ?? 50));
             $diff = abs($p1 - $p2);
             $totalDelta += $diff;
             $cnt++;
 
+            $title = $m1[$code]['title_fa'] ?? ($m2[$code]['title_fa'] ?? $code);
+
             $deltaMatrix[$code] = [
                 'code'   => $code,
-                'title'  => $code,
+                'title'  => $title,
                 'p1'     => $p1,
                 'p2'     => $p2,
                 'diff'   => $diff,
@@ -334,26 +493,29 @@ final class DyadAnalyzer
         $avgDiff = $cnt > 0 ? $totalDelta / $cnt : 20;
         $score = (int)round(max(50, min(94, 92 - ($avgDiff * 0.8))));
 
+        $p1Name = trim(($u1['first_name'] ?? '') . ' ' . ($u1['last_name'] ?? '')) ?: 'کاربر ۱';
+        $p2Name = trim(($u2['first_name'] ?? '') . ' ' . ($u2['last_name'] ?? '')) ?: ($d['partner_name'] ?: 'کاربر ۲');
+
         return [
             'synergy_score'    => $score,
             'rating_fa'        => $score >= 75 ? 'سازگاری بسیار خوب و همسویی مطلوب' : 'سازگاری نیازمند تنظیم انتظارات متقابل',
             'rel_type_fa'      => self::$REL_TYPES[$d['rel_type']] ?? 'رابطه دونفره',
-            'user1'            => ['id' => $u1['id'], 'name' => trim($u1['first_name'] . ' ' . $u1['last_name']), 'pattern' => ''],
-            'user2'            => ['id' => $u2['id'], 'name' => trim($u2['first_name'] . ' ' . $u2['last_name']), 'pattern' => ''],
+            'user1'            => ['id' => $u1['id'] ?? 0, 'name' => $p1Name, 'pattern' => ''],
+            'user2'            => ['id' => $u2['id'] ?? 0, 'name' => $p2Name, 'pattern' => ''],
             'delta_matrix'     => $deltaMatrix,
             'synergy_strengths' => [
-                ['area' => 'همدلی', 'title' => 'همپوشانی در ابعاد کلیدی', 'desc' => 'در بخش بزرگی از مولفه‌های شخصیتی، تفاوت‌های عمیق بازدارنده مشاهده نمی‌شود.'],
+                ['area' => 'همدلی و اشتراک', 'title' => 'همپوشانی در ابعاد کلیدی', 'desc' => 'در بخش بزرگی از مؤلفه‌ها، تفاوت‌های عمیق بازدارنده مشاهده نمی‌شود.'],
             ],
             'friction_points'  => [
-                ['area' => 'تفاوت نگاه', 'title' => 'نقاط نیازمند هماهنگی', 'desc' => 'تفاوت در ابعاد با اختلاف نمره بالای ۳۰ نیازمند شفاف‌سازی آگاهانه انتظارات است.'],
+                ['area' => 'تفاوت نگاه', 'title' => 'نقاط نیازمند هماهنگی', 'desc' => 'تفاوت در ابعاد با اختلاف نمره بالاتر نیازمند شفاف‌سازی آگاهانه انتظارات است.'],
             ],
             'safe_protocols'   => [
-                'to_p1' => "شنیدن صبورانه و پرهیز از نتیجه‌گیری شتاب‌زده دربارهٔ انگیزه‌های {$u2['first_name']}.",
-                'to_p2' => "ابراز شفاف نیازها بدون سرزنش یا برچسب‌زنی به {$u1['first_name']}.",
-                'rules' => ['گوش دادن فعال بدون قطع کلام طرف مقابل', 'قرار گذاشتن برای صحبت در زمان آرامش و سیری'],
+                'to_p1' => "شنیدن صبورانه و پرهیز از نتیجه‌گیری شتاب‌زده دربارهٔ انگیزه‌های {$p2Name}.",
+                'to_p2' => "ابراز شفاف نیازها بدون سرزنش یا برچسب‌زنی به {$p1Name}.",
+                'rules' => ['گوش دادن فعال بدون قطع کلام طرف مقابل', 'قرار گذاشتن برای صحبت در زمان آرامش و بدون خستگی'],
             ],
             'growth_contract'  => [
-                'week1' => 'گفت‌وگوی شفاف دربارهٔ نقاط اشتراک و افتراق این کارنامه',
+                'week1' => 'گفت‌وگوی شفاف دربارهٔ نقاط اشتراک و تفاوت‌های این کارنامه',
                 'week2' => 'تدوین یک قانون طلایی دونفره برای پیشگیری از اصطکاک',
             ],
         ];
@@ -380,10 +542,10 @@ final class DyadAnalyzer
     {
         $lead = substr($pat, 0, 1);
         return match ($lead) {
-            'D' => "مستقیم به اصل مطلب بروید، از حاشیه‌روی بپرهیزید، روی نتایج تمرکز کنید و گزینه‌های شفاف با حق انتخاب در اختیار {$name} بگذارید.",
-            'I' => "با لحن گرم، صمیمانه و مثبت آغاز کنید، به احساساتش توجه نشان دهید و اجازه دهید ایده‌هایش را با اشتیاق به اشتراک بگذارد.",
-            'S' => "آرام و بدون شتاب صحبت کنید، امنیت و احترام متقابل را تضمین نمایید و از تحمیل تغییرات ناگهانی و غافلگیرکننده بپرهیزید.",
-            'C' => "با استدلال منطقی و شواهد صحبت کنید، از اغراق هیجانی دوری نمایید و به جزئیات و استانداردهای مدنظر {$name} احترام بگذارید.",
+            'D' => "مستقیم به اصل مطلب بروید، از حاشیه‌روی بپرهیزید، روی نتایج تمرکز کنید و گزینه‌های شفاف در اختیار {$name} بگذارید.",
+            'I' => "با لحن گرم و صمیمانه آغاز کنید، به احساساتش توجه نشان دهید و اجازه دهید ایده‌هایش را با اشتیاق بگوید.",
+            'S' => "آرام و بدون شتاب صحبت کنید، امنیت و احترام متقابل را تضمین نمایید و از تحمیل تغییرات ناگهانی بپرهیزید.",
+            'C' => "با استدلال منطقی و شواهد صحبت کنید، از اغراق هیجانی دوری نمایید و به استانداردهای مدنظر {$name} احترام بگذارید.",
             default => "با لحنی محترمانه و شنوا، زمینه را برای درک دوجانبه فراهم آورید.",
         };
     }

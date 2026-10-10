@@ -50,8 +50,13 @@ $toJ = fn($dt) => $dt ? fa_num(jdate('Y/m/d', strtotime($dt))) : '';
 admin_layout($adm, 'discounts', 'کدهای تخفیف');
 echo flash();
 ?>
-<div class="fr-card">
-  <h3><?= $editD ? 'ویرایش کد' : 'ایجاد کد جدید' ?></h3>
+<div class="fr-card" style="margin:0">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
+    <h3 style="margin:0"><?= $editD ? '✏️ ویرایش کد تخفیف «' . e($editD['code']) . '»' : '➕ ایجاد کد تخفیف جدید' ?></h3>
+    <?php if ($editD): ?>
+      <a class="fr-btn ghost sm" href="discounts.php">← بازگشت به فهرست کدهای تخفیف</a>
+    <?php endif; ?>
+  </div>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="act" value="save"><input type="hidden" name="id" value="<?= $editD['id'] ?? 0 ?>">
@@ -100,10 +105,21 @@ echo flash();
           <option value="inactive" <?= ($editD['status'] ?? '')==='inactive'?'selected':'' ?>>غیرفعال</option>
         </select></div>
     </div>
-    <button class="fr-btn sm">ذخیره کد</button>
-    <?php if ($editD): ?><a class="fr-btn ghost sm" href="discounts.php">لغو</a><?php endif; ?>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap">
+      <button class="fr-btn sm" type="submit"><?= $editD ? 'ذخیره تغییرات کد' : 'ذخیره کد' ?></button>
+      <?php if ($editD): ?>
+        <a class="fr-btn ghost sm" href="discounts.php">انصراف و بازگشت</a>
+      <?php endif; ?>
+    </div>
   </form>
 </div>
+<?php
+// در حالت ویرایش کد تخفیف، فقط فرم همان کد نمایش داده می‌شود و جدول کدهای موجود مخفی می‌ماند
+if ($editD) {
+    admin_layout_end();
+    exit;
+}
+?>
 
 <div class="fr-card">
   <h3>کدهای موجود (<?= fa_num(count($rows)) ?>)</h3>
