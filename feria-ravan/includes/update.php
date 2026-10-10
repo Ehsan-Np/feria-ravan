@@ -1002,6 +1002,32 @@ function fr_update_pipeline(bool $force = false): void
             fr_db_run_safe_ddl("ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `growth_injected` TINYINT(1) NOT NULL DEFAULT 0 AFTER `validity_json`");
         } catch (Throwable $e) { error_log('feria: 3.4.5 planner ddl: ' . $e->getMessage()); }
 
+        /* ─── ۳٫۴٫۶: تضمین ساختار جدول قالب‌های پیامک و ردیف‌های پیش‌فرض + تنظیم پترن پیش‌فرض ─── */
+        try {
+            $p = DB_PREFIX;
+            fr_db_run_safe_ddl("CREATE TABLE IF NOT EXISTS `{$p}sms_templates` (
+                `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                `event` VARCHAR(60) NOT NULL UNIQUE,
+                `title` VARCHAR(150) NULL,
+                `body` TEXT NOT NULL,
+                `use_pattern` TINYINT(1) NOT NULL DEFAULT 0,
+                `pattern_code` VARCHAR(80) NULL,
+                `enabled` TINYINT(1) NOT NULL DEFAULT 1
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}sms_templates` ADD COLUMN IF NOT EXISTS `title` VARCHAR(150) NULL AFTER `event`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}sms_templates` ADD COLUMN IF NOT EXISTS `use_pattern` TINYINT(1) NOT NULL DEFAULT 0 AFTER `body`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}sms_templates` ADD COLUMN IF NOT EXISTS `pattern_code` VARCHAR(80) NULL AFTER `use_pattern`");
+
+            if (DB::setting('kavenegar_otp_pattern', null) === null) {
+                DB::setSetting('kavenegar_otp_pattern', 'otp');
+            }
+
+            if (class_exists('Kavenegar')) {
+                Kavenegar::ensureTemplatesSchema();
+            }
+        } catch (Throwable $e) { error_log('feria: 3.4.6 sms migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

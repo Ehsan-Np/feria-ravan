@@ -292,8 +292,22 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}sms_templates` (
   `event` VARCHAR(60) NOT NULL UNIQUE,
   `title` VARCHAR(150) NULL,
   `body` TEXT NOT NULL,
+  `use_pattern` TINYINT(1) NOT NULL DEFAULT 0,
+  `pattern_code` VARCHAR(80) NULL,
   `enabled` TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `{{prefix}}sms_templates` (`event`, `title`, `body`, `use_pattern`, `pattern_code`, `enabled`) VALUES
+('otp', 'کد یک‌بارمصرف ورود و ثبت‌نام', 'کد تأیید ورود شما به %site%: %code%', 1, 'otp', 1),
+('register', 'خوش‌آمدگویی پس از ثبت‌نام', '%name% عزیز، به %site% خوش آمدید 🦢', 0, NULL, 1),
+('payment_ok', 'پس از پرداخت موفق (قالب پیش‌فرض)', '%name% عزیز، پرداخت شما با کد رهگیری %refid% در %site% ثبت شد.', 0, NULL, 1),
+('test_done', 'پس از تکمیل تست روانشناسی', '%name% عزیز، آزمون «%test%» شما با موفقیت ثبت شد و نتایج در پنل کاربری آماده است. %site%', 0, NULL, 1),
+('report_free', 'پس از صدور تحلیل رایگان', '%name% عزیز، کارنامه مقدماتی آزمون «%test%» برای شما صادر شد: %link%', 0, NULL, 1),
+('report_full', 'پس از صدور تحلیل ویژه', '%name% عزیز، گزارش تحلیلی کامل شما برای آزمون «%test%» آماده مشاهده است: %link%', 0, NULL, 1),
+('admin_new_order', 'اطلاع ثبت‌نام/خرید جدید به مدیر', 'ثبت‌نام جدید در %site%: %name% (%mobile%) — %test% — مبلغ %amount%', 0, NULL, 1),
+('refund_request_user', 'عودت وجه — تأیید دریافت درخواست به کاربر', '%name% عزیز، درخواست عودت وجه شما به مبلغ %amount% ثبت شد و در صف بررسی است؛ نتیجه پیامک می‌شود. %site%', 0, NULL, 1),
+('refund_request_admin', 'عودت وجه — اطلاع به مدیر/حسابداری', 'درخواست عودت وجه جدید: %name% (%mobile%) مبلغ %amount% — علت: %reason%', 0, NULL, 1),
+('test_nudge', 'یادآوری آزمون نیمه‌تمام (Nudge)', '%name% عزیز، آزمون شما در %site% نیمه‌تمام است؛ برای تکمیل و دریافت کارنامه مراجعه فرمایید: %link%', 0, NULL, 1);
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}sms_logs` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

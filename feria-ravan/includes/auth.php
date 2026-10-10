@@ -196,36 +196,93 @@ function do_user_logout(): void
  * -------------------------------------------------------------------------*/
 /**
  * ارسال OTP
- * @return array ['ok'=>bool,'message'=>string,'ttl'=>int,'debug_code'=>?string]
+ * @return array ['ok'=>bool,'message'=>string,'ttl'=>int,'debug_code'=>?string,'sms_sent'=>bool]
  */
-function otp_send(string $mobile, string $purpose): array
+function otp_send(string $mobile, string $purpose = 'login'): array
 {
-    $mobile = en_num($mobile);
-    if (!valid_mobile($mobile))            return ['ok'=>false,'message'=>'شماره موبایل معتبر نیست.','ttl'=>0];
-    if (!rate_limit('otp:' . $mobile, 5, 600))
-        return ['ok'=>false,'message'=>'تعداد درخواست‌های شما بیش از حد مجاز است؛ چند دقیقه دیگر تلاش کنید.','ttl'=>0];
+    $mobile = clean_mobile($mobile);
+    if (!valid_mobile($mobile)) {
+        return ['ok' => false, 'message' => 'شماره موبایل معتبر نیست (مثال: ۰۹۱۲۳۴۵۶۷۸۹).', 'ttl' => 0];
+    }
+    if (!rate_limit('otp:' . $mobile, 5, 600)) {
+        return ['ok' => false, 'message' => 'تعداد درخواست‌های شما بیش از حد مجاز است؛ لطفاً چند دقیقه دیگر تلاش کنید.', 'ttl' => 0];
+    }
 
     $len = (int)DB::setting('otp_length', '5');
+    if ($len < 4 || $len > 6) $len = 5;
     $ttl = (int)DB::setting('otp_ttl', '120');
+    if ($ttl < 60) $ttl = 120;
+
     $code = (string)random_int(10 ** ($len - 1), 10 ** $len - 1);
 
     // باطل‌سازی کدهای قبلی
     DB::run('UPDATE ' . DB::t('otps') . ' SET used_at=NOW() WHERE mobile=? AND purpose=? AND used_at IS NULL',
             [$mobile, $purpose]);
-    DB::insert('otps', [
-        'mobile' => $mobile, 'code_hash' => password_hash($code, PASSWORD_DEFAULT),
-        'purpose' => $purpose, 'expires_at' => date('Y-m-d H:i:s', time() + $ttl),
-        'ip' => client_ip_bin(),
-    ]);
+
+    // نگاشت منعطف فیلدهای ذخیره‌سازی OTP متناسب با ستون‌های موجود در جدول
+    static $otpCols = null;
+    if ($otpCols === null) {
+        try {
+            $otpCols = array_column(DB::all('SHOW COLUMNS FROM ' . DB::t('otps')), 'Field');
+        } catch (Throwable $e) {
+            $otpCols = ['mobile', 'code', 'purpose', 'expires_at', 'ip'];
+        }
+    }
+
+    $otpData = [
+        'mobile'     => $mobile,
+        'purpose'    => $purpose,
+        'expires_at' => date('Y-m-d H:i:s', time() + $ttl),
+        'ip'         => client_ip_bin(),
+    ];
+    if (in_array('code', $otpCols, true)) {
+        $otpData['code'] = $code;
+    }
+    if (in_array('code_hash', $otpCols, true)) {
+        $otpData['code_hash'] = password_hash($code, PASSWORD_DEFAULT);
+    }
+
+    DB::insert('otps', $otpData);
 
     $sms = new Kavenegar();
-    $sent = $sms->sendEvent('otp', $mobile, ['code' => $code, '_tokens' => [$code]]);
-    log_activity('otp_sent', 'otp', null, ['mobile' => $mobile, 'purpose' => $purpose, 'delivered' => $sent]);
+    $isSmsConfigured = $sms->isEnabled();
 
-    // اگر پنل پیامک فعال نبود، کد در پاسخ برگردد تا در حالت توسعه تست شود
-    $resp = ['ok'=>true, 'message'=> $sent ? 'کد تأیید پیامک شد.' : 'کد تأیید صادر شد.', 'ttl'=>$ttl];
-    if (!$sent && FR_ENV !== 'production') { $resp['debug_code'] = $code; }
-    if (!$sent && DB::setting('kavenegar_enabled','0')!=='1') { $resp['debug_code'] = $code; }
+    $sent = false;
+    if ($isSmsConfigured) {
+        $sent = $sms->sendEvent('otp', $mobile, ['code' => $code, '_tokens' => [$code]]);
+    }
+
+    log_activity('otp_sent', 'otp', null, [
+        'mobile'          => $mobile,
+        'purpose'         => $purpose,
+        'delivered'       => $sent,
+        'gateway_enabled' => $isSmsConfigured,
+    ]);
+
+    if ($sent) {
+        return [
+            'ok'       => true,
+            'message'  => 'کد تأیید به شمارهٔ شما پیامک شد 📩',
+            'ttl'      => $ttl,
+            'sms_sent' => true,
+        ];
+    }
+
+    // اگر پیامک به دلیل عدم پیکربندی یا خطای موقت ارائه‌دهنده ارسال نشد
+    $resp = [
+        'ok'       => true,
+        'ttl'      => $ttl,
+        'sms_sent' => false,
+    ];
+
+    if (!$isSmsConfigured) {
+        $resp['message']    = 'سامانهٔ پیامک هنوز فعال نشده است؛ از کد آزمایشی نمایش‌داده‌شده برای ورود استفاده کنید.';
+        $resp['debug_code'] = $code;
+    } else {
+        $resp['message']    = 'ارسال پیامک با کندی مواجه شد؛ کد تأیید ورود برای شما صادر شد.';
+        $resp['debug_code'] = $code;
+    }
+
     return $resp;
 }
 
@@ -233,26 +290,41 @@ function otp_send(string $mobile, string $purpose): array
  * تأیید OTP
  * @return array ['ok'=>bool,'message'=>string,'mobile'=>?string]
  */
-function otp_verify(string $mobile, string $code, string $purpose): array
+function otp_verify(string $mobile, string $code, string $purpose = 'login'): array
 {
-    $mobile = en_num($mobile); $code = en_num(trim($code));
-    if (!rate_limit('otp_verify:' . $mobile, 8, 600))
-        return ['ok'=>false,'message'=>'تلاش‌های ناموفق زیاد؛ کمی بعد تلاش کنید.'];
+    $mobile = clean_mobile($mobile);
+    $code   = trim(en_num($code));
+    if (!rate_limit('otp_verify:' . $mobile, 8, 600)) {
+        return ['ok' => false, 'message' => 'تلاش‌های ناموفق بیش از حد مجاز است؛ کمی بعد تلاش کنید.'];
+    }
 
     $row = DB::one('SELECT * FROM ' . DB::t('otps') .
                    ' WHERE mobile=? AND purpose=? AND used_at IS NULL AND expires_at>NOW()
                      ORDER BY id DESC LIMIT 1', [$mobile, $purpose]);
-    if (!$row) return ['ok'=>false,'message'=>'کد منقضی شده است؛ کد جدید دریافت کنید.'];
+    if (!$row) {
+        return ['ok' => false, 'message' => 'کد منقضی شده یا نامعتبر است؛ مجدداً درخواست کد دهید.'];
+    }
+
     if ((int)$row['tries'] >= 5) {
         DB::run('UPDATE ' . DB::t('otps') . ' SET used_at=NOW() WHERE id=?', [$row['id']]);
-        return ['ok'=>false,'message'=>'کد مسدود شد؛ کد جدید دریافت کنید.'];
+        return ['ok' => false, 'message' => 'کد منقضی شد؛ بیش از ۵ بار اشتباه وارد شده است. لطفاً کد جدید دریافت نمایید.'];
     }
-    if (!password_verify($code, $row['code_hash'])) {
+
+    $valid = false;
+    if (!empty($row['code_hash'])) {
+        $valid = password_verify($code, (string)$row['code_hash']);
+    }
+    if (!$valid && isset($row['code'])) {
+        $valid = hash_equals((string)$row['code'], $code);
+    }
+
+    if (!$valid) {
         DB::run('UPDATE ' . DB::t('otps') . ' SET tries=tries+1 WHERE id=?', [$row['id']]);
-        return ['ok'=>false,'message'=>'کد واردشده صحیح نیست.'];
+        return ['ok' => false, 'message' => 'کد واردشده صحیح نیست. لطفاً مجدداً بررسی کنید.'];
     }
+
     DB::run('UPDATE ' . DB::t('otps') . ' SET used_at=NOW() WHERE id=?', [$row['id']]);
-    return ['ok'=>true,'message'=>'تأیید شد.','mobile'=>$mobile];
+    return ['ok' => true, 'message' => 'تأیید شد.', 'mobile' => $mobile];
 }
 
 /* ---------------------------------------------------------------------------
@@ -260,6 +332,7 @@ function otp_verify(string $mobile, string $code, string $purpose): array
  * -------------------------------------------------------------------------*/
 function find_user_by(string $mobile): ?array
 {
+    $mobile = clean_mobile($mobile);
     return DB::one('SELECT * FROM ' . DB::t('users') . " WHERE mobile=? AND status!='deleted'", [$mobile]);
 }
 

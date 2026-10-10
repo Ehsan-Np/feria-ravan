@@ -282,10 +282,19 @@ DB::run("ALTER TABLE " . DB::t('refund_requests') .
 
 // نسخهٔ ۱٫۷: ستون عنوان نمایشی قالب پیامک + قالب‌های جدید — بدون رونویسی ویرایش‌های مدیر
 fr_add_col('sms_templates', 'title', "`title` VARCHAR(150) DEFAULT NULL AFTER `event`");
-DB::run("INSERT IGNORE INTO " . DB::t('sms_templates') . " (`event`,`title`,`body`,`enabled`) VALUES
- ('refund_request_user','عودت وجه — تأیید دریافت درخواست','%name% عزیز، درخواست عودت وجه شما به مبلغ %amount% ثبت شد و در صف بررسی است؛ نتیجه پیامک می‌شود. %site%',1),
- ('refund_request_admin','عودت وجه — اطلاع به مدیر/حسابداری','درخواست عودت وجه جدید: %name% (%mobile%) مبلغ %amount% — علت: %reason%',1),
- ('admin_new_order','ثبت‌نام/خرید جدید — اطلاع به مدیر','ثبت‌نام جدید در %site%: %name% (%mobile%) — %test% — مبلغ %amount%',1)");
+fr_add_col('sms_templates', 'use_pattern', "`use_pattern` TINYINT(1) NOT NULL DEFAULT 0 AFTER `body`");
+fr_add_col('sms_templates', 'pattern_code', "`pattern_code` VARCHAR(80) NULL AFTER `use_pattern`");
+DB::run("INSERT IGNORE INTO " . DB::t('sms_templates') . " (`event`,`title`,`body`,`use_pattern`,`pattern_code`,`enabled`) VALUES
+ ('otp','کد یک‌بارمصرف ورود و ثبت‌نام','کد تأیید ورود شما به %site%: %code%',1,'otp',1),
+ ('register','خوش‌آمدگویی پس از ثبت‌نام','%name% عزیز، به %site% خوش آمدید 🦢',0,NULL,1),
+ ('payment_ok','پس از پرداخت موفق (قالب پیش‌فرض)','%name% عزیز، پرداخت شما با کد رهگیری %refid% در %site% ثبت شد.',0,NULL,1),
+ ('test_done','پس از تکمیل تست روانشناسی','%name% عزیز، آزمون «%test%» شما با موفقیت ثبت شد و نتایج در پنل کاربری آماده است. %site%',0,NULL,1),
+ ('report_free','پس از صدور تحلیل رایگان','%name% عزیز، کارنامه مقدماتی آزمون «%test%» برای شما صادر شد: %link%',0,NULL,1),
+ ('report_full','پس از صدور تحلیل ویژه','%name% عزیز، گزارش تحلیلی کامل شما برای آزمون «%test%» آماده مشاهده است: %link%',0,NULL,1),
+ ('refund_request_user','عودت وجه — تأیید دریافت درخواست','%name% عزیز، درخواست عودت وجه شما به مبلغ %amount% ثبت شد و در صف بررسی است؛ نتیجه پیامک می‌شود. %site%',0,NULL,1),
+ ('refund_request_admin','عودت وجه — اطلاع به مدیر/حسابداری','درخواست عودت وجه جدید: %name% (%mobile%) مبلغ %amount% — علت: %reason%',0,NULL,1),
+ ('admin_new_order','ثبت‌نام/خرید جدید — اطلاع به مدیر','ثبت‌نام جدید در %site%: %name% (%mobile%) — %test% — مبلغ %amount%',0,NULL,1),
+ ('test_nudge','یادآوری آزمون نیمه‌تمام (Nudge)','%name% عزیز، آزمون شما در %site% نیمه‌تمام است؛ برای تکمیل و دریافت کارنامه مراجعه فرمایید: %link%',0,NULL,1)");
 
 // تنظیمات جدید نسخهٔ ۱٫۷
 DB::run("INSERT IGNORE INTO " . DB::t('settings') . " (`key`,`value`) VALUES

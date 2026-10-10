@@ -20,10 +20,13 @@ switch ($action) {
 
     /* ---------- ارسال کد یک‌بارمصرف ---------- */
     case 'send_otp': {
-        $mobile = en_num((string)($in['mobile'] ?? ''));
+        $mobile = clean_mobile((string)($in['mobile'] ?? ''));
+        if (!valid_mobile($mobile)) {
+            json_out(['ok' => false, 'message' => 'شماره موبایل واردشده نامعتبر است (مثال: ۰۹۱۲۳۴۵۶۷۸۹).', 'ttl' => 0]);
+        }
         /* اگر عضویت بسته است و موبایل قبلاً حساب ندارد، هزینهٔ پیامک بیهوده نرواند */
-        if (valid_mobile($mobile) && !find_user_by($mobile) && !fr_register_enabled()) {
-            json_out(['ok'=>false,'message'=>'این شماره حسابی ندارد و عضویت جدید فعلاً غیرفعال است؛ با پشتیبانی در تماس باشید.','ttl'=>0]);
+        if (!find_user_by($mobile) && !fr_register_enabled()) {
+            json_out(['ok' => false, 'message' => 'این شماره حسابی ندارد و عضویت جدید فعلاً غیرفعال است؛ با پشتیبانی در تماس باشید.', 'ttl' => 0]);
         }
         $res = otp_send($mobile, 'login');
         json_out($res);
@@ -31,8 +34,8 @@ switch ($action) {
 
     /* ---------- تأیید کد → ورود یا شروع ثبت‌نام سبک ---------- */
     case 'verify_otp': {
-        $mobile = en_num((string)($in['mobile'] ?? ''));
-        $code   = (string)($in['code'] ?? '');
+        $mobile = clean_mobile((string)($in['mobile'] ?? ''));
+        $code   = trim(en_num((string)($in['code'] ?? '')));
         $res = otp_verify($mobile, $code, 'login');
         if (!$res['ok']) json_out($res);
 

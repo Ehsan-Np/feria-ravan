@@ -116,10 +116,11 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
 
         <!-- گام ۲: کد -->
         <div id="stepCode" style="display:none">
-          <p class="fr-alert info" style="font-size:13px">کد تأیید به <b id="otpSentTo" style="direction:ltr;display:inline-block"></b> پیامک شد.</p>
+          <p class="fr-alert info" id="otpInfoAlert" style="font-size:13px">کد تأیید به <b id="otpSentTo" style="direction:ltr;display:inline-block"></b> پیامک شد.</p>
+          <div id="otpDebugBox" class="fr-alert warn" style="display:none;font-size:13.5px;line-height:2;text-align:center;margin-bottom:14px"></div>
           <div class="fr-field">
             <label>کد <?= fa_num($otpLen) ?> رقمی</label>
-            <input class="fr-input au-code" id="otpCode" inputmode="numeric" maxlength="6"
+            <input class="fr-input au-code" id="otpCode" inputmode="numeric" maxlength="<?= (int)$otpLen ?>"
                    placeholder="– – – – –" autocomplete="one-time-code">
           </div>
           <button class="fr-btn au-btn" id="btnVerifyOtp">تأیید و ورود ✨</button>
@@ -220,6 +221,7 @@ function startTimer(sec){
 /* ---------- ارسال OTP ---------- */
 async function sendOtp(){
   const mobile=$('otpMobile').value.trim();
+  if(!mobile){ toast('لطفاً شماره موبایل را وارد کنید.','err'); $('otpMobile').focus(); return; }
   if($('stepName').style.display==='block'){ setOtpStep(1); }
   const btn=$('btnSendOtp'); btn.disabled=true;
   try{
@@ -227,9 +229,21 @@ async function sendOtp(){
     if(!r.ok){toast(r.message,'err');}
     else{
       toast(r.message);
-      if(r.debug_code) toast('کد تست: '+r.debug_code,'warn');
+      const dbgBox = $('otpDebugBox');
+      if(r.debug_code){
+        if (dbgBox) {
+          dbgBox.style.display = 'block';
+          dbgBox.innerHTML = 'کد تأیید ورود شما: <b style="font-size:18px;letter-spacing:4px;color:#5b21b6;direction:ltr;display:inline-block">' + r.debug_code + '</b>';
+        }
+        $('otpCode').value = r.debug_code;
+      } else {
+        if (dbgBox) dbgBox.style.display = 'none';
+        $('otpCode').value = '';
+      }
       $('otpSentTo').textContent=mobile;
-      setOtpStep(2); startTimer(r.ttl||120);
+      setOtpStep(2);
+      startTimer(r.ttl||120);
+      $('otpCode').focus();
     }
   }finally{btn.disabled=false;}
 }
@@ -251,6 +265,12 @@ $('btnVerifyOtp').onclick=async()=>{
   }finally{btn.disabled=false;}
 };
 $('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnVerifyOtp').click();});
+$('otpCode').addEventListener('input',e=>{
+  const val = e.target.value.trim();
+  if (val.length === <?= (int)$otpLen ?>) {
+    $('btnVerifyOtp').click();
+  }
+});
 
 /* ---------- تکمیل ثبت‌نام سبک — «نام و نام خانوادگی» یک فیلد ---------- */
 $('btnRegister').onclick=async()=>{

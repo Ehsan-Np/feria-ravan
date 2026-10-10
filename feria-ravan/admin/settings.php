@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         'site_title','site_slogan','logo','logo_alt','footer_text','report_footer','currency_label',  // نسخهٔ ۱٫۷: logo_alt
         'font_main','font_headings','color_primary','color_secondary','color_accent',
         'zarinpal_merchant','zarinpal_sandbox',
-        'kavenegar_apikey','kavenegar_sender','kavenegar_enabled',
+        'kavenegar_apikey','kavenegar_sender','kavenegar_enabled','kavenegar_otp_pattern',
         'otp_length','otp_ttl','telegram','instagram','support_mobile',
         'consult_hold_minutes','consult_cancel_hours',          // بوکینگ مشاوره (۱٫۴)
         'register_enabled',                                     // عضویت کاربران (۱٫۵ — پیش‌فرض فعال)
@@ -467,7 +467,10 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
       <input class="fr-input" name="kavenegar_apikey" value="<?= e($s('kavenegar_apikey')) ?>" style="direction:ltr">
       <div class="hint">از پنل کاوه‌نگار → حساب کاربری دریافت می‌شود.</div></div>
     <div class="fr-field"><label>خط ارسال (شماره سرویس)</label>
-      <input class="fr-input" name="kavenegar_sender" value="<?= e($s('kavenegar_sender')) ?>" style="direction:ltr"></div>
+      <input class="fr-input" name="kavenegar_sender" value="<?= e($s('kavenegar_sender')) ?>" style="direction:ltr" placeholder="مثال: 10008585 یا 2000... (در صورت ارسال پترن می‌تواند خالی باشد)"></div>
+    <div class="fr-field"><label>کد پترن پیش‌فرض OTP (وب‌سرویس اعتبارسنجی VerifyLookup)</label>
+      <input class="fr-input" name="kavenegar_otp_pattern" value="<?= e($s('kavenegar_otp_pattern', 'otp')) ?>" style="direction:ltr" placeholder="otp">
+      <div class="hint">نام پترن ثبت‌شده در پنل کاوه‌نگار (مثلاً <code>otp</code>). پیامک از بلک‌لیست مخابرات عبور کرده و در چند ثانیه تحویل می‌شود.</div></div>
     <div class="fr-field"><label>فعال‌سازی ارسال پیامک</label>
       <select class="fr-select" name="kavenegar_enabled">
         <option value="1" <?= $s('kavenegar_enabled')==='1'?'selected':'' ?>>فعال ✅</option>

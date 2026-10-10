@@ -44,8 +44,8 @@ echo "====================================================================\n\n";
 
 // --- 1. Version and Config Checks ---
 echo "--- 1. Version Constants ---\n";
-it("FR_RELEASE is 3.4.5", defined('FR_RELEASE') && FR_RELEASE === '3.4.5', FR_RELEASE ?? 'unset');
-it("FR_VERSION is 3.4.5", defined('FR_VERSION') && FR_VERSION === '3.4.5', FR_VERSION ?? 'unset');
+it("FR_RELEASE is at least 3.4.5", defined('FR_RELEASE') && version_compare(FR_RELEASE, '3.4.5', '>='), FR_RELEASE ?? 'unset');
+it("FR_VERSION is at least 3.4.5", defined('FR_VERSION') && version_compare(FR_VERSION, '3.4.5', '>='), FR_VERSION ?? 'unset');
 
 // --- 2. Schema Guard & Self-Healing ---
 echo "\n--- 2. Schema Guard & Auto-Healing ---\n";
