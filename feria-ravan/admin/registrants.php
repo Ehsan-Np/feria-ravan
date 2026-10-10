@@ -290,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
                         WHERE a.id=?', [$aid]);
         if (!$a) { flash('تلاش یافت نشد.', 'err'); redirect($back()); }
-        $link = SITE_URL . '/panel/take.php?attempt=' . $aid;
+        $link = fr_panel_url('take.php?attempt=' . $aid);
         $name = trim($a['first_name'] . ' ' . $a['last_name']) ?: 'کاربر گرامی';
         require_once FR_ROOT . '/core/Kavenegar.php';
         $kv = new Kavenegar();

@@ -162,11 +162,11 @@ $openRes = $zip->open($testZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 if ($openRes !== true) die("Could not open zip: " . $openRes);
 
 // Add sample files that mimic the project
-$zip->addFromString('feria-ravan/includes/version.php', "<?php\ndefine('FR_RELEASE', '3.4.2');\nif (!defined('FR_VERSION')) define('FR_VERSION', FR_RELEASE);\n");
+$zip->addFromString('feria-ravan/includes/version.php', "<?php\ndefine('FR_RELEASE', '3.4.3');\nif (!defined('FR_VERSION')) define('FR_VERSION', FR_RELEASE);\n");
 $zip->addFromString('feria-ravan/includes/db.php', file_get_contents(FR_ROOT . '/includes/db.php'));
 $zip->addFromString('feria-ravan/config.php', "<?php // NEVER OVERWRITE EXISTING CONFIG\n");
 $zip->addFromString('feria-ravan/feria-uploads/tests/keep-this.txt', "user uploaded file that must not be deleted");
-$zip->addFromString('feria-ravan/updater_test_marker.txt', "v3.4.2 installed successfully at " . date('Y-m-d H:i:s'));
+$zip->addFromString('feria-ravan/updater_test_marker.txt', "v3.4.3 installed successfully at " . date('Y-m-d H:i:s'));
 $zip->close();
 
 assert(file_exists($testZipPath));

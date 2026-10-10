@@ -14,7 +14,7 @@ require_once __DIR__ . '/../includes/planner.php';
 fr_bootstrap();
 
 $u = require_user();
-if (!fr_planner_enabled()) redirect(SITE_URL . '/panel/');
+if (!fr_planner_enabled()) redirect(fr_panel_url());
 
 $today  = fr_planner_today();
 $target = max(1, (int)DB::setting('planner_streak_target', '7'));
@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_guard();
     $act = (string)($_POST['act'] ?? '');
     $backTab = (string)($_POST['tab'] ?? 'today');
-    $redir = SITE_URL . '/panel/planner.php' . ($backTab !== 'today' ? '?t=' . urlencode($backTab) : '');
+    $redir = fr_panel_url('planner.php') . ($backTab !== 'today' ? '?t=' . urlencode($backTab) : '');
     if ($act === 'add') {
         $day = (string)($_POST['day'] ?? $today);
         if ($day === 'tomorrow') $day = date('Y-m-d', strtotime('+1 day'));
@@ -62,12 +62,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($act === 'cat_add') {
         $nc = fr_planner_cat_add((int)$u['id'], (string)($_POST['name'] ?? ''), (string)($_POST['color'] ?? '#1e3a6e'));
         $msg = $nc ? 'دستهٔ تازه ساخته شد 🏷' : 'نام دسته خالی یا تکراری است.';
-        $redir = SITE_URL . '/panel/planner.php?t=cats';
+        $redir = fr_panel_url('planner.php?t=cats');
     }
     if ($act === 'cat_del') {
         fr_planner_cat_delete((int)$u['id'], (int)($_POST['id'] ?? 0));
         $msg = 'دسته حذف شد (کارهای آن دسته باقی می‌مانند).';
-        $redir = SITE_URL . '/panel/planner.php?t=cats';
+        $redir = fr_panel_url('planner.php?t=cats');
     }
     if ($act === 'toggle')  { fr_planner_toggle((int)$u['id'], (int)($_POST['id'] ?? 0)); }
     if ($act === 'del')     { fr_planner_delete((int)$u['id'], (int)($_POST['id'] ?? 0)); $msg = 'کار حذف شد.'; }
@@ -76,13 +76,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = fr_planner_recur_add((int)$u['id'], (string)($_POST['title'] ?? ''), (string)($_POST['time_note'] ?? ''),
                                    (string)($_POST['priority'] ?? 'normal'), (string)($_POST['category'] ?? 'personal'), (string)($_POST['freq'] ?? 'daily'));
         $msg = $id ? 'کار تکرارشونده ثبت شد 🔁 از امروز خودش سر جایش می‌آید.' : 'عنوان کار را بنویسید.';
-        $redir = SITE_URL . '/panel/planner.php?t=recur';
+        $redir = fr_panel_url('planner.php?t=recur');
     }
     if ($act === 'recur_del' || $act === 'recur_toggle') {
         $rid = (int)($_POST['id'] ?? 0);
         if ($act === 'recur_del') DB::run("DELETE FROM " . DB::t('planner_recur') . " WHERE id=? AND user_id=?", [$rid, (int)$u['id']]);
         else DB::run("UPDATE " . DB::t('planner_recur') . " SET active=1-active WHERE id=? AND user_id=?", [$rid, (int)$u['id']]);
-        $redir = SITE_URL . '/panel/planner.php?t=recur';
+        $redir = fr_panel_url('planner.php?t=recur');
     }
     if ($act !== 'toggle') { $plFlash($msg); redirect($redir); }
     redirect($redir);

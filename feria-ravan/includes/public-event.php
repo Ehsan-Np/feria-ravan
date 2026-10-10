@@ -68,7 +68,7 @@ $seoDesc  = trim((string)($ev['seo_desc'] ?? '')) !== '' ? (string)$ev['seo_desc
 
 /* کاربر جاری — دکمهٔ ثبت‌نام برای مهمان به ورود با بازگشت می‌رود */
 $me      = current_user();
-$regUrl  = SITE_URL . '/panel/event-register.php?id=' . (int)$ev['id'];
+$regUrl  = fr_panel_url('event-register.php?id=' . (int)$ev['id']);
 $myReg   = $me ? DB::val('SELECT id FROM ' . DB::t('event_registrations') .
                          " WHERE event_id=? AND user_id=? AND status='paid'", [(int)$ev['id'], (int)$me['id']]) : null;
 

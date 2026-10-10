@@ -257,11 +257,40 @@ function fr_panel_title(): string
     return function_exists('T') ? T('nav.panel') : 'پنل کاربری';
 }
 
-/** دریافت نشانی سفارشی‌شدهٔ پنل کاربری */
-function fr_panel_url(): string
+/** دریافت اسلاگ تمیز پنل کاربری (پیش‌فرض: panel) */
+function fr_panel_slug(): string
 {
-    $url = trim((string)DB::setting('panel_url', '/panel/'));
-    return fr_format_url($url !== '' ? $url : '/panel/');
+    $raw = trim((string)DB::setting('panel_url', '/panel/'));
+    if ($raw === '') return 'panel';
+    if (preg_match('#^https?://#i', $raw)) {
+        $path = (string)parse_url($raw, PHP_URL_PATH);
+    } else {
+        $path = $raw;
+    }
+    $path = trim($path, '/');
+    if (str_ends_with($path, '.php')) {
+        $path = dirname($path);
+        if ($path === '.') $path = '';
+    }
+    $slug = trim($path, '/');
+    if ($slug !== '' && preg_match('/^[a-zA-Z0-9_\-]+$/', $slug)) {
+        return strtolower($slug);
+    }
+    return 'panel';
+}
+
+/** دریافت نشانی سفارشی‌شدهٔ پنل کاربری با پشتیبانی از زیرمسیر */
+function fr_panel_url(?string $subpath = null): string
+{
+    $slug = fr_panel_slug();
+    $base = rtrim(SITE_URL, '/') . '/' . $slug . '/';
+    if ($subpath === null || $subpath === '' || $subpath === '/') {
+        return $base;
+    }
+    if (str_starts_with($subpath, '?')) {
+        return rtrim($base, '/') . '/' . $subpath;
+    }
+    return $base . ltrim($subpath, '/');
 }
 
 function fr_format_url(?string $url): string

@@ -53,7 +53,7 @@ switch ($action) {
 
         $back = fr_safe_back((string)($in['back'] ?? ''));
         json_out(['ok'=>true,'message'=>user_fullname($user) . ' عزیز، خوش آمدید 🦢',
-                  'redirect'=>$back !== '' ? $back : SITE_URL . '/panel/']);
+                  'redirect'=>$back !== '' ? $back : fr_panel_url()]);
     }
 
     /* ---------- تکمیل ثبت‌نام سبک — فقط «نام و نام خانوادگی» یک فیلد (۱٫۷) ---------- */
@@ -82,7 +82,7 @@ switch ($action) {
         if (($u = find_user_by($mobile))) {                 // مسابقه: کاربر هم‌زمان ساخته شده
             unset($_SESSION['pending_register']);
             do_user_login($u, 'otp');
-            json_out(['ok'=>true,'message'=>'خوش آمدید 🦢','redirect'=>SITE_URL . '/panel/']);
+            json_out(['ok'=>true,'message'=>'خوش آمدید 🦢','redirect'=>fr_panel_url()]);
         }
 
         $id = DB::insert('users', [
@@ -104,7 +104,7 @@ switch ($action) {
 
         $back = fr_safe_back((string)($in['back'] ?? ''));
         json_out(['ok'=>true,'message'=>$fn . ' عزیز، حساب شما ساخته شد 🎉',
-                  'redirect'=>$back !== '' ? $back : SITE_URL . '/panel/?welcome=1']);
+                  'redirect'=>$back !== '' ? $back : fr_panel_url('?welcome=1')]);
     }
 
     /* ---------- ورود با رمز عبور (موبایل یا کد ملی) ---------- */
@@ -116,7 +116,7 @@ switch ($action) {
                 $u = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE national_code=? AND status='active'", [en_num((string)$in['identity'])]);
             }
             $back = fr_safe_back((string)($in['back'] ?? ''));
-            $res['redirect'] = $back !== '' ? $back : SITE_URL . '/panel/';
+            $res['redirect'] = $back !== '' ? $back : fr_panel_url();
         }
         json_out($res);
     }

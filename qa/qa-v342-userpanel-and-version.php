@@ -18,7 +18,7 @@ require_once FR_ROOT . '/includes/auth.php';
 require_once FR_ROOT . '/includes/admin-auth.php';
 require_once FR_ROOT . '/includes/update.php';
 
-echo "=== FERIA RAVAN: USER PANEL & v3.4.2 QA SUITE ===\n\n";
+echo "=== FERIA RAVAN: USER PANEL & v3.4.3 QA SUITE ===\n\n";
 
 $pass = 0;
 $fail = 0;
@@ -35,16 +35,16 @@ function assert_true(bool $cond, string $msg): void {
 }
 
 // -------------------------------------------------------------
-// 1. Version 3.4.2 Verification
+// 1. Version 3.4.3 Verification
 // -------------------------------------------------------------
 echo "1. Checking System Versioning:\n";
-assert_true(defined('FR_RELEASE') && FR_RELEASE === '3.4.2', "FR_RELEASE is strictly 3.4.2");
-assert_true(defined('FR_VERSION') && FR_VERSION === '3.4.2', "FR_VERSION is strictly 3.4.2");
+assert_true(defined('FR_RELEASE') && FR_RELEASE === '3.4.3', "FR_RELEASE is strictly 3.4.3");
+assert_true(defined('FR_VERSION') && FR_VERSION === '3.4.3', "FR_VERSION is strictly 3.4.3");
 
 // Run update pipeline
 fr_update_pipeline(true);
 $dbVer = (string)DB::setting('fr_version', '');
-assert_true($dbVer === '3.4.2', "Database version setting updated to 3.4.2");
+assert_true($dbVer === '3.4.3', "Database version setting updated to 3.4.3");
 
 // -------------------------------------------------------------
 // 2. Database Sessions Table Verification
@@ -120,7 +120,7 @@ if ($bridgedUser) DB::run("DELETE FROM " . DB::t('users') . " WHERE id=?", [$bri
 echo "\n============================================\n";
 echo "SUMMARY: Passed: {$pass}, Failed: {$fail}\n";
 if ($fail === 0) {
-    echo "🎉 ALL USER PANEL & v3.4.2 TESTS PASSED (100% SUCCESS)!\n";
+    echo "🎉 ALL USER PANEL & v3.4.3 TESTS PASSED (100% SUCCESS)!\n";
 } else {
     echo "❌ SOME TESTS FAILED!\n";
 }

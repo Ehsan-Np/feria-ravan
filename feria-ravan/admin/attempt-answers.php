@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     /* ۳. ارسال پیامک یادآوری ادامهٔ آزمون نیمه‌کاره */
     if ($action === 'send_nudge') {
         require_once FR_ROOT . '/core/Kavenegar.php';
-        $resumeLink = SITE_URL . '/panel/take.php?attempt=' . $attemptId;
+        $resumeLink = fr_panel_url('take.php?attempt=' . $attemptId);
         $name = trim($at['first_name'] . ' ' . $at['last_name']) ?: 'کاربر گرامی';
         
         $kv = new Kavenegar();

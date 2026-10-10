@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['act'] ?? '') === 'new') {
             DB::insert('ticket_replies', ['ticket_id' => $tid, 'author_id' => $u['id'], 'body' => $body,
                 'attachment' => $attach['path']]);
             log_activity('ticket_new', 'ticket', $tid, ['attach' => $attach['path'] ? 1 : 0]);
-            redirect(SITE_URL . '/panel/ticket-view.php?id=' . $tid);
+            redirect(fr_panel_url('ticket-view.php?id=' . $tid));
         }
     }
 }

@@ -18,7 +18,7 @@ $o = DB::one('SELECT o.*, COALESCE(t.title, ev.title,
               LEFT JOIN ' . DB::t('tests') . ' t ON t.id=o.test_id
               LEFT JOIN ' . DB::t('events') . ' ev ON ev.id=o.event_id
               WHERE o.id=? AND o.user_id=?', [(int)($_GET['order'] ?? 0), $u['id']]);
-if (!$o) redirect(SITE_URL . '/panel/payments.php');
+if (!$o) redirect(fr_panel_url('payments.php'));
 $pay = DB::one("SELECT ref_id FROM " . DB::t('payments') . " WHERE order_id=? AND status='ok' ORDER BY id DESC", [$o['id']]);
 $site = (string)DB::setting('site_title', 'فریا روان');
 

@@ -189,17 +189,28 @@ function fr_permalinks_flush(): array
          $lines[] = "RewriteRule ^{$prefix}/{$q}/?$ {$target}{$slug} [L,QSA]";
     }
     /* قوانین کلی — برای لینک‌های تازهٔ بعد از بازتولید بعدی */
+    /* قوانین کلی — برای لینک‌های تازهٔ بعد از بازتولید بعدی */
     $lines[] = 'RewriteRule ^w/([^/]+)/?$ workshop.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^c/([^/]+)/?$ course.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^t/([^/]+)/?$ test-page.php?s=$1 [L,QSA]';
+
+    /* قوانین هدایت پنل کاربری سفارشی (User Panel Slug) */
+    $pSlug = function_exists('fr_panel_slug') ? fr_panel_slug() : 'panel';
+    if ($pSlug !== '' && $pSlug !== 'panel') {
+        $qSlug = preg_quote($pSlug, '#');
+        $lines[] = "# قوانین هدایت پنل کاربری سفارشی ({$pSlug})";
+        $lines[] = "RewriteRule ^{$qSlug}/?$ panel/index.php [L,QSA]";
+        $lines[] = "RewriteRule ^{$qSlug}/(.*)$ panel/$1 [L,QSA]";
+    }
     $lines[] = '</IfModule>';
     $lines[] = '# END FERIA';
 
-    $static = file_get_contents(FR_ROOT . '/.htaccess');
-    $static = (string)$static;
+    $static = (string)@file_get_contents(FR_ROOT . '/.htaccess');
     $block  = implode("\n", $lines) . "\n";
-    if (preg_match('/# BEGIN FERIA.*# END FERIA/s', $static)) {
-        $new = preg_replace('/# BEGIN FERIA.*# END FERIA/s', trim($block), $static);
+    $p1 = strpos($static, '# BEGIN FERIA');
+    $p2 = strpos($static, '# END FERIA');
+    if ($p1 !== false && $p2 !== false && $p2 > $p1) {
+        $new = substr($static, 0, $p1) . trim($block) . substr($static, $p2 + strlen('# END FERIA'));
     } else {
         $new = rtrim($static) . "\n\n" . $block;
     }

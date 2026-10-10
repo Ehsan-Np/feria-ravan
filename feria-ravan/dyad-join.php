@@ -33,9 +33,9 @@ if (!$dyad) {
 // اگر کاربر وارد نشده، ابتدا به صفحه ورود/ثبت‌نام می‌رود
 if (!is_logged_in()) {
     flash('جهت پذیرش دعوت و شرکت در ارزیابی تطابق دونفره، لطفاً وارد حساب خود شوید یا ثبت‌نام فرمایید.', 'info');
-    redirect(SITE_URL . '/login.php?back=' . urlencode(SITE_URL . '/panel/dyad.php?token=' . $token));
+    redirect(SITE_URL . '/login.php?back=' . urlencode(fr_panel_url('dyad.php?token=') . $token));
 }
 
 // اگر وارد شده، مستقیماً به کنترلر پنل هدایت می‌شود
-redirect(SITE_URL . '/panel/dyad.php?token=' . urlencode($token));
+redirect(fr_panel_url('dyad.php?token=') . urlencode($token));
 

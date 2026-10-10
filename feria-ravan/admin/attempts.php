@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ارسال لینک کارنامه با پیامک برای مراجع
     if ($act === 'sms_report') {
-        $link = SITE_URL . '/panel/report.php?attempt=' . $atRow['id'];
+        $link = fr_panel_url('report.php?attempt=' . $atRow['id']);
         $name = user_fullname($atRow);
         $kv = new Kavenegar();
         $ok = $kv->sendEvent('report_full', $atRow['mobile'], [
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ارسال پیامک یادآوری تکمیل آزمون ناتمام
     if ($act === 'sms_nudge') {
-        $link = SITE_URL . '/panel/take.php?attempt=' . $atRow['id'];
+        $link = fr_panel_url('take.php?attempt=' . $atRow['id']);
         $name = user_fullname($atRow);
         $kv = new Kavenegar();
         $ok = $kv->sendEvent('test_nudge', $atRow['mobile'], [

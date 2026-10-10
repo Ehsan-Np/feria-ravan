@@ -23,7 +23,7 @@ fr_bootstrap();
 $u = require_user();
 $attemptId = (int)($_GET['attempt'] ?? 0);
 $at = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=? AND user_id=?', [$attemptId, $u['id']]);
-if (!$at || $at['status'] === 'in_progress') redirect(SITE_URL . '/panel/');
+if (!$at || $at['status'] === 'in_progress') redirect(fr_panel_url());
 
 $site   = (string)DB::setting('site_title', 'فریا روان');
 $slogan = (string)DB::setting('site_slogan', '');

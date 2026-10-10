@@ -22,16 +22,16 @@ $dyad = DB::one('SELECT d.*, t.title AS test_title, t.slug AS test_slug, t.engin
                  JOIN ' . DB::t('tests') . ' t ON t.id=d.test_id
                  WHERE d.id=?', [$dyadId]);
 
-if (!$dyad) redirect(SITE_URL . '/panel/dyad.php');
+if (!$dyad) redirect(fr_panel_url('dyad.php'));
 
 // دسترسی فقط برای دو طرف رابطه یا مدیر
 if ((int)$dyad['user1_id'] !== (int)$u['id'] && (int)$dyad['user2_id'] !== (int)$u['id']) {
-    redirect(SITE_URL . '/panel/dyad.php');
+    redirect(fr_panel_url('dyad.php'));
 }
 
 if ($dyad['status'] !== 'ready' || empty($dyad['attempt2_id'])) {
     flash('طرف دوم هنوز آزمون خود را تکمیل نکرده است.', 'warn');
-    redirect(SITE_URL . '/panel/dyad.php');
+    redirect(fr_panel_url('dyad.php'));
 }
 
 // اگر داده‌های تحلیل خالیست یا نیاز به بازسازی دارد
@@ -42,7 +42,7 @@ if (!$data || empty($data['delta_matrix'])) {
 
 if (!$data) {
     flash('گزارش تطابق هنوز تکمیل نشده یا اطلاعات آزمون دوم پردازش نشده است.', 'warn');
-    redirect(SITE_URL . '/panel/dyad.php');
+    redirect(fr_panel_url('dyad.php'));
 }
 
 $u1 = $data['user1'] ?? [];

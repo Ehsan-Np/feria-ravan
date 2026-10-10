@@ -33,15 +33,100 @@ RewriteRule ^assets/uploads/(.*)$ feria-uploads/$1 [L]
 #  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
 #  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
 # ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
+# ============================================================================
+#  ♻ قوانین پیوند یکتا — خودکار تولید می‌شود (نسخهٔ ۱٫۷)
+#  این بلوک هنگام تغییر اسلاگ از پیشخوان مدیریت بازنویسی می‌شود؛
+#  خارج از نشانگرهای BEGIN/END FERIA دست‌نویس ویرایش کنید.
+# ============================================================================
 # BEGIN FERIA
 <IfModule mod_rewrite.c>
 RewriteEngine On
-# مسیرهای زیبای هر صفحه (با نصب/بازتولید پیوندها از بخش «پیوندها» تکمیل می‌شود)
-# قوانین کلی — برای هر اسلاگ تازه:
+RewriteRule ^w/ehmal\-kari/?$ workshop.php?s=ehmal-kari [L,QSA]
+RewriteRule ^w/shekast\-eshghi/?$ workshop.php?s=shekast-eshghi [L,QSA]
+RewriteRule ^w/az\-fekr\-ta\-sokut/?$ workshop.php?s=az-fekr-ta-sokut [L,QSA]
+RewriteRule ^w/zir\-avar\-dalkhori/?$ workshop.php?s=zir-avar-dalkhori [L,QSA]
+RewriteRule ^w/tanhayi/?$ workshop.php?s=tanhayi [L,QSA]
+RewriteRule ^w/modiriat\-khashm/?$ workshop.php?s=modiriat-khashm [L,QSA]
+RewriteRule ^w/nashkhar\-fekri/?$ workshop.php?s=nashkhar-fekri [L,QSA]
+RewriteRule ^w/etemad\-be\-nafs/?$ workshop.php?s=etemad-be-nafs [L,QSA]
+RewriteRule ^w/farzandparvari\-moasser/?$ workshop.php?s=farzandparvari-moasser [L,QSA]
+RewriteRule ^w/hoosh\-eqteyayi/?$ workshop.php?s=hoosh-eqteyayi [L,QSA]
+RewriteRule ^c/doreh\-tarazehe/?$ course.php?s=doreh-tarazehe [L,QSA]
+RewriteRule ^c/doreh\-disc\-modiran/?$ course.php?s=doreh-disc-modiran [L,QSA]
+RewriteRule ^c/doreh\-disc\-khanevade/?$ course.php?s=doreh-disc-khanevade [L,QSA]
+RewriteRule ^c/doreh\-ertebat/?$ course.php?s=doreh-ertebat [L,QSA]
+RewriteRule ^c/doreh\-stress/?$ course.php?s=doreh-stress [L,QSA]
+RewriteRule ^c/doreh\-tabavari/?$ course.php?s=doreh-tabavari [L,QSA]
+RewriteRule ^c/doreh\-khodshenakht/?$ course.php?s=doreh-khodshenakht [L,QSA]
+RewriteRule ^c/doreh\-zouj\-darmani/?$ course.php?s=doreh-zouj-darmani [L,QSA]
+RewriteRule ^c/doreh\-farzand\-mosbat/?$ course.php?s=doreh-farzand-mosbat [L,QSA]
+RewriteRule ^c/doreh\-hoosh\-eqteyayi/?$ course.php?s=doreh-hoosh-eqteyayi [L,QSA]
+RewriteRule ^t/disc\-family/?$ test-page.php?s=disc-family [L,QSA]
+RewriteRule ^t/disc\-business/?$ test-page.php?s=disc-business [L,QSA]
+RewriteRule ^t/neo/?$ test-page.php?s=neo [L,QSA]
+RewriteRule ^t/gardner\-mi/?$ test-page.php?s=gardner-mi [L,QSA]
+RewriteRule ^t/eq\-shutte/?$ test-page.php?s=eq-shutte [L,QSA]
+RewriteRule ^t/anxiety/?$ test-page.php?s=anxiety [L,QSA]
+RewriteRule ^t/anxiety\-manager/?$ test-page.php?s=anxiety-manager [L,QSA]
+RewriteRule ^t/depression/?$ test-page.php?s=depression [L,QSA]
+RewriteRule ^t/depression\-manager/?$ test-page.php?s=depression-manager [L,QSA]
+RewriteRule ^t/jobsat/?$ test-page.php?s=jobsat [L,QSA]
+RewriteRule ^t/jobsat\-manager/?$ test-page.php?s=jobsat-manager [L,QSA]
+RewriteRule ^t/neo\-manager/?$ test-page.php?s=neo-manager [L,QSA]
+RewriteRule ^t/mbti/?$ test-page.php?s=mbti [L,QSA]
+RewriteRule ^t/holland/?$ test-page.php?s=holland [L,QSA]
+RewriteRule ^t/ysq/?$ test-page.php?s=ysq [L,QSA]
+RewriteRule ^t/baron\-eq/?$ test-page.php?s=baron-eq [L,QSA]
+RewriteRule ^t/mmpi/?$ test-page.php?s=mmpi [L,QSA]
+RewriteRule ^t/raven/?$ test-page.php?s=raven [L,QSA]
+RewriteRule ^t/wais/?$ test-page.php?s=wais [L,QSA]
 RewriteRule ^w/([^/]+)/?$ workshop.php?s=$1 [L,QSA]
 RewriteRule ^c/([^/]+)/?$ course.php?s=$1 [L,QSA]
 RewriteRule ^t/([^/]+)/?$ test-page.php?s=$1 [L,QSA]
-# نقشهٔ سایت
-RewriteRule ^sitemap\.xml$ sitemap.php [L]
 </IfModule>
 # END FERIA

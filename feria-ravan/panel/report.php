@@ -15,8 +15,8 @@ $attemptId = (int)($_GET['attempt'] ?? 0);
 $at = DB::one('SELECT a.*, t.title FROM ' . DB::t('attempts') . ' a
                JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
                WHERE a.id=? AND a.user_id=?', [$attemptId, $u['id']]);
-if (!$at) redirect(SITE_URL . '/panel/');
-if ($at['status'] === 'in_progress') redirect(SITE_URL . '/panel/take.php?attempt=' . $attemptId);
+if (!$at) redirect(fr_panel_url());
+if ($at['status'] === 'in_progress') redirect(fr_panel_url('take.php?attempt=' . $attemptId));
 
 // بررسی خودکار دسترسی ویژه: اگر تلاش رایگان است اما کاربر برای این تست سفارش پرداخت‌شده دارد
 if ($at['mode'] === 'free') {
@@ -50,10 +50,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'inject_growth') {
     $res = GrowthEngine::injectToPlanner((int)$u['id'], $attemptId);
     if ($res['ok']) {
         flash($res['message'], 'ok');
-        redirect(SITE_URL . '/panel/planner.php');
+        redirect(fr_panel_url('planner.php'));
     } else {
         flash($res['message'] ?? 'خطا در افزودن تمرین‌ها به پلنر.', 'err');
-        redirect(SITE_URL . '/panel/report.php?attempt=' . $attemptId);
+        redirect(fr_panel_url('report.php?attempt=' . $attemptId));
     }
 }
 

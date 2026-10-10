@@ -13,7 +13,7 @@ fr_bootstrap();
 $u = require_user();
 $at = DB::one('SELECT a.*, t.title FROM ' . DB::t('attempts') . ' a JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
                WHERE a.id=? AND a.user_id=?', [(int)($_GET['attempt'] ?? 0), $u['id']]);
-if (!$at) redirect(SITE_URL . '/panel/');
+if (!$at) redirect(fr_panel_url());
 
 /* نسخهٔ ۲٫۰: تابع barcode39_svg() به includes/view.php منتقل شده است
    تا در «نسخهٔ چاپی گزارش» (report-pdf.php) نیز به‌صورت جایگزینِ QR استفاده شود. */

@@ -94,7 +94,7 @@ if ($dyadPartner && $dyadPartner['status'] === 'ready') {
     echo '<p style="color:var(--muted)">کد رهگیری: <b style="direction:ltr;display:inline-block">' . e((string)$ver['ref_id']) . '</b></p>';
     echo '<div class="fr-alert ok" style="margin:16px 0;font-size:14px">✨ نسخهٔ تخصصی شما فعال و گزارش تطابق دونفره و زوجین شما آماده مشاهده است.</div>';
     echo '<div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap">';
-    echo '<a class="fr-btn" style="background:#6d28d9" href="' . SITE_URL . '/panel/dyad-report.php?id=' . (int)$dyadPartner['id'] . '">مشاهده کارنامه تطابق دونفره ←</a> ';
+    echo '<a class="fr-btn" style="background:#6d28d9" href="' . fr_panel_url('dyad-report.php?id=') . (int)$dyadPartner['id'] . '">مشاهده کارنامه تطابق دونفره ←</a> ';
     echo '<a class="fr-btn ghost" href="' . SITE_URL . '/panel/payments.php">مشاهده فاکتور</a>';
     echo '</div></div>';
     render_footer();
@@ -116,10 +116,10 @@ echo '<p style="color:var(--muted)">کد رهگیری: <b style="direction:ltr;d
 if ($attempt) {
     if ($attempt['status'] === 'completed') {
         echo '<div class="fr-alert ok" style="margin:16px 0;font-size:13.5px">✨ دسترسی به <b>تحلیل نسخهٔ ویژه و گزارش کامل</b> برای شما فعال شد.</div>';
-        echo '<a class="fr-btn" href="' . SITE_URL . '/panel/report.php?attempt=' . (int)$attempt['id'] . '">مشاهده تحلیل ویژه ←</a> ';
+        echo '<a class="fr-btn" href="' . fr_panel_url('report.php?attempt=') . (int)$attempt['id'] . '">مشاهده تحلیل ویژه ←</a> ';
     } else {
         $btnLbl = ((int)$attempt['progress'] > 0) ? 'ادامه تست روانشناسی ←' : 'شروع تست روانشناسی ←';
-        echo '<a class="fr-btn" href="' . SITE_URL . '/panel/take.php?attempt=' . (int)$attempt['id'] . '">' . $btnLbl . '</a> ';
+        echo '<a class="fr-btn" href="' . fr_panel_url('take.php?attempt=') . (int)$attempt['id'] . '">' . $btnLbl . '</a> ';
     }
 } elseif (($order['kind'] ?? '') === 'event') {
     /* نسخهٔ ۲٫۲: بازگشت به برگهٔ تفکیک‌شدهٔ درست (کارگاه/دوره) */

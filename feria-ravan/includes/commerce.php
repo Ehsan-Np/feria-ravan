@@ -491,7 +491,7 @@ function mark_order_paid(int $orderId, string $refId, ?string $cardPan): void
                 Analyzer::scoreAttempt((int)$targetAtt['id']);
 
                 $nameForSms = trim($o['first_name'] . ' ' . $o['last_name']) ?: 'کاربر';
-                $repLink = SITE_URL . '/panel/report.php?attempt=' . (int)$targetAtt['id'];
+                $repLink = fr_panel_url('report.php?attempt=' . (int)$targetAtt['id']);
                 (new Kavenegar())->sendEvent('report_full', $o['mobile'], [
                     'name'    => $nameForSms,
                     'test'    => $o['test_title'] ?? 'تست روانشناسی',

@@ -22,9 +22,9 @@ $at = DB::one('SELECT a.*, t.title, t.engine, t.question_count, t.instructions, 
                JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
                LEFT JOIN ' . DB::t('orders') . ' o ON o.id=a.order_id
                WHERE a.id=? AND a.user_id=?', [$attemptId, $u['id']]);
-if (!$at) redirect(SITE_URL . '/panel/');
-if ($at['mode'] === 'full' && $at['os'] !== 'paid') redirect(SITE_URL . '/panel/test-start.php?id=' . $at['test_id']);
-if ($at['status'] !== 'in_progress') redirect(SITE_URL . '/panel/report.php?attempt=' . $attemptId);
+if (!$at) redirect(fr_panel_url());
+if ($at['mode'] === 'full' && $at['os'] !== 'paid') redirect(fr_panel_url('test-start.php?id=' . $at['test_id']));
+if ($at['status'] !== 'in_progress') redirect(fr_panel_url('report.php?attempt=' . $attemptId));
 
 /* برچسب‌های طیف لیکرت (فارسی) */
 $likertLabels = [

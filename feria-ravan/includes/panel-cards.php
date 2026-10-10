@@ -37,7 +37,7 @@ function fr_panel_test_card(array $t, string $mode = 'start'): void
     }
     $isNew = !empty($t['created_at']) && strtotime((string)$t['created_at']) > time() - 75 * 86400;
     $url   = $mode === 'start'
-        ? SITE_URL . '/panel/test-start.php?id=' . (int)$t['id']
+        ? fr_panel_url('test-start.php?id=' . (int)$t['id'])
         : fr_test_url($t);
     ?>
 <article class="pc-card" style="margin:0">

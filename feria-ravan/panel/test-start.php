@@ -30,7 +30,7 @@ if ($activeDyadToken !== '') {
 $isDyadGift = ($dyadContext && $dyadContext['pay_mode'] === 'self_paid' && (int)$dyadContext['partner_paid'] === 1);
 
 $test = DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [(int)($_GET['id'] ?? 0)]);
-if (!$test) redirect(SITE_URL . '/panel/tests.php');
+if (!$test) redirect(fr_panel_url('tests.php'));
 $err = '';
 
 /* ادامهٔ سفارش پرداخت‌نشده */
@@ -48,7 +48,7 @@ if (isset($_GET['resume'])) {
             }
         }
     }
-    redirect(SITE_URL . '/panel/test-start.php?id=' . $test['id']);
+    redirect(fr_panel_url('test-start.php?id=' . $test['id']));
 }
 
 /* آیا جلسهٔ ناتمام دارد؟ */
@@ -63,7 +63,7 @@ $completedFree = DB::one("SELECT * FROM " . DB::t('attempts') .
 
 // اگر کاربر قبلاً نسخهٔ ویژه را خریداری و تکمیل کرده، مستقیماً به گزارش برود
 if ($completedFree && $completedFree['mode'] === 'full') {
-    redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$completedFree['id']);
+    redirect(fr_panel_url('report.php?attempt=' . (int)$completedFree['id']));
 }
 
 // خودترمیمی: اگر جلسهٔ ناتمام خالی ناشی از پرداخت قبلی وجود دارد درحالی که تستی را تمام کرده، مستقیماً ارتقا و انتقال به گزارش
@@ -74,7 +74,7 @@ if ($open && $open['os'] === 'paid' && $completedFree) {
         DB::update('attempts', ['mode' => 'full', 'order_id' => $open['order_id']], 'id=?', [$completedFree['id']]);
         require_once __DIR__ . '/../core/Analyzer.php';
         Analyzer::scoreAttempt((int)$completedFree['id']);
-        redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$completedFree['id']);
+        redirect(fr_panel_url('report.php?attempt=' . (int)$completedFree['id']));
     }
 }
 
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             require_once __DIR__ . '/../core/DyadAnalyzer.php';
             DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$completedFree['id']);
             flash('آزمون شما با استفاده از هدیهٔ همراهتان به نسخه تخصصی ارتقا یافت! گزارش تطابق آماده است 🎉', 'ok');
-            redirect(SITE_URL . '/panel/dyad-report.php?id=' . $dyadContext['id']);
+            redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
         } else {
             $aid = DB::insert('attempts', [
                 'user_id'    => $u['id'],
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
             ]);
             log_activity('test_start', 'attempt', $aid, ['mode' => 'full', 'test' => $test['slug'], 'dyad_gift' => 1]);
-            redirect(SITE_URL . '/panel/take.php?attempt=' . $aid);
+            redirect(fr_panel_url('take.php?attempt=' . $aid));
         }
     }
 
@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'ip'=>client_ip_bin(), 'user_agent'=>substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
                 ]);
                 log_activity('test_start', 'attempt', $aid, ['mode'=>'free','test'=>$test['slug']]);
-                redirect(SITE_URL . '/panel/take.php?attempt=' . $aid);
+                redirect(fr_panel_url('take.php?attempt=' . $aid));
             }
         }
     } else {
@@ -144,11 +144,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
                 if ($attRow && $attRow['status'] === 'completed') {
                     if ($dyadContext) {
-                        redirect(SITE_URL . '/panel/dyad-report.php?id=' . $dyadContext['id']);
+                        redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
                     }
-                    redirect(SITE_URL . '/panel/report.php?attempt=' . (int)$r['attempt_id']);
+                    redirect(fr_panel_url('report.php?attempt=' . (int)$r['attempt_id']));
                 } else {
-                    redirect(SITE_URL . '/panel/take.php?attempt=' . (int)$r['attempt_id']);
+                    redirect(fr_panel_url('take.php?attempt=' . (int)$r['attempt_id']));
                 }
             }
         }

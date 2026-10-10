@@ -97,8 +97,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
             }
         }
     }
+    // همگام‌سازی و بازتولید خودکار قوانین پیوند و .htaccess در صورت تغییر نشانی پنل کاربری یا اسلاگ‌ها
+    if (function_exists('fr_permalinks_flush')) {
+        try { fr_permalinks_flush(); } catch (Throwable $e) {}
+    }
     log_activity('admin_settings_save');
-    flash('تنظیمات ذخیره شدند ✅');
+    flash('تنظیمات ذخیره شدند ✅ (پیوندهای سامانه و قوانین وب‌سرور به‌صورت خودکار همگام‌سازی شدند)');
     redirect(SITE_URL . '/admin/settings.php?tab=' . urlencode($tab));
 }
 
@@ -393,7 +397,7 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
     <div class="fr-field">
       <label>نشانی (لینک) ورودی پنل کاربری</label>
       <input class="fr-input" name="panel_url" value="<?= e($s('panel_url', '/panel/')) ?>" dir="ltr" style="text-align:left" placeholder="/panel/">
-      <small class="hint">مسیر ورود کاربر به پنل (پیش‌فرض: <code>/panel/</code> یا نشانی سفارشی دیگر).</small>
+      <small class="hint">مسیر دلخواه ورود به پنل کاربری مانند <code>/dashboard/</code> یا <code>/my-account/</code> یا <code>/panel/</code>. قوانین بازنویسی وب‌سرور و پیونددهی بدون هیچ‌گونه خطای ۴۰۴ خودکار اعمال می‌شوند.</small>
     </div>
   </div>
 </div>

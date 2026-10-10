@@ -86,7 +86,7 @@ final class DyadAnalyzer
             'created_at'     => date('Y-m-d H:i:s'),
         ]);
 
-        $inviteUrl = SITE_URL . '/panel/dyad.php?token=' . $token;
+        $inviteUrl = fr_panel_url('dyad.php?token=' . $token);
 
         // پیامک فقط زمانی که آزمون پرداخت‌شده (هدیه قطعی یا رایگان) یا پرداخت بر عهده همراه است ارسال می‌شود
         if ($partnerMobile !== '' && ($partnerPaid === 1 || $payMode === 'partner_paid')) {
@@ -141,7 +141,7 @@ final class DyadAnalyzer
                     'ok'         => true,
                     'status'     => 'ready',
                     'dyad_id'    => (int)$dyad['id'],
-                    'report_url' => SITE_URL . '/panel/dyad-report.php?id=' . $dyad['id'],
+                    'report_url' => fr_panel_url('dyad-report.php?id=' . $dyad['id']),
                 ];
             }
             return [
@@ -150,7 +150,7 @@ final class DyadAnalyzer
                 'is_owner'   => true,
                 'dyad_id'    => (int)$dyad['id'],
                 'message'    => 'این پیوند دعوت اختصاصی شماست و در انتظار تکمیل تست توسط همراه شما است.',
-                'invite_url' => SITE_URL . '/panel/dyad.php?token=' . $token,
+                'invite_url' => fr_panel_url('dyad.php?token=' . $token),
             ];
         }
 
@@ -171,7 +171,7 @@ final class DyadAnalyzer
                 'ok'         => true,
                 'status'     => 'ready',
                 'dyad_id'    => (int)$dyad['id'],
-                'report_url' => SITE_URL . '/panel/dyad-report.php?id=' . $dyad['id'],
+                'report_url' => fr_panel_url('dyad-report.php?id=' . $dyad['id']),
             ];
         }
 
@@ -217,7 +217,7 @@ final class DyadAnalyzer
                 ' WHERE user_id=? AND test_id=? AND status="completed" ORDER BY id DESC LIMIT 1',
                 [$user2Id, $dyad['test_id']]);
 
-            $redirectUrl = SITE_URL . '/panel/test-start.php?id=' . $dyad['test_id'] . '&dyad_token=' . urlencode($token);
+            $redirectUrl = fr_panel_url('test-start.php?id=' . $dyad['test_id']) . '&dyad_token=' . urlencode($token);
             if ($hasFree && $targetMode === 'full' && $payMode === 'partner_paid') {
                 $redirectUrl .= '&upgrade_attempt=' . (int)$hasFree['id'];
             }
@@ -251,7 +251,7 @@ final class DyadAnalyzer
             'ok'        => true,
             'status'    => 'ready',
             'dyad_id'   => (int)$dyad['id'],
-            'report_url'=> SITE_URL . '/panel/dyad-report.php?id=' . $dyad['id'],
+            'report_url'=> fr_panel_url('dyad-report.php?id=' . $dyad['id']),
         ];
     }
 

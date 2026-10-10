@@ -11,7 +11,7 @@ $u = require_user();
 fr_panel_guard('tickets');
 
 $t = DB::one('SELECT * FROM ' . DB::t('tickets') . ' WHERE id=? AND user_id=?', [(int)($_GET['id'] ?? 0), $u['id']]);
-if (!$t) redirect(SITE_URL . '/panel/tickets.php');
+if (!$t) redirect(fr_panel_url('tickets.php'));
 
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $t['status'] !== 'closed') {
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $t['status'] !== 'closed') {
         DB::insert('ticket_replies', ['ticket_id' => $t['id'], 'author_id' => $u['id'], 'body' => $body,
             'attachment' => $attach['path']]);
         DB::update('tickets', ['status' => 'user_reply'], 'id=?', [$t['id']]);
-        redirect(SITE_URL . '/panel/ticket-view.php?id=' . $t['id']);
+        redirect(fr_panel_url('ticket-view.php?id=' . $t['id']));
     }
 }
 

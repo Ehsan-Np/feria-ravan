@@ -18,7 +18,7 @@ require_once __DIR__ . '/core/Kavenegar.php';
 fr_bootstrap();
 
 $back = fr_safe_back((string)($_GET['back'] ?? ''));
-if (current_user()) redirect($back !== '' ? $back : SITE_URL . '/panel/');
+if (current_user()) redirect($back !== '' ? $back : fr_panel_url());
 
 $siteTitle = (string)DB::setting('site_title', 'فریا روان');
 $slogan    = (string)DB::setting('site_slogan', 'مسیر رشد فردی شما از اینجا آغاز می‌شود!');

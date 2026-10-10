@@ -49,7 +49,7 @@ function current_admin(): ?array
  * اجبار لاگین مدیر — نسخهٔ ۲٫۱: علاوه‌بر نقش‌های قدیمی (legacy)،
  * نقش‌های سفارشی با capها بر اساس «فایل ادمینِ در حال اجرا» کنترل می‌شوند.
  */
-function require_admin(array $roles = ['superadmin','manager','support']): array
+function require_admin(array $roles = ['superadmin','super','manager','admin','support']): array
 {
     $a = current_admin();
     if (!$a) { redirect(SITE_URL . '/admin/login.php?back=' . urlencode($_SERVER['REQUEST_URI'] ?? '')); }
@@ -123,6 +123,20 @@ function admin_logout(): void
     }
     $_SESSION = [];
     session_destroy();
+}
+
+/**
+ * نگهبان دسترسی مدیر (Guard) — بررسی لاگین و دسترسیِ اختیاری با Cap
+ * در صورت عدم لاگین ریدایرکت، و در صورت عدم صلاحیت ۴۰۳ صادر می‌کند.
+ */
+function admin_guard(?string $cap = null): array
+{
+    $adm = require_admin();
+    if ($cap !== null && function_exists('fr_admin_can') && !fr_admin_can($adm, $cap)) {
+        http_response_code(403);
+        exit('دسترسی مجاز نیست — شما مجوز دسترسی به این بخش را ندارید.');
+    }
+    return $adm;
 }
 
 /* ---------------------------------------------------------------------------

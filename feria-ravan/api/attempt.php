@@ -32,10 +32,10 @@ if (!$at) { http_response_code(404); json_out(['ok'=>false,'message'=>'جلسه�
 
 /* نسخهٔ ویژه باید پرداخت‌شده باشد */
 if ($at['mode'] === 'full' && $at['order_status'] !== 'paid') {
-    json_out(['ok'=>false,'message'=>'abandon_pay','redirect'=>SITE_URL . '/panel/test-start.php?id=' . $at['test_id']]);
+    json_out(['ok'=>false,'message'=>'abandon_pay','redirect'=>fr_panel_url('test-start.php?id=' . $at['test_id'])]);
 }
 if ($at['status'] !== 'in_progress' && $action !== 'state') {
-    json_out(['ok'=>false,'message'=>'این تست روانشناسی تکمیل شده است.','redirect'=>SITE_URL . '/panel/report.php?attempt=' . $attemptId]);
+    json_out(['ok'=>false,'message'=>'این تست روانشناسی تکمیل شده است.','redirect'=>fr_panel_url('report.php?attempt=' . $attemptId)]);
 }
 
 switch ($action) {
@@ -169,7 +169,7 @@ switch ($action) {
         }
 
         $name = user_fullname($u);
-        $link = SITE_URL . '/panel/report.php?attempt=' . $attemptId;
+        $link = fr_panel_url('report.php?attempt=' . $attemptId);
         $sms  = new Kavenegar();
         $sms->sendEvent('test_done', $u['mobile'], ['name'=>$name,'test'=>$at['title'],'link'=>$link,'_tokens'=>[$name,$at['title']]]);
         $sms->sendEvent($at['mode'] === 'full' ? 'report_full' : 'report_free', $u['mobile'],

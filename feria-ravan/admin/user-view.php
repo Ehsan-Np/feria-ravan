@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'sms_report') {
     $at = DB::one('SELECT a.*, t.title FROM ' . DB::t('attempts') . ' a JOIN ' . DB::t('tests') .
                   ' t ON t.id=a.test_id WHERE a.id=? AND a.user_id=?', [(int)post('attempt_id'), $id]);
     if ($at) {
-        $link = SITE_URL . '/panel/report.php?attempt=' . $at['id'];
+        $link = fr_panel_url('report.php?attempt=' . $at['id']);
         $ok = (new Kavenegar())->send($u['mobile'],
             'لینک گزارش تست روانشناسی «' . $at['title'] . '» شما:' . "\n" . $link, 'report_link');
         flash($ok ? 'لینک گزارش پیامک شد ✅' : 'ارسال ناموفق (تنظیمات کاوه‌نگار را بررسی کنید).', $ok ? 'ok' : 'err');
@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'sms_nudge') {
     $at = DB::one('SELECT a.*, t.title FROM ' . DB::t('attempts') . ' a JOIN ' . DB::t('tests') .
                   ' t ON t.id=a.test_id WHERE a.id=? AND a.user_id=?', [(int)post('attempt_id'), $id]);
     if ($at) {
-        $link = SITE_URL . '/panel/take.php?attempt=' . $at['id'];
+        $link = fr_panel_url('take.php?attempt=' . $at['id']);
         $name = trim($u['first_name'] . ' ' . $u['last_name']) ?: 'کاربر گرامی';
         $kv = new Kavenegar();
         $ok = $kv->sendEvent('test_nudge', $u['mobile'], [

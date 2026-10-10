@@ -14,4 +14,4 @@ DB::run('DELETE o FROM ' . DB::t('orders') . ' o JOIN ' . DB::t('attempts') .
         ' t ON t.order_id=o.id WHERE t.id=? AND t.user_id=? AND t.status="in_progress" AND o.status="pending"', [$id, $u['id']]);
 DB::run('DELETE FROM ' . DB::t('attempts') . ' WHERE id=? AND user_id=? AND status="in_progress"', [$id, $u['id']]);
 log_activity('test_abandon', 'attempt', $id);
-redirect((string)($_GET['back'] ?? (SITE_URL . '/panel/')));
+redirect((string)($_GET['back'] ?? (fr_panel_url())));

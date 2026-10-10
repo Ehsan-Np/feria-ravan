@@ -1,0 +1,14 @@
+# فریا روان — robots.txt
+User-agent: *
+Allow: /workshops.php
+Allow: /courses.php
+Allow: /consult.php
+Allow: /w/
+Allow: /c/
+Allow: /t/
+Disallow: /panel/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /install/
+
+Sitemap: http://127.0.0.1:8000/sitemap.xml

@@ -25,7 +25,7 @@ $EV_KIND = $EV_KIND ?? 'workshop';
 if (!in_array($EV_KIND, ['workshop','course'], true)) $EV_KIND = 'workshop';
 
 $isCourse = $EV_KIND === 'course';
-$self     = SITE_URL . '/panel/' . ($isCourse ? 'courses.php' : 'workshops.php');
+$self     = fr_panel_url() . ($isCourse ? 'courses.php' : 'workshops.php');
 $pageKey  = $isCourse ? 'courses' : 'workshops';
 $pageTitle = $isCourse ? 'دوره‌های جامع' : 'کارگاه‌های آموزشی';
 $pageIcon  = $isCourse ? '📚' : '🛠';

@@ -15,8 +15,8 @@ require_once __DIR__ . '/boot.php';
 require_once __DIR__ . '/../includes/roles.php';
 require_once __DIR__ . '/../core/ProjectUpdater.php';
 
-$admin = admin_guard();
-if (!fr_admin_can($admin, 'roles')) {
+$admin = require_admin();
+if (function_exists('fr_admin_can') && !fr_admin_can($admin, 'roles')) {
     http_response_code(403);
     exit('دسترسی مجاز نیست — فقط مدیران ارشد سیستم می‌توانند سامانه را به‌روزرسانی کنند.');
 }
@@ -145,7 +145,7 @@ admin_layout($admin, 'updater', '🚀 به‌روزرسانی و ارتقای س
       <input type="hidden" name="action" value="url_update">
       <div class="fr-field">
         <label>نشانی مستقیم فایل ZIP:</label>
-        <input class="fr-input" name="zip_url" dir="ltr" style="text-align:left;font-family:monospace" placeholder="https://domain.com/downloads/feria-ravan-v3.4.2.zip" required>
+        <input class="fr-input" name="zip_url" dir="ltr" style="text-align:left;font-family:monospace" placeholder="https://domain.com/downloads/feria-ravan-v3.4.3.zip" required>
         <small class="hint">نشانی باید به یک فایل فشرده <code>.zip</code> معتبر منتهی شود.</small>
       </div>
       <div style="margin-bottom:18px">

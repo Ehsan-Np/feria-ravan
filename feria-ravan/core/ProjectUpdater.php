@@ -88,7 +88,7 @@ final class ProjectUpdater
             curl_setopt($ch, CURLOPT_MAXREDIRS, 7);
             curl_setopt($ch, CURLOPT_TIMEOUT, self::DOWNLOAD_TIMEOUT);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FeriaRavan-Updater/' . (defined('FR_VERSION') ? FR_VERSION : '3.4.2'));
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FeriaRavan-Updater/' . (defined('FR_VERSION') ? FR_VERSION : '3.4.3'));
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
 
@@ -111,7 +111,7 @@ final class ProjectUpdater
                 'http' => [
                     'timeout' => self::DOWNLOAD_TIMEOUT,
                     'follow_location' => 1,
-                    'user_agent' => 'FeriaRavan-Updater/' . (defined('FR_VERSION') ? FR_VERSION : '3.4.2'),
+                    'user_agent' => 'FeriaRavan-Updater/' . (defined('FR_VERSION') ? FR_VERSION : '3.4.3'),
                 ],
                 'ssl' => [
                     'verify_peer' => false,
@@ -380,7 +380,7 @@ final class ProjectUpdater
         }
 
         // خواندن نسخه جدید پس از استخراج
-        $newVersion = '3.4.2';
+        $newVersion = '3.4.3';
         $verFile = FR_ROOT . '/includes/version.php';
         if (file_exists($verFile)) {
             $verCode = file_get_contents($verFile);

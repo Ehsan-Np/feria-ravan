@@ -30,16 +30,16 @@ if ($token !== '') {
     $res = DyadAnalyzer::joinDyad($token, (int)$u['id']);
     if ($res['ok']) {
         if ($res['status'] === 'ready') {
-            redirect(SITE_URL . '/panel/dyad-report.php?id=' . $res['dyad_id']);
+            redirect(fr_panel_url('dyad-report.php?id=' . $res['dyad_id']));
         } elseif ($res['status'] === 'waiting_partner') {
             flash('شما ایجادکننده این پیوند هستید؛ این پیوند در انتظار تکمیل آزمون توسط همراه شما است ⏳', 'info');
-            redirect(SITE_URL . '/panel/dyad.php');
+            redirect(fr_panel_url('dyad.php'));
         } elseif (!empty($res['redirect_url'])) {
             redirect($res['redirect_url']);
         }
     } else {
         flash($res['message'] ?? 'خطا در اتصال به پیوند دعوت.', 'err');
-        redirect(SITE_URL . '/panel/dyad.php');
+        redirect(fr_panel_url('dyad.php'));
     }
 }
 
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'resend_sms') {
             $test = DB::one('SELECT title FROM ' . DB::t('tests') . ' WHERE id=?', [$dy['test_id']]);
             $u1Name = user_fullname($u);
             $pName = $dy['partner_name'] ?: 'همراه گرامی';
-            $inviteUrl = SITE_URL . '/panel/dyad.php?token=' . $dy['token'];
+            $inviteUrl = fr_panel_url('dyad.php?token=' . $dy['token']);
 
             $sms = new Kavenegar();
             if ($dy['pay_mode'] === 'self_paid') {
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'resend_sms') {
     } else {
         flash('شماره همراه ثبت‌نشده یا پیوند نامعتبر است.', 'err');
     }
-    redirect(SITE_URL . '/panel/dyad.php');
+    redirect(fr_panel_url('dyad.php'));
 }
 
 // لغو / حذف دعوت‌نامه معلق
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'cancel_dyad') {
     } else {
         flash('امکان لغو این دعوت وجود ندارد.', 'err');
     }
-    redirect(SITE_URL . '/panel/dyad.php');
+    redirect(fr_panel_url('dyad.php'));
 }
 
 // پرداخت مجدد هدیه سنجش تطابق
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'pay_dyad_gift') {
             if ($wp['gateway'] <= 0) {
                 mark_order_paid($orderId, 'WALLET-' . fr_token(8), null);
                 flash('هزینه نسخه تخصصی همراه با موفقیت از کیف پول پرداخت شد و دعوت‌نامه ارسال گردید 🎁', 'ok');
-                redirect(SITE_URL . '/panel/dyad.php');
+                redirect(fr_panel_url('dyad.php'));
             }
             $payable = $wp['gateway'];
         }
@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'pay_dyad_gift') {
         $zpRes = $zp->request($orderId, $payable, $desc, (string)$u['mobile']);
         if (!$zpRes['ok']) {
             flash('خطا در اتصال به درگاه پرداخت: ' . $zpRes['message'], 'err');
-            redirect(SITE_URL . '/panel/dyad.php');
+            redirect(fr_panel_url('dyad.php'));
         }
 
         DB::insert('payments', [
@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'pay_dyad_gift') {
         redirect($zpRes['url']);
     } else {
         flash('پیوند مورد نظر یافت نشد یا قبلاً پرداخت شده است.', 'err');
-        redirect(SITE_URL . '/panel/dyad.php');
+        redirect(fr_panel_url('dyad.php'));
     }
 }
 
@@ -206,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'create_dyad') {
                         if ($wp['gateway'] <= 0) {
                             mark_order_paid($orderId, 'WALLET-' . fr_token(8), null);
                             flash('هزینه نسخه تخصصی همراه با موفقیت از کیف پول پرداخت شد و دعوت‌نامه ارسال گردید 🎁', 'ok');
-                            redirect(SITE_URL . '/panel/dyad.php');
+                            redirect(fr_panel_url('dyad.php'));
                         }
                         $payable = $wp['gateway'];
                     }

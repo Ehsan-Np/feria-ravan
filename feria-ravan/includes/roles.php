@@ -61,8 +61,10 @@ function fr_legacy_role_caps(string $legacyRole): array
     $all = array_keys(fr_caps_catalog());
     switch ($legacyRole) {
         case 'superadmin':
+        case 'super':
             return $all;                                                    // دسترسی کامل
         case 'manager':
+        case 'admin':
             // همه‌چیز جز تنظیمات کلی، متن‌ها و نقش‌ها (معادل require_admin قبلی)
             return array_values(array_diff($all, ['settings','texts','roles']));
         case 'support':

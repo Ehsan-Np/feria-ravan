@@ -23,6 +23,24 @@ require_once __DIR__ . '/core/Zarinpal.php';
 require_once __DIR__ . '/core/Analyzer.php';
 fr_bootstrap();
 
+/* ---------------------------------------------------------------------------
+ | مسیریابی هوشمند پنل کاربری در صورت تنظیم اسلاگ اختصاصی (جلوگیری قطعی از ۴۰۴)
+ * -------------------------------------------------------------------------*/
+$pSlug = function_exists('fr_panel_slug') ? fr_panel_slug() : 'panel';
+if ($pSlug !== 'panel') {
+    $reqPath = trim((string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/');
+    if ($reqPath === $pSlug || str_starts_with($reqPath, $pSlug . '/')) {
+        $sub = substr($reqPath, strlen($pSlug));
+        $sub = trim((string)$sub, '/');
+        if ($sub === '' || $sub === false) $sub = 'index.php';
+        $targetFile = __DIR__ . '/panel/' . $sub;
+        if (file_exists($targetFile) && is_file($targetFile)) {
+            require $targetFile;
+            exit;
+        }
+    }
+}
+
 /* تست‌های روانشناسی — دو گروه کاملاً جدا: عمومی و ویژهٔ مدیران */
 try {
     $testsG = DB::all("SELECT * FROM " . DB::t('tests') . " WHERE status='active' AND audience='general' ORDER BY sort_order");

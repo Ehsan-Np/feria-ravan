@@ -97,7 +97,7 @@ function fr_panel_visible(string $section): bool
 /** محافظ صفحهٔ پنل در برابر غیرفعال‌شدن بخش از سمت مدیر (۱٫۷) */
 function fr_panel_guard(string $section): void
 {
-    if (!fr_panel_visible($section)) { redirect(SITE_URL . '/panel/?off=' . $section); }
+    if (!fr_panel_visible($section)) { redirect(fr_panel_url('?off=' . $section)); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -110,19 +110,19 @@ function panel_layout(array $user, string $active): void
     $name   = user_fullname($u);
     $avatar = $u['avatar'] ?: (SITE_URL . '/assets/img/avatar.svg');
     $items  = [
-        ['داشبورد', 'dashboard', '🏠', SITE_URL . '/panel/'],
-        ['تست‌های روانشناسی', 'tests', '🧠', SITE_URL . '/panel/tests.php'],
+        ['داشبورد', 'dashboard', '🏠', fr_panel_url()],
+        ['تست‌های روانشناسی', 'tests', '🧠', fr_panel_url('tests.php')],
         /* نسخهٔ ۲٫۲: تفکیک کامل کارگاه‌ها و دوره‌ها به دو گزینهٔ مجزا */
-        ['کارگاه‌ها', 'workshops', '🛠', SITE_URL . '/panel/workshops.php'],
-        ['دوره‌های آموزشی', 'courses', '📚', SITE_URL . '/panel/courses.php'],
-        ['نوبت‌های مشاوره', 'consult', '🛋', SITE_URL . '/panel/consult.php'],
-        ['برنامهٔ روزانه', 'planner', '🗓', SITE_URL . '/panel/planner.php'],
-        ['کیف پول و عودت وجه', 'wallet', '👛', SITE_URL . '/panel/wallet.php'],
-        ['تاریخچه تست‌های روانشناسی', 'history', '📋', SITE_URL . '/panel/history.php'],
-        ['تراکنش‌ها', 'payments', '💳', SITE_URL . '/panel/payments.php'],
-        ['پروفایل', 'profile', '👤', SITE_URL . '/panel/profile.php'],
-        ['تیکت پشتیبانی', 'tickets', '🎫', SITE_URL . '/panel/tickets.php'],
-        ['خروج', 'logout', '🚪', SITE_URL . '/panel/logout.php'],
+        ['کارگاه‌ها', 'workshops', '🛠', fr_panel_url('workshops.php')],
+        ['دوره‌های آموزشی', 'courses', '📚', fr_panel_url('courses.php')],
+        ['نوبت‌های مشاوره', 'consult', '🛋', fr_panel_url('consult.php')],
+        ['برنامهٔ روزانه', 'planner', '🗓', fr_panel_url('planner.php')],
+        ['کیف پول و عودت وجه', 'wallet', '👛', fr_panel_url('wallet.php')],
+        ['تاریخچه تست‌های روانشناسی', 'history', '📋', fr_panel_url('history.php')],
+        ['تراکنش‌ها', 'payments', '💳', fr_panel_url('payments.php')],
+        ['پروفایل', 'profile', '👤', fr_panel_url('profile.php')],
+        ['تیکت پشتیبانی', 'tickets', '🎫', fr_panel_url('tickets.php')],
+        ['خروج', 'logout', '🚪', fr_panel_url('logout.php')],
     ];
     // حذف بخش‌های غیرفعال‌شده توسط مدیر (داشبورد/پروفایل/خروج همیشه می‌مانند)
     $items = array_values(array_filter($items, fn($it) =>

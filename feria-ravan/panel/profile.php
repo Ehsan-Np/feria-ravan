@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $okMsg = 'اطلاعات حساب با موفقیت به‌روزرسانی شد ✨';
             log_activity('profile_update', 'user', (int)$u['id']);
             $u = current_user() ?: $u;
-            if (isset($_GET['welcome']) && !empty($data['first_name'])) redirect(SITE_URL . '/panel/');
+            if (isset($_GET['welcome']) && !empty($data['first_name'])) redirect(fr_panel_url());
         }
     }
 
