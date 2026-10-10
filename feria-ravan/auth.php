@@ -112,6 +112,9 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
             <div id="opBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
           </div>
           <button class="fr-btn au-btn" id="btnSendOtp">ارسال کد تأیید</button>
+          <div style="text-align:center;margin-top:10px">
+            <a href="javascript:void(0)" onclick="const m=$('otpMobile').value.trim(); if(m){ $('otpSentTo').textContent=m; setOtpStep(2); } else { toast('ابتدا شماره موبایل را وارد نمایید.','warn'); $('otpMobile').focus(); }" style="font-size:12px;color:#6366f1;text-decoration:none">کد تأیید را از قبل دارید؟ ورود کد ↵</a>
+          </div>
           <p class="au-hint">کد <?= fa_num($otpLen) ?> رقمی برایتان پیامک می‌شود؛ نیازی به رمز عبور نیست.</p>
         </div>
 
@@ -127,6 +130,9 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
           <button class="fr-btn au-btn" id="btnVerifyOtp">تأیید و ورود ✨</button>
           <button class="fr-btn ghost sm" style="width:100%;justify-content:center;margin-top:10px" id="btnResend" disabled>
             ارسال مجدد (<span id="resendTimer">۱۲۰</span>)
+          </button>
+          <button type="button" class="fr-btn ghost xs" style="width:100%;margin-top:8px;font-size:12px" onclick="setOtpStep(1);$('otpMobile').focus();">
+            ✏️ ویرایش شماره موبایل
           </button>
         </div>
 
@@ -263,6 +269,8 @@ $('otpMobile').addEventListener('input', e => {
   }
 });
 
+const FR_AUTH_API = '<?= rtrim(SITE_URL, "/") ?>/api/auth.php';
+
 /* ---------- ارسال OTP ---------- */
 async function sendOtp(){
   const mobile=$('otpMobile').value.trim();
@@ -270,7 +278,7 @@ async function sendOtp(){
   if($('stepName').style.display==='block'){ setOtpStep(1); }
   const btn=$('btnSendOtp'); btn.disabled=true;
   try{
-    const r=await api('api/auth.php',{action:'send_otp',mobile});
+    const r=await api(FR_AUTH_API,{action:'send_otp',mobile});
     if(!r.ok){toast(r.message,'err');}
     else{
       toast(r.message);
@@ -290,6 +298,8 @@ async function sendOtp(){
       startTimer(r.ttl||120);
       $('otpCode').focus();
     }
+  }catch(e){
+    toast('خطایی در ارتباط با سرور رخ داد؛ لطفاً دوباره تلاش کنید.','err');
   }finally{btn.disabled=false;}
 }
 $('btnSendOtp').onclick=sendOtp;
@@ -300,7 +310,7 @@ $('otpMobile').addEventListener('keydown',e=>{if(e.key==='Enter')sendOtp();});
 $('btnVerifyOtp').onclick=async()=>{
   const btn=$('btnVerifyOtp'); btn.disabled=true;
   try{
-    const r=await api('api/auth.php',{action:'verify_otp',mobile:$('otpMobile').value.trim(),code:$('otpCode').value.trim(),back:FR_BACK});
+    const r=await api(FR_AUTH_API,{action:'verify_otp',mobile:$('otpMobile').value.trim(),code:$('otpCode').value.trim(),back:FR_BACK});
     if(!r.ok){ toast(r.message,'err'); }
     else if(r.needs_register){
       toast(r.message);
@@ -321,7 +331,7 @@ $('otpCode').addEventListener('input',e=>{
 $('btnRegister').onclick=async()=>{
   const btn=$('btnRegister'); btn.disabled=true;
   try{
-    const r=await api('api/auth.php',{action:'register_name',full_name:$('regFull').value.trim(),back:FR_BACK});
+    const r=await api(FR_AUTH_API,{action:'register_name',full_name:$('regFull').value.trim(),back:FR_BACK});
     if(!r.ok){ toast(r.message,'err');
       if(/مهلت/.test(r.message||'')){ setOtpStep(1); }
     }
@@ -334,7 +344,7 @@ $('regFull').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnRegister').
 $('btnPwdLogin').onclick=async()=>{
   const btn=$('btnPwdLogin'); btn.disabled=true;
   try{
-    const r=await api('api/auth.php',{action:'password_login',identity:$('pwdIdentity').value.trim(),password:$('pwdPassword').value,back:FR_BACK});
+    const r=await api(FR_AUTH_API,{action:'password_login',identity:$('pwdIdentity').value.trim(),password:$('pwdPassword').value,back:FR_BACK});
     if(!r.ok) toast(r.message,'err'); else location.href=r.redirect;
   }finally{btn.disabled=false;}
 };

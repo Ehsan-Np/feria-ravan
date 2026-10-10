@@ -37,11 +37,16 @@ final class Kavenegar
         return $this->sender;
     }
 
+    private static bool $schemaEnsured = false;
+
     /**
      * تضمین خودکار ساختار جدول قالب‌های پیامک و ردیف‌های پیش‌فرض
      */
     public static function ensureTemplatesSchema(): void
     {
+        if (self::$schemaEnsured) return;
+        self::$schemaEnsured = true;
+
         try {
             $p = DB_PREFIX;
             // ساخت جدول قالب‌ها در صورت عدم وجود
@@ -182,8 +187,8 @@ final class Kavenegar
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_POST           => true,
-                CURLOPT_TIMEOUT        => 8,
-                CURLOPT_CONNECTTIMEOUT => 4,
+                CURLOPT_TIMEOUT        => 4,
+                CURLOPT_CONNECTTIMEOUT => 2,
                 CURLOPT_SSL_VERIFYPEER => false,
                 CURLOPT_SSL_VERIFYHOST => 0,
                 CURLOPT_POSTFIELDS     => http_build_query($params),
@@ -216,7 +221,7 @@ final class Kavenegar
                     'method'        => 'POST',
                     'header'        => "Content-Type: application/x-www-form-urlencoded\r\nConnection: close\r\n",
                     'content'       => http_build_query($params),
-                    'timeout'       => 8,
+                    'timeout'       => 4,
                     'ignore_errors' => true,
                 ],
                 'ssl' => [

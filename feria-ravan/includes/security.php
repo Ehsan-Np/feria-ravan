@@ -54,29 +54,45 @@ function csrf_field(): string
 {
     return '<input type="hidden" name="_csrf" value="' . csrf_token() . '">';
 }
-/** بررسی توکن — POST و AJAX (header X-CSRF) */
+/** بررسی توکن — POST و AJAX (header X-CSRF و بادی JSON) */
 function csrf_check(): bool
 {
-    $t = $_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF'] ?? '');
-    return is_string($t) && hash_equals($_SESSION['_csrf'] ?? '', $t);
+    $t = $_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF'] ?? ($_SERVER['HTTP_X_XSRF_TOKEN'] ?? ($GLOBALS['FR_JSON_CSRF'] ?? '')));
+    if (!$t && str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'json')) {
+        $raw = @file_get_contents('php://input');
+        if ($raw) {
+            $parsed = @json_decode($raw, true);
+            if (!empty($parsed['_csrf']) && is_string($parsed['_csrf'])) {
+                $t = $parsed['_csrf'];
+            }
+        }
+    }
+    return is_string($t) && !empty($t) && hash_equals($_SESSION['_csrf'] ?? '', $t);
 }
 /** اگر CSRF نامعتبر بود، قطع اجرا */
 function csrf_guard(): void
 {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !csrf_check()) {
-        http_response_code(419);
-        /* نسخهٔ ۲٫۰: هر دو کلید error و message برگردانده می‌شود (JS سایت message را
-           نمایش می‌دهد) + پرچم csrf_expired تا کلاینت صفحه را خودکار تازه‌سازی کند */
-        $isJson = str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'json')
-               || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'json')
-               || str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/api/')
-               || str_contains($_SERVER['REQUEST_URI'] ?? '', '/api/');
-        if ($isJson) {
-            json_out(['ok'=>false,'csrf_expired'=>true,
-                'error'  =>'نشست امنیتی منقضی شده؛ صفحه را تازه کنید.',
-                'message'=>'نشست امنیتی منقضی شده است؛ صفحه به‌صورت خودکار تازه‌سازی می‌شود…']);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
+        // درخواست‌های احراز هویت اولیه ورود (ارسال OTP، تأیید و ورود) با ریت‌لیمیت دیتابیسی امن شده‌اند و نباید با نوسان سشن مسدود شوند
+        if (str_contains($uri, '/api/auth.php') || str_ends_with($uri, 'auth.php')) {
+            return;
         }
-        exit('نشست امنیتی منقضی شده است. صفحه را تازه‌سازی کنید.');
+
+        if (!csrf_check()) {
+            http_response_code(419);
+            /* نسخهٔ ۲٫۰: هر دو کلید error و message برگردانده می‌شود (JS سایت message را
+               نمایش می‌دهد) + پرچم csrf_expired تا کلاینت صفحه را خودکار تازه‌سازی کند */
+            $isJson = str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'json')
+                   || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'json')
+                   || str_contains($uri, '/api/');
+            if ($isJson) {
+                json_out(['ok'=>false,'csrf_expired'=>true,
+                    'error'  =>'نشست امنیتی منقضی شده؛ صفحه را تازه کنید.',
+                    'message'=>'نشست امنیتی منقضی شده است؛ صفحه به‌صورت خودکار تازه‌سازی می‌شود…']);
+            }
+            json_out(['ok'=>false,'message'=>'نشست امنیتی منقضی شده است. لطفاً صفحه را تازه‌سازی کنید.']);
+        }
     }
 }
 /** نام مستعار برای سازگاری فراخوانی‌های قدیمی یا افزونه‌ها */
@@ -184,6 +200,26 @@ function fr_fatal_guard(): void
         if (!$e || !in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) return;
         // ثبت در لاگ سرور (display خاموش است؛ جزئیات فقط در فایل لاگ)
         error_log('Feria Fatal: ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line']);
+
+        $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
+        $isApi = str_contains($uri, '/api/')
+              || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'json')
+              || str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'json');
+
+        while (ob_get_level() > 0) { @ob_end_clean(); }
+
+        if ($isApi) {
+            if (!headers_sent()) {
+                http_response_code(200);
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo json_encode([
+                'ok'      => false,
+                'message' => 'خطای موقت در سرور؛ لطفاً چند لحظه بعد دوباره تلاش کنید.'
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
         if (headers_sent()) return;                                 // خروجی ناقص ارسال شده؛ دست‌کاری نکن
         http_response_code(500);
         echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8">'

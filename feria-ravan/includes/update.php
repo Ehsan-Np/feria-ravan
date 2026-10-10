@@ -1028,6 +1028,29 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 3.4.6 sms migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۴٫۷: پایداری ۱۰۰٪ سیستم ارسال OTP، تضمین جدول otps و ایزولاسیون کامل API ---- */
+        try {
+            $p = DB_PREFIX;
+            fr_db_run_safe_ddl("CREATE TABLE IF NOT EXISTS `{$p}otps` (
+              `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              `mobile` VARCHAR(20) NOT NULL,
+              `code` VARCHAR(10) NOT NULL,
+              `code_hash` VARCHAR(255) NULL,
+              `purpose` VARCHAR(30) NOT NULL DEFAULT 'login',
+              `expires_at` DATETIME NOT NULL,
+              `used_at` DATETIME NULL,
+              `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+              `ip` VARBINARY(16) NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              KEY `ix_mobile_purpose` (`mobile`, `purpose`),
+              KEY `ix_expires` (`expires_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}otps` MODIFY COLUMN `mobile` VARCHAR(20) NOT NULL");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}otps` ADD COLUMN IF NOT EXISTS `code_hash` VARCHAR(255) NULL AFTER `code`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}otps` ADD COLUMN IF NOT EXISTS `used_at` DATETIME NULL AFTER `expires_at`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}otps` ADD COLUMN IF NOT EXISTS `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `used_at`");
+        } catch (Throwable $e) { error_log('feria: 3.4.7 otp migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

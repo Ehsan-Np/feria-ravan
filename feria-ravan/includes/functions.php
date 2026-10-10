@@ -22,10 +22,17 @@ function redirect(string $url): never
     exit;
 }
 
-/** پاسخ JSON استاندارد برای AJAX */
+/** پاسخ JSON استاندارد برای AJAX (با پاک‌سازی کامل بافر برای تضمین JSON معتبر) */
 function json_out(array $data): never
 {
-    header('Content-Type: application/json; charset=utf-8');
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+    }
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }

@@ -63,18 +63,37 @@
      ─ رفع خطای ثبت‌نام در کروم دسکتاپ ۱۵۱ (bfcache + توکن کهنه) */
   window.api = async function (url, data) {
     let res, txt = '';
+    const payload = Object.assign({}, data || {});
+    if (window.CSRF && !payload._csrf) {
+      payload._csrf = window.CSRF;
+    }
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF': window.CSRF || '' },
-        body: JSON.stringify(data || {})
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'X-CSRF': window.CSRF || ''
+        },
+        body: JSON.stringify(payload)
       });
     } catch (netErr) {
       return { ok: false, message: 'خطای ارتباط با سرور؛ اتصال اینترنت را بررسی کرده و دوباره تلاش کنید.' };
     }
     try { txt = await res.text(); } catch (e) { txt = ''; }
     let j = null;
-    try { j = JSON.parse(txt); } catch (e) { j = null; }
+    try {
+      j = JSON.parse(txt);
+    } catch (e) {
+      // اگر پاسخ سرور همراه با فضاهای خالی، هشدار PHP یا BOM باشد، استخراج JSON خالص
+      if (typeof txt === 'string') {
+        const m = txt.match(/\{[\s\S]*\}/);
+        if (m) {
+          try { j = JSON.parse(m[0]); } catch (e2) { j = null; }
+        }
+      }
+    }
     if (res.status === 419 || (j && j.csrf_expired)) {
       const out = { ok: false, csrf_expired: true, message: (j && j.message) || 'نشست امنیتی منقضی شده است؛ صفحه به‌صورت خودکار تازه‌سازی می‌شود…' };
       try {
@@ -86,7 +105,15 @@
       } catch (e2) { setTimeout(() => location.reload(), 900); }
       return out;
     }
-    if (!j) return { ok: false, message: 'پاسخ نامعتبری از سرور دریافت شد؛ لطفاً چند لحظهٔ دیگر دوباره تلاش کنید.' };
+    if (!j) {
+      if (res && res.status === 404) {
+        return { ok: false, message: 'مسیر سرویس احراز هویت در سرور یافت نشد (کد ۴۰۴).' };
+      }
+      if (res && (res.status === 504 || res.status === 502)) {
+        return { ok: false, message: 'ارتباط با سامانه با تأخیر مواجه شد؛ لطفاً پیامک‌های گوشی خود را بررسی کنید.' };
+      }
+      return { ok: false, message: 'پاسخ نامعتبری از سرور دریافت شد؛ لطفاً چند لحظهٔ دیگر دوباره تلاش کنید.' };
+    }
     try { sessionStorage.removeItem('fr_csrf_reload_once'); } catch (e3) {}
     return j;
   };

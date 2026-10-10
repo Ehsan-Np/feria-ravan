@@ -45,8 +45,8 @@ function assert_true(bool $cond, string $msg): void {
 // 1. Version definition check
 // -------------------------------------------------------------
 echo "1. Checking System Version Definitions:\n";
-assert_true(FR_RELEASE === '3.4.6', "FR_RELEASE is updated to '3.4.6' (got " . FR_RELEASE . ")");
-assert_true(FR_VERSION === '3.4.6', "FR_VERSION is updated to '3.4.6' (got " . FR_VERSION . ")");
+assert_true(version_compare(FR_RELEASE, '3.4.6', '>='), "FR_RELEASE is at least '3.4.6' (got " . FR_RELEASE . ")");
+assert_true(version_compare(FR_VERSION, '3.4.6', '>='), "FR_VERSION is at least '3.4.6' (got " . FR_VERSION . ")");
 
 // -------------------------------------------------------------
 // 2. Database Migration & Schema Self-Healing
@@ -72,7 +72,7 @@ assert_true(($otpTpl['pattern_code'] ?? '') === 'otp', "OTP template defaults to
 // Run update pipeline migration to verify idempotency
 fr_update_pipeline(true);
 $dbVer = DB::setting('fr_version');
-assert_true($dbVer === '3.4.6', "Database settings fr_version upgraded to '3.4.6' (got {$dbVer})");
+assert_true(version_compare((string)$dbVer, '3.4.6', '>='), "Database settings fr_version upgraded to at least '3.4.6' (got {$dbVer})");
 
 // -------------------------------------------------------------
 // 3. Mobile Normalization & Operator Matrix (All Iranian Carriers)
@@ -174,7 +174,7 @@ assert_true(!empty($loggedOff), "Log row recorded with status='disabled'");
 // -------------------------------------------------------------
 echo "\n5. Testing OTP Generation & Fallback Pipeline:\n";
 // Clear rate limit bucket for test isolation
-DB::run("DELETE FROM " . DB::t('rate_limits') . " WHERE bucket LIKE 'otp:%'");
+DB::run("DELETE FROM " . DB::t('rate_limits') . " WHERE bucket LIKE 'otp%'");
 
 // Gateway disabled -> test fallback code must be returned
 DB::setSetting('kavenegar_enabled', '0');

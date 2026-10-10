@@ -194,6 +194,31 @@ function do_user_logout(): void
 /* ---------------------------------------------------------------------------
  | OTP — ارسال/تأیید کد یک‌بارمصرف پیامکی
  * -------------------------------------------------------------------------*/
+/** تضمین خودکار وجود جدول otps با ساختار مقاوم */
+function ensure_otps_table(): void
+{
+    static $ensured = false;
+    if ($ensured) return;
+    $ensured = true;
+    try {
+        $p = DB_PREFIX;
+        DB::run("CREATE TABLE IF NOT EXISTS `{$p}otps` (
+          `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          `mobile` VARCHAR(20) NOT NULL,
+          `code` VARCHAR(10) NOT NULL,
+          `code_hash` VARCHAR(255) NULL,
+          `purpose` VARCHAR(30) NOT NULL DEFAULT 'login',
+          `expires_at` DATETIME NOT NULL,
+          `used_at` DATETIME NULL,
+          `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+          `ip` VARBINARY(16) NULL,
+          `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          KEY `ix_mobile_purpose` (`mobile`, `purpose`),
+          KEY `ix_expires` (`expires_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {}
+}
+
 /**
  * ارسال OTP
  * @return array ['ok'=>bool,'message'=>string,'ttl'=>int,'debug_code'=>?string,'sms_sent'=>bool]
@@ -207,6 +232,8 @@ function otp_send(string $mobile, string $purpose = 'login'): array
     if (!rate_limit('otp:' . $mobile, 5, 600)) {
         return ['ok' => false, 'message' => 'تعداد درخواست‌های شما بیش از حد مجاز است؛ لطفاً چند دقیقه دیگر تلاش کنید.', 'ttl' => 0];
     }
+
+    ensure_otps_table();
 
     $len = (int)DB::setting('otp_length', '5');
     if ($len < 4 || $len > 6) $len = 5;
@@ -297,6 +324,8 @@ function otp_verify(string $mobile, string $code, string $purpose = 'login'): ar
     if (!rate_limit('otp_verify:' . $mobile, 8, 600)) {
         return ['ok' => false, 'message' => 'تلاش‌های ناموفق بیش از حد مجاز است؛ کمی بعد تلاش کنید.'];
     }
+
+    ensure_otps_table();
 
     $row = DB::one('SELECT * FROM ' . DB::t('otps') .
                    ' WHERE mobile=? AND purpose=? AND used_at IS NULL AND expires_at>NOW()
