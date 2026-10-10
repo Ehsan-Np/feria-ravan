@@ -145,13 +145,13 @@ switch ($action) {
             $pendingDyad = null;
             $dyadToken = (string)($_SESSION['active_dyad_token'] ?? '');
             if ($dyadToken !== '') {
-                $pendingDyad = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE token=? AND status="pending"', [$dyadToken]);
+                $pendingDyad = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE token=? AND status="pending" AND user1_id!=?', [$dyadToken, $u['id']]);
             }
             if (!$pendingDyad) {
                 $cleanMob = clean_mobile((string)$u['mobile']);
                 $pendingDyad = DB::one('SELECT * FROM ' . DB::t('dyads') .
-                    ' WHERE (user2_id=? OR (partner_mobile IS NOT NULL AND partner_mobile=?)) AND test_id=? AND status="pending" ORDER BY id DESC LIMIT 1',
-                    [$u['id'], $cleanMob, $at['test_id']]);
+                    ' WHERE (user2_id=? OR (partner_mobile IS NOT NULL AND partner_mobile=?)) AND user1_id!=? AND test_id=? AND status="pending" ORDER BY id DESC LIMIT 1',
+                    [$u['id'], $cleanMob, $u['id'], $at['test_id']]);
             }
             if ($pendingDyad) {
                 $targetMode = $pendingDyad['target_mode'] ?? 'free';
@@ -176,6 +176,17 @@ switch ($action) {
                     ], 'id=?', [$pendingDyad['id']]);
                     DyadAnalyzer::analyze((int)$pendingDyad['id']);
                     unset($_SESSION['active_dyad_token']);
+
+                    // اطلاع‌رسانی پیامکی به کاربر ۱ (سازنده دعوت) که همراه آزمون را تکمیل کرد
+                    try {
+                        $u1 = DB::one('SELECT mobile, first_name FROM ' . DB::t('users') . ' WHERE id=?', [(int)$pendingDyad['user1_id']]);
+                        if ($u1 && !empty($u1['mobile'])) {
+                            $pName = user_fullname($u);
+                            $dyadRepUrl = fr_panel_url('dyad-report.php?id=' . $pendingDyad['id']);
+                            $smsU1 = new Kavenegar();
+                            $smsU1->sendDirect((string)$u1['mobile'], "{$u1['first_name']} عزیز، {$pName} در آزمون سنجش تطابق شرکت کرد و کارنامهٔ تطابق دونفرهٔ شما آماده شد 🕊\nمشاهده کارنامه:\n{$dyadRepUrl}", 'dyad_ready');
+                        }
+                    } catch (Throwable $e) {}
                 }
             }
         } catch (Throwable $e) {

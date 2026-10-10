@@ -18,8 +18,9 @@ final class GrowthEngine
     public static function ensurePlannerSchema(): void
     {
         try {
+            $p = DB_PREFIX;
             // ۱. جدول دسته‌بندی‌های پلنر
-            DB::run("CREATE TABLE IF NOT EXISTS " . DB::t('planner_cats') . " (
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}planner_cats` (
                 `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 `user_id` BIGINT UNSIGNED NOT NULL,
                 `name` VARCHAR(60) NOT NULL,
@@ -30,50 +31,104 @@ final class GrowthEngine
                 UNIQUE KEY `uq_user_name` (`user_id`,`name`),
                 KEY `ix_user` (`user_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        } catch (Throwable $e) {
-            error_log('GrowthEngine ensurePlannerSchema planner_cats: ' . $e->getMessage());
-        }
 
-        try {
-            // ۲. فیلدهای موردنیاز در جدول کارهای پلنر
-            $taskCols = array_column(DB::all("SHOW COLUMNS FROM " . DB::t('planner_tasks')), 'Field');
+            // ۲. جدول کارهای پلنر
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}planner_tasks` (
+                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` BIGINT UNSIGNED NOT NULL,
+                `ref_attempt_id` BIGINT UNSIGNED NULL,
+                `day` DATE NOT NULL,
+                `title` VARCHAR(190) NOT NULL,
+                `time_note` VARCHAR(5) DEFAULT NULL,
+                `priority` ENUM('low','normal','high') NOT NULL DEFAULT 'normal',
+                `category` VARCHAR(60) NOT NULL DEFAULT 'personal',
+                `note` VARCHAR(500) NOT NULL DEFAULT '',
+                `recur_id` BIGINT UNSIGNED DEFAULT NULL,
+                `done` TINYINT(1) NOT NULL DEFAULT 0,
+                `done_at` DATETIME DEFAULT NULL,
+                `remind_at` DATETIME DEFAULT NULL,
+                `reminded_at` DATETIME DEFAULT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `ix_user_day` (`user_id`,`day`),
+                KEY `ix_ref_att` (`ref_attempt_id`),
+                KEY `ix_remind` (`reminded_at`,`remind_at`),
+                KEY `ix_recur` (`recur_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // ۳. جدول پاداش‌های پلنر
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}planner_rewards` (
+                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` BIGINT UNSIGNED NOT NULL,
+                `streak_from` INT NOT NULL,
+                `streak_to` INT NOT NULL,
+                `type` VARCHAR(30) NOT NULL DEFAULT 'discount',
+                `percent` INT DEFAULT NULL,
+                `code` VARCHAR(50) DEFAULT NULL,
+                `note` VARCHAR(255) NOT NULL DEFAULT '',
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `ix_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // ۴. جدول کارهای تکرارشونده
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}planner_recur` (
+                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` BIGINT UNSIGNED NOT NULL,
+                `title` VARCHAR(190) NOT NULL,
+                `time_note` VARCHAR(5) DEFAULT NULL,
+                `priority` ENUM('low','normal','high') NOT NULL DEFAULT 'normal',
+                `category` VARCHAR(60) NOT NULL DEFAULT 'personal',
+                `freq` ENUM('daily','weekday','weekly') NOT NULL DEFAULT 'daily',
+                `active` TINYINT(1) NOT NULL DEFAULT 1,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `ix_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // ۵. فیلدهای موردنیاز در جدول کارهای پلنر
+            $taskCols = array_column(DB::all("SHOW COLUMNS FROM `{$p}planner_tasks`"), 'Field');
 
             if (!in_array('note', $taskCols, true)) {
-                DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD COLUMN `note` VARCHAR(500) NOT NULL DEFAULT '' AFTER `category`");
+                DB::run("ALTER TABLE `{$p}planner_tasks` ADD COLUMN `note` VARCHAR(500) NOT NULL DEFAULT '' AFTER `category`");
             }
             if (!in_array('remind_at', $taskCols, true)) {
-                DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD COLUMN `remind_at` DATETIME DEFAULT NULL AFTER `done_at`");
+                DB::run("ALTER TABLE `{$p}planner_tasks` ADD COLUMN `remind_at` DATETIME DEFAULT NULL AFTER `done_at`");
             }
             if (!in_array('reminded_at', $taskCols, true)) {
-                DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD COLUMN `reminded_at` DATETIME DEFAULT NULL AFTER `remind_at`");
+                DB::run("ALTER TABLE `{$p}planner_tasks` ADD COLUMN `reminded_at` DATETIME DEFAULT NULL AFTER `remind_at`");
             }
             if (!in_array('recur_id', $taskCols, true)) {
-                DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD COLUMN `recur_id` BIGINT UNSIGNED DEFAULT NULL AFTER `note`");
+                DB::run("ALTER TABLE `{$p}planner_tasks` ADD COLUMN `recur_id` BIGINT UNSIGNED DEFAULT NULL AFTER `note`");
             }
             if (!in_array('ref_attempt_id', $taskCols, true)) {
-                DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD COLUMN `ref_attempt_id` BIGINT UNSIGNED DEFAULT NULL AFTER `user_id`");
+                DB::run("ALTER TABLE `{$p}planner_tasks` ADD COLUMN `ref_attempt_id` BIGINT UNSIGNED DEFAULT NULL AFTER `user_id`");
             }
+
+            // تضمین گنجایش ستون category و title
+            try {
+                DB::run("ALTER TABLE `{$p}planner_tasks` MODIFY COLUMN `category` VARCHAR(60) NOT NULL DEFAULT 'personal'");
+            } catch (Throwable $e) {}
+            try {
+                DB::run("ALTER TABLE `{$p}planner_tasks` MODIFY COLUMN `title` VARCHAR(190) NOT NULL");
+            } catch (Throwable $e) {}
 
             // بررسی ایندکس‌ها
-            $taskIndexes = array_column(DB::all("SHOW INDEX FROM " . DB::t('planner_tasks')), 'Key_name');
+            $taskIndexes = array_column(DB::all("SHOW INDEX FROM `{$p}planner_tasks`"), 'Key_name');
             if (!in_array('ix_remind', $taskIndexes, true)) {
-                try { DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD KEY `ix_remind` (`reminded_at`,`remind_at`)"); } catch (Throwable $e) {}
+                try { DB::run("ALTER TABLE `{$p}planner_tasks` ADD KEY `ix_remind` (`reminded_at`,`remind_at`)"); } catch (Throwable $e) {}
             }
             if (!in_array('ix_ref_att', $taskIndexes, true)) {
-                try { DB::run("ALTER TABLE " . DB::t('planner_tasks') . " ADD KEY `ix_ref_att` (`ref_attempt_id`)"); } catch (Throwable $e) {}
+                try { DB::run("ALTER TABLE `{$p}planner_tasks` ADD KEY `ix_ref_att` (`ref_attempt_id`)"); } catch (Throwable $e) {}
             }
-        } catch (Throwable $e) {
-            error_log('GrowthEngine ensurePlannerSchema planner_tasks cols: ' . $e->getMessage());
-        }
 
-        try {
-            // ۳. فیلد growth_injected در جدول attempts
-            $attCols = array_column(DB::all("SHOW COLUMNS FROM " . DB::t('attempts')), 'Field');
+            // ۶. فیلد growth_injected در جدول attempts
+            $attCols = array_column(DB::all("SHOW COLUMNS FROM `{$p}attempts`"), 'Field');
             if (!in_array('growth_injected', $attCols, true)) {
-                DB::run("ALTER TABLE " . DB::t('attempts') . " ADD COLUMN `growth_injected` TINYINT(1) NOT NULL DEFAULT 0");
+                DB::run("ALTER TABLE `{$p}attempts` ADD COLUMN `growth_injected` TINYINT(1) NOT NULL DEFAULT 0");
             }
         } catch (Throwable $e) {
-            error_log('GrowthEngine ensurePlannerSchema attempts cols: ' . $e->getMessage());
+            error_log('GrowthEngine ensurePlannerSchema error: ' . $e->getMessage());
         }
     }
 
@@ -162,6 +217,11 @@ final class GrowthEngine
         try {
             // تضمین صحت و ترمیم خودکار ساختار دیتابیس
             self::ensurePlannerSchema();
+
+            $at = DB::one('SELECT a.*, t.title AS test_title FROM ' . DB::t('attempts') . ' a JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id WHERE a.id=? AND a.user_id=?', [$attemptId, $userId]);
+            if (!$at) {
+                return ['ok' => false, 'message' => 'جلسهٔ آزمون انتخاب‌شده یافت نشد یا متعلق به شما نیست.'];
+            }
 
             $plan = self::generatePlan($attemptId);
             if (empty($plan['tasks'])) {

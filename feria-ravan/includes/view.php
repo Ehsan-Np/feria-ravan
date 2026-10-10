@@ -191,6 +191,7 @@ function panel_layout(array $user, string $active): void
         <small style="color:var(--muted)"><?= fa_num(jdate('l j F Y')) ?></small></div>
       </div>
     </div>
+    <?php if (!empty($_SESSION['flash'])) echo flash(); ?>
     <?php
 }
 

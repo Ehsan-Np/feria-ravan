@@ -168,6 +168,7 @@ function admin_layout(array $admin, string $active, string $title): void
       <button class="fr-hamburger icon-btn" style="width:42px;height:42px;border-radius:12px;border:1.5px solid var(--line);background:var(--panel)">☰</button>
       <h2 style="font-size:17px;margin:0"><?= e($title) ?></h2>
     </div>
+    <?php if (!empty($_SESSION['flash'])) echo flash(); ?>
     <?php
 }
 function admin_layout_end(): void
@@ -176,15 +177,19 @@ function admin_layout_end(): void
 }
 
 /** پیام flash ساده با سشن */
-function flash(?string $msg = null, string $type = 'ok'): ?string
-{
-    if ($msg !== null) { $_SESSION['flash'] = [$msg, $type]; return null; }
-    if (!empty($_SESSION['flash'])) {
-        [$m,$t] = $_SESSION['flash']; unset($_SESSION['flash']);
-        return '<div class="fr-alert ' . $t . '" style="margin-bottom:16px">' . e($m) . '</div>';
+if (!function_exists('flash')) {
+    function flash(?string $msg = null, string $type = 'ok'): ?string
+    {
+        if ($msg !== null) { $_SESSION['flash'] = [$msg, $type]; return null; }
+        if (!empty($_SESSION['flash'])) {
+            [$m,$t] = $_SESSION['flash']; unset($_SESSION['flash']);
+            return '<div class="fr-alert ' . e($t) . '" style="margin-bottom:16px">' . e($m) . '</div>';
+        }
+        return '';
     }
-    return '';
 }
 
 /** خواندن مقدار POST بولی/رشته‌ای امن */
-function post(string $k, $default = '') { return $_POST[$k] ?? $default; }
+if (!function_exists('post')) {
+    function post(string $k, $default = '') { return $_POST[$k] ?? $default; }
+}

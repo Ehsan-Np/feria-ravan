@@ -22,6 +22,77 @@ final class DyadAnalyzer
     ];
 
     /**
+     * تضمین خودکار ساختار جدول پیوندهای دونفره و ستون‌های مالی و تحلیلی (Self-healing schema guard)
+     */
+    public static function ensureDyadSchema(): void
+    {
+        static $checked = false;
+        if ($checked) return;
+        $checked = true;
+
+        try {
+            $p = DB_PREFIX;
+            DB::run("CREATE TABLE IF NOT EXISTS `{$p}dyads` (
+              `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              `token` VARCHAR(32) NOT NULL UNIQUE,
+              `test_id` INT UNSIGNED NOT NULL,
+              `user1_id` BIGINT UNSIGNED NOT NULL,
+              `attempt1_id` BIGINT UNSIGNED NOT NULL,
+              `order1_id` BIGINT UNSIGNED NULL,
+              `user2_id` BIGINT UNSIGNED NULL,
+              `attempt2_id` BIGINT UNSIGNED NULL,
+              `order2_id` BIGINT UNSIGNED NULL,
+              `rel_type` ENUM('couple','spouse','coworker','friend','business') NOT NULL DEFAULT 'couple',
+              `pay_mode` ENUM('free','self_paid','partner_paid') NOT NULL DEFAULT 'free',
+              `target_mode` ENUM('free','full') NOT NULL DEFAULT 'free',
+              `partner_paid` TINYINT(1) NOT NULL DEFAULT 0,
+              `partner_name` VARCHAR(150) NULL,
+              `partner_mobile` VARCHAR(20) NULL,
+              `status` ENUM('pending','ready','archived') NOT NULL DEFAULT 'pending',
+              `synergy_score` INT UNSIGNED NULL,
+              `summary_json` MEDIUMTEXT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+              KEY `ix_u1` (`user1_id`),
+              KEY `ix_u2` (`user2_id`),
+              KEY `ix_att1` (`attempt1_id`),
+              KEY `ix_att2` (`attempt2_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $cols = array_column(DB::all("SHOW COLUMNS FROM `{$p}dyads`"), 'Field');
+            if (!in_array('pay_mode', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `pay_mode` ENUM('free','self_paid','partner_paid') NOT NULL DEFAULT 'free' AFTER `rel_type`");
+            }
+            if (!in_array('target_mode', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `target_mode` ENUM('free','full') NOT NULL DEFAULT 'free' AFTER `pay_mode`");
+            }
+            if (!in_array('partner_paid', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `partner_paid` TINYINT(1) NOT NULL DEFAULT 0 AFTER `target_mode`");
+            }
+            if (!in_array('order1_id', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `order1_id` BIGINT UNSIGNED NULL AFTER `attempt1_id`");
+            }
+            if (!in_array('order2_id', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `order2_id` BIGINT UNSIGNED NULL AFTER `attempt2_id`");
+            }
+            if (!in_array('partner_name', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `partner_name` VARCHAR(150) NULL AFTER `partner_paid`");
+            }
+            if (!in_array('partner_mobile', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `partner_mobile` VARCHAR(20) NULL AFTER `partner_name`");
+            }
+            if (!in_array('synergy_score', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `synergy_score` INT UNSIGNED NULL AFTER `status`");
+            }
+            if (!in_array('summary_json', $cols, true)) {
+                DB::run("ALTER TABLE `{$p}dyads` ADD COLUMN `summary_json` MEDIUMTEXT NULL AFTER `synergy_score`");
+            }
+        } catch (Throwable $e) {
+            error_log('ensureDyadSchema error: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * ایجاد پیوند دونفره جدید با پشتیبانی از مدل‌های سه‌گانه مالی و تجاری
      * pay_mode: 'free' | 'self_paid' | 'partner_paid'
      */
@@ -34,6 +105,7 @@ final class DyadAnalyzer
         string $payMode = 'free',
         ?int $orderId = null
     ): array {
+        self::ensureDyadSchema();
         $at = DB::one('SELECT a.*, t.title AS test_title, t.price_full, t.price_sale FROM ' . DB::t('attempts') . ' a
                        JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id
                        WHERE a.id=? AND a.user_id=? AND a.status="completed"', [$attemptId, $userId]);
@@ -104,7 +176,7 @@ final class DyadAnalyzer
                 } else {
                     $smsText = "{$pName} عزیز، {$u1Name} شما را به آزمون سنجش تطابق دونفره ({$at['test_title']}) در فریا روان دعوت کرده است.\nمشاهده و شروع:\n{$inviteUrl}";
                 }
-                $sms->sendDirect($partnerMobile, $smsText);
+                $sms->sendDirect($partnerMobile, $smsText, 'dyad_invite');
             } catch (Throwable $e) {
                 error_log('feria dyad sms error: ' . $e->getMessage());
             }
@@ -128,6 +200,7 @@ final class DyadAnalyzer
      */
     public static function joinDyad(string $token, int $user2Id, ?int $attempt2Id = null): array
     {
+        self::ensureDyadSchema();
         $token = trim($token);
         $dyad = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE token=?', [$token]);
         if (!$dyad) {
@@ -247,6 +320,19 @@ final class DyadAnalyzer
         // تحلیل و محاسبهٔ فوری شاخص‌های تطابق
         self::analyze((int)$dyad['id']);
 
+        // اطلاع‌رسانی به سازنده دعوت (کاربر ۱)
+        try {
+            $u1 = DB::one('SELECT mobile, first_name FROM ' . DB::t('users') . ' WHERE id=?', [(int)$dyad['user1_id']]);
+            if ($u1 && !empty($u1['mobile'])) {
+                $user2 = DB::one('SELECT first_name, last_name FROM ' . DB::t('users') . ' WHERE id=?', [$user2Id]);
+                $pName = trim(($user2['first_name'] ?? '') . ' ' . ($user2['last_name'] ?? '')) ?: ($dyad['partner_name'] ?: 'همراه شما');
+                $dyadRepUrl = fr_panel_url('dyad-report.php?id=' . $dyad['id']);
+                require_once FR_ROOT . '/core/Kavenegar.php';
+                $sms = new Kavenegar();
+                $sms->sendDirect((string)$u1['mobile'], "{$u1['first_name']} عزیز، {$pName} در آزمون سنجش تطابق شرکت کرد و کارنامهٔ تطابق دونفرهٔ شما آماده شد 🕊\nمشاهده کارنامه:\n{$dyadRepUrl}", 'dyad_ready');
+            }
+        } catch (Throwable $e) {}
+
         return [
             'ok'        => true,
             'status'    => 'ready',
@@ -286,10 +372,21 @@ final class DyadAnalyzer
         $res1 = DB::all('SELECT * FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$d['attempt1_id']]);
         $res2 = DB::all('SELECT * FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$d['attempt2_id']]);
 
+        if (empty($res1)) {
+            require_once FR_ROOT . '/core/Analyzer.php';
+            Analyzer::scoreAttempt((int)$d['attempt1_id']);
+            $res1 = DB::all('SELECT * FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$d['attempt1_id']]);
+        }
+        if (empty($res2)) {
+            require_once FR_ROOT . '/core/Analyzer.php';
+            Analyzer::scoreAttempt((int)$d['attempt2_id']);
+            $res2 = DB::all('SELECT * FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$d['attempt2_id']]);
+        }
+
         $map1 = []; foreach ($res1 as $r) { $map1[$r['scale_code']] = $r; }
         $map2 = []; foreach ($res2 as $r) { $map2[$r['scale_code']] = $r; }
 
-        $engine = (string)($d['test_engine'] ?? 'disc');
+        $engine = strtolower((string)($d['test_engine'] ?? 'disc'));
         $analysis = match ($engine) {
             'disc'  => self::analyzeDiscDyad($d, $u1, $u2, $at1, $at2, $map1, $map2),
             default => self::analyzeGenericDyad($d, $u1, $u2, $at1, $at2, $map1, $map2),
@@ -316,8 +413,10 @@ final class DyadAnalyzer
         $totalDelta = 0;
 
         foreach ($dims as $code => $title) {
-            $p1 = (int)round((float)($m1[$code]['percent'] ?? 50));
-            $p2 = (int)round((float)($m2[$code]['percent'] ?? 50));
+            $r1 = $m1[$code] ?? ($m1[strtolower($code)] ?? null);
+            $r2 = $m2[$code] ?? ($m2[strtolower($code)] ?? null);
+            $p1 = (int)round((float)($r1['percent'] ?? 50));
+            $p2 = (int)round((float)($r2['percent'] ?? 50));
             $diff = abs($p1 - $p2);
             $totalDelta += $diff;
 
@@ -348,10 +447,10 @@ final class DyadAnalyzer
         $frictionPoints = [];
         $synergyStrengths = [];
 
-        $d1 = $deltaMatrix['D']['p1']; $d2 = $deltaMatrix['D']['p2'];
-        $i1 = $deltaMatrix['I']['p1']; $i2 = $deltaMatrix['I']['p2'];
-        $s1 = $deltaMatrix['S']['p1']; $s2 = $deltaMatrix['S']['p2'];
-        $c1 = $deltaMatrix['C']['p1']; $c2 = $deltaMatrix['C']['p2'];
+        $d1 = (int)($deltaMatrix['D']['p1'] ?? 50); $d2 = (int)($deltaMatrix['D']['p2'] ?? 50);
+        $i1 = (int)($deltaMatrix['I']['p1'] ?? 50); $i2 = (int)($deltaMatrix['I']['p2'] ?? 50);
+        $s1 = (int)($deltaMatrix['S']['p1'] ?? 50); $s2 = (int)($deltaMatrix['S']['p2'] ?? 50);
+        $c1 = (int)($deltaMatrix['C']['p1'] ?? 50); $c2 = (int)($deltaMatrix['C']['p2'] ?? 50);
 
         if ($d1 >= 65 && $d2 >= 65) {
             $clashFriction += 12;

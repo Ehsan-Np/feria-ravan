@@ -43,8 +43,8 @@ function assert_true(bool $cond, string $msg): void {
 // 1. Version definition check
 // -------------------------------------------------------------
 echo "1. Checking System Version Definitions:\n";
-assert_true(FR_RELEASE === '3.4.7', "FR_RELEASE is '3.4.7'");
-assert_true(FR_VERSION === '3.4.7', "FR_VERSION is '3.4.7'");
+assert_true(version_compare(FR_RELEASE, '3.4.7', '>='), "FR_RELEASE is at least 3.4.7 (current: " . FR_RELEASE . ")");
+assert_true(version_compare(FR_VERSION, '3.4.7', '>='), "FR_VERSION is at least 3.4.7 (current: " . FR_VERSION . ")");
 
 // -------------------------------------------------------------
 // 2. Testing ensure_otps_table()

@@ -65,6 +65,9 @@ $dyadGift = DB::one('SELECT d.*, t.title AS test_title FROM ' . DB::t('dyads') .
                      JOIN ' . DB::t('tests') . ' t ON t.id=d.test_id
                      WHERE d.order1_id=?', [(int)$pay['order_id']]);
 if ($dyadGift) {
+    try {
+        DB::update('dyads', ['partner_paid' => 1, 'updated_at' => date('Y-m-d H:i:s')], 'id=?', [$dyadGift['id']]);
+    } catch (Throwable $e) {}
     render_header('پرداخت موفق هدیه تطابق');
     echo '<div style="max-width:540px;margin:60px auto" class="fr-card" style="text-align:center">';
     echo '<div style="font-size:48px;margin-bottom:8px">🎁</div><h3>پرداخت هدیه سنجش تطابق با موفقیت انجام شد!</h3>';
@@ -76,7 +79,7 @@ if ($dyadGift) {
     }
     echo '</div>';
     echo '<div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap">';
-    echo '<a class="fr-btn" style="background:#6d28d9" href="' . SITE_URL . '/panel/dyad.php">مدیریت پیوندهای تطابق ←</a> ';
+    echo '<a class="fr-btn" style="background:#6d28d9" href="' . fr_panel_url('dyad.php') . '">مدیریت پیوندهای تطابق ←</a> ';
     echo '<a class="fr-btn ghost" href="' . SITE_URL . '/panel/payments.php">مشاهده فاکتور</a>';
     echo '</div></div>';
     render_footer();

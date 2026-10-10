@@ -1051,6 +1051,20 @@ function fr_update_pipeline(bool $force = false): void
             fr_db_run_safe_ddl("ALTER TABLE `{$p}otps` ADD COLUMN IF NOT EXISTS `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `used_at`");
         } catch (Throwable $e) { error_log('feria: 3.4.7 otp migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۴٫۸: پایداری ۱۰۰٪ تزریق تمرین‌های پلنر، خودترمیمی ساختار و اصلاح دعوت پارتنر زوجین ---- */
+        try {
+            $p = DB_PREFIX;
+            if (class_exists('GrowthEngine')) {
+                GrowthEngine::ensurePlannerSchema();
+            }
+            if (class_exists('DyadAnalyzer')) {
+                DyadAnalyzer::ensureDyadSchema();
+            }
+            if (class_exists('Kavenegar')) {
+                Kavenegar::ensureTemplatesSchema();
+            }
+        } catch (Throwable $e) { error_log('feria: 3.4.8 planner & dyad migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

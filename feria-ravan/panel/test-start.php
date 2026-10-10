@@ -63,6 +63,12 @@ $completedFree = DB::one("SELECT * FROM " . DB::t('attempts') .
 
 // اگر کاربر قبلاً نسخهٔ ویژه را خریداری و تکمیل کرده، مستقیماً به گزارش برود
 if ($completedFree && $completedFree['mode'] === 'full') {
+    if ($dyadContext && $dyadContext['status'] === 'pending' && (int)$dyadContext['user1_id'] !== (int)$u['id']) {
+        require_once FR_ROOT . '/core/DyadAnalyzer.php';
+        DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$completedFree['id']);
+        flash('شما قبلاً این آزمون را کامل انجام داده بودید؛ کارنامه تطابق دونفره بر مبنای همان آزمون آماده شد 🎉', 'ok');
+        redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
+    }
     redirect(fr_panel_url('report.php?attempt=' . (int)$completedFree['id']));
 }
 

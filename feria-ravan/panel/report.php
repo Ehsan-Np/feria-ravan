@@ -44,7 +44,7 @@ if ($at['mode'] === 'free') {
 log_activity('report_view', 'attempt', $attemptId);
 
 // اقدام افزودن تمرین‌های رشد کارنامه به پلنر روزانه (فاز ۳)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'inject_growth') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'inject_growth' || ($_POST['act'] ?? '') === 'inject_growth')) {
     check_csrf();
     require_once FR_ROOT . '/core/GrowthEngine.php';
     try {

@@ -18,7 +18,11 @@ function e(?string $s): string
 /** هدایت به آدرس دیگر */
 function redirect(string $url): never
 {
-    header('Location: ' . $url);
+    if (!headers_sent()) {
+        header('Location: ' . $url);
+        exit;
+    }
+    echo '<script>window.location.href=' . json_encode($url) . ';</script><noscript><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '"></noscript>';
     exit;
 }
 
@@ -642,3 +646,35 @@ function fr_purge_test(int $tid): bool
         return false;
     }
 }
+
+/** خواندن مقدار POST بولی/رشته‌ای امن */
+if (!function_exists('post')) {
+    function post(string $k, $default = '') { return $_POST[$k] ?? $default; }
+}
+
+/** خواندن مقدار GET بولی/رشته‌ای امن */
+if (!function_exists('get')) {
+    function get(string $k, $default = '') { return $_GET[$k] ?? $default; }
+}
+
+/** پیام flash سراسری با سشن */
+if (!function_exists('flash')) {
+    function flash(?string $msg = null, string $type = 'ok'): ?string
+    {
+        if ($msg !== null) {
+            if (session_status() !== PHP_SESSION_ACTIVE && function_exists('fr_session_start')) {
+                fr_session_start();
+            }
+            $_SESSION['flash'] = [$msg, $type];
+            return null;
+        }
+        if (!empty($_SESSION['flash'])) {
+            [$m, $t] = $_SESSION['flash'];
+            unset($_SESSION['flash']);
+            $cls = in_array($t, ['ok', 'err', 'warn', 'info'], true) ? $t : 'ok';
+            return '<div class="fr-alert ' . e($cls) . '" style="margin-bottom:16px">' . e($m) . '</div>';
+        }
+        return '';
+    }
+}
+

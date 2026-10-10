@@ -21,6 +21,7 @@ fr_bootstrap();
 
 $u = require_user();
 fr_panel_guard('history');
+DyadAnalyzer::ensureDyadSchema();
 
 $action = (string)($_GET['action'] ?? '');
 $token  = trim((string)($_GET['token'] ?? ''));
@@ -30,11 +31,15 @@ if ($token !== '') {
     $res = DyadAnalyzer::joinDyad($token, (int)$u['id']);
     if ($res['ok']) {
         if ($res['status'] === 'ready') {
+            flash('پیوند تطابق دونفره با موفقیت برقرار شد! گزارش آماده است 🎉', 'ok');
             redirect(fr_panel_url('dyad-report.php?id=' . $res['dyad_id']));
         } elseif ($res['status'] === 'waiting_partner') {
             flash('شما ایجادکننده این پیوند هستید؛ این پیوند در انتظار تکمیل آزمون توسط همراه شما است ⏳', 'info');
             redirect(fr_panel_url('dyad.php'));
         } elseif (!empty($res['redirect_url'])) {
+            if (!empty($res['message'])) {
+                flash($res['message'], 'info');
+            }
             redirect($res['redirect_url']);
         }
     } else {
@@ -44,7 +49,7 @@ if ($token !== '') {
 }
 
 // ارسال مجدد پیامک دعوت
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'resend_sms') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'resend_sms' || ($_POST['act'] ?? '') === 'resend_sms')) {
     csrf_guard();
     $dyadId = (int)post('dyad_id');
     $dy = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE id=? AND user1_id=?', [$dyadId, $u['id']]);
@@ -53,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'resend_sms') {
             $test = DB::one('SELECT title FROM ' . DB::t('tests') . ' WHERE id=?', [$dy['test_id']]);
             $u1Name = user_fullname($u);
             $pName = $dy['partner_name'] ?: 'همراه گرامی';
-            $inviteUrl = fr_panel_url('dyad.php?token=' . $dy['token']);
+            $inviteUrl = fr_panel_url('dyad.php?token=' . urlencode($dy['token']));
 
             $sms = new Kavenegar();
             if ($dy['pay_mode'] === 'self_paid') {
@@ -63,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'resend_sms') {
             } else {
                 $smsText = "{$pName} عزیز، یادآوری دعوت {$u1Name} برای سنجش تطابق دونفره ({$test['title']}) در فریا روان.\nمشاهده و شروع:\n{$inviteUrl}";
             }
-            $sms->sendDirect($dy['partner_mobile'], $smsText);
+            $sms->sendDirect($dy['partner_mobile'], $smsText, 'dyad_invite');
             flash('پیامک یادآوری دعوت مجدداً ارسال شد ✅', 'ok');
         } catch (Throwable $e) {
             flash('خطا در ارسال پیامک: ' . $e->getMessage(), 'err');
@@ -75,12 +80,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'resend_sms') {
 }
 
 // لغو / حذف دعوت‌نامه معلق
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'cancel_dyad') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'cancel_dyad' || ($_POST['act'] ?? '') === 'cancel_dyad')) {
     csrf_guard();
     $dyadId = (int)post('dyad_id');
     $dy = DB::one('SELECT * FROM ' . DB::t('dyads') . ' WHERE id=? AND user1_id=? AND status="pending"', [$dyadId, $u['id']]);
     if ($dy) {
         if (!empty($dy['order1_id'])) {
+            require_once FR_ROOT . '/includes/wallet.php';
             fr_cancel_dead_order((int)$dy['order1_id'], 'لغو توسط کاربر');
         }
         DB::run('DELETE FROM ' . DB::t('dyads') . ' WHERE id=?', [$dyadId]);
@@ -92,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'cancel_dyad') {
 }
 
 // پرداخت مجدد هدیه سنجش تطابق
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'pay_dyad_gift') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'pay_dyad_gift' || ($_POST['act'] ?? '') === 'pay_dyad_gift')) {
     csrf_guard();
     $dyadId = (int)post('dyad_id');
     $dy = DB::one('SELECT d.*, t.title AS test_title, t.slug AS test_slug, t.price_full, t.price_sale
@@ -154,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'pay_dyad_gift') {
 
 // ساخت پیوند جدید
 $createdDyad = null;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'create_dyad') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'create_dyad' || ($_POST['act'] ?? '') === 'create_dyad')) {
     csrf_guard();
     $attemptId     = (int)post('attempt_id');
     $relType       = (string)post('rel_type');
@@ -305,7 +311,7 @@ panel_layout($u, 'history');
     </p>
     <div style="display:flex;gap:8px;max-width:540px;margin:0 auto 16px">
       <input type="text" readonly id="dyadLinkInput" value="<?= e($createdDyad['invite_url']) ?>" class="fr-input" style="direction:ltr;text-align:left;font-family:monospace;background:#fff">
-      <button class="fr-btn" type="button" onclick="navigator.clipboard.writeText(document.getElementById('dyadLinkInput').value);toast('لینک دعوت با موفقیت کپی شد! ✅','ok')">کپی لینک</button>
+      <button class="fr-btn" type="button" onclick="copyDyadLink(document.getElementById('dyadLinkInput').value)">کپی لینک</button>
     </div>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       <a class="fr-btn sm ghost" target="_blank" href="https://api.whatsapp.com/send?text=<?= urlencode("سلام " . ($createdDyad['partner_name'] ?: '') . "! من آزمون روانشناسی را در فریا روان انجام دادم. با این لینک بیا تا سازگاری و تطابق شخصیتمان را بسنجیم:
@@ -493,7 +499,7 @@ panel_layout($u, 'history');
                   <button class="fr-btn sm ok" type="submit">تکمیل پرداخت هدیه (درگاه) 💳</button>
                 </form>
               <?php else: ?>
-                <button class="fr-btn sm ghost" type="button" onclick="navigator.clipboard.writeText('<?= fr_panel_url('dyad.php?token=') ?><?= $dy['token'] ?>');toast('لینک دعوت کپی شد! ✅','ok')">کپی لینک دعوت</button>
+                <button class="fr-btn sm ghost" type="button" onclick="copyDyadLink('<?= e(fr_panel_url('dyad.php?token=' . urlencode($dy['token']))) ?>')">کپی لینک دعوت 📋</button>
                 <?php if ($isOwner && !empty($dy['partner_mobile'])): ?>
                   <form method="post" style="margin:0;display:inline">
                     <?= csrf_field() ?>
@@ -523,6 +529,19 @@ panel_layout($u, 'history');
 </div>
 
 <script>
+function copyDyadLink(url) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(function() {
+      if (window.toast) toast('لینک دعوت با موفقیت کپی شد! ✅', 'ok');
+      else alert('لینک دعوت کپی شد:\n' + url);
+    }).catch(function() {
+      prompt('لینک دعوت (برای کپی دستی Ctrl+C را بزنید):', url);
+    });
+  } else {
+    prompt('لینک دعوت (برای کپی دستی Ctrl+C را بزنید):', url);
+  }
+}
+
 function updateDyadPricing() {
   const sel = document.getElementById('attemptSelect');
   if (!sel) return;

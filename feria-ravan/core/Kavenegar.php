@@ -170,6 +170,20 @@ final class Kavenegar
                 'pattern_code' => null,
                 'enabled'      => 1,
             ],
+            'dyad_invite' => [
+                'title'        => 'دعوت به سنجش تطابق دونفره / زوجین',
+                'body'         => '%name% عزیز، دعوت به سنجش تطابق دونفره در %site%: %link%',
+                'use_pattern'  => 0,
+                'pattern_code' => null,
+                'enabled'      => 1,
+            ],
+            'dyad_ready' => [
+                'title'        => 'آماده‌شدن کارنامه تطابق دونفره به دعوت‌کننده',
+                'body'         => '%name% عزیز، همراه شما در آزمون سنجش تطابق شرکت کرد و کارنامه تطابق آماده است: %link%',
+                'use_pattern'  => 0,
+                'pattern_code' => null,
+                'enabled'      => 1,
+            ],
         ];
     }
 

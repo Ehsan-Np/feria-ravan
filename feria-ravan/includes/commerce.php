@@ -512,13 +512,13 @@ function mark_order_paid(int $orderId, string $refId, ?string $cardPan): void
                     $u1 = DB::one('SELECT first_name, last_name FROM ' . DB::t('users') . ' WHERE id=?', [(int)$dyad1['user1_id']]);
                     $u1Name = trim(($u1['first_name'] ?? '') . ' ' . ($u1['last_name'] ?? '')) ?: 'همراه شما';
                     $testTitle = $dyad1['test_title'] ?? 'سنجش تطابق';
-                    $inviteUrl = rtrim(SITE_URL, '/') . '/panel/dyad.php?token=' . urlencode($dyad1['token']);
+                    $inviteUrl = fr_panel_url('dyad.php?token=' . urlencode($dyad1['token']));
                     $pName = $dyad1['partner_name'] ?: 'همراه گرامی';
 
                     require_once FR_ROOT . '/core/Kavenegar.php';
                     $sms = new Kavenegar();
                     $smsText = "{$pName} عزیز، {$u1Name} هزینهٔ نسخهٔ تخصصی آزمون سنجش تطابق ({$testTitle}) را برای شما هدیه و پرداخت کرده است.\nمشاهده و شروع آزمون هدیه:\n{$inviteUrl}";
-                    $sms->sendDirect($dyad1['partner_mobile'], $smsText);
+                    $sms->sendDirect($dyad1['partner_mobile'], $smsText, 'dyad_invite');
                 }
             }
 
