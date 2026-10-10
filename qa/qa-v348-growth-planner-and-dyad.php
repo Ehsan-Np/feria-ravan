@@ -52,7 +52,7 @@ echo "====================================================================\n\n";
 
 // --- 1. Version and Core Global Helper Checks ---
 echo "--- 1. Version and Core Global Helpers ---\n";
-it('Version is advanced to 3.4.8', FR_RELEASE === '3.4.8', 'Actual: ' . FR_RELEASE);
+it('Version is advanced to 3.4.8 or higher', version_compare(FR_RELEASE, '3.4.8', '>='), 'Actual: ' . FR_RELEASE);
 it('post() helper is globally defined', function_exists('post'));
 it('get() helper is globally defined', function_exists('get'));
 it('flash() helper is globally defined', function_exists('flash'));

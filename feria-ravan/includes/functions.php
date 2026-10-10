@@ -678,3 +678,49 @@ if (!function_exists('flash')) {
     }
 }
 
+/** حذف کامل و آبشاری کاربر از تمام جداول سیستم */
+if (!function_exists('fr_admin_delete_user_fully')) {
+    function fr_admin_delete_user_fully(int $uid, string $mobile): void
+    {
+        $T = fn(string $t) => DB::t($t);
+        try { DB::run("SET FOREIGN_KEY_CHECKS=0"); } catch (Throwable $e) {}
+        try {
+            $oids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('orders')} WHERE user_id=?", [$uid]), 'id'));
+            $aids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('attempts')} WHERE user_id=?", [$uid]), 'id'));
+            $rids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('event_registrations')} WHERE user_id=?", [$uid]), 'id'));
+            $tids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('tickets')} WHERE user_id=?", [$uid]), 'id'));
+            $in = fn(array $ids) => $ids ? '(' . implode(',', $ids) . ')' : '(0)';
+            $run = function (string $sql, array $p = []) { try { DB::run($sql, $p); } catch (Throwable $e) { error_log('feria: del_user: ' . $e->getMessage()); } };
+
+            $run("DELETE FROM {$T('payments')} WHERE order_id IN " . $in($oids));
+            $run("DELETE FROM {$T('discount_usage')} WHERE order_id IN " . $in($oids) . " OR user_id=?", [$uid]);
+            $run("DELETE FROM {$T('answers')} WHERE attempt_id IN " . $in($aids));
+            $run("DELETE FROM {$T('results')} WHERE attempt_id IN " . $in($aids));
+            $run("DELETE FROM {$T('reports')} WHERE attempt_id IN " . $in($aids));
+            $run("DELETE FROM {$T('clinical_notes')} WHERE attempt_id IN " . $in($aids));
+            $run("DELETE FROM {$T('attempts')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('orders')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('wallet_transactions')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('refund_requests')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('consult_appointments')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('event_companions')} WHERE user_id=? OR reg_id IN " . $in($rids), [$uid]);
+            $run("DELETE FROM {$T('event_registrations')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('reviews')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('planner_tasks')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('planner_rewards')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('planner_recur')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('social_links')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('notify_log')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('ticket_replies')} WHERE ticket_id IN " . $in($tids));
+            $run("DELETE FROM {$T('tickets')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('otps')} WHERE user_id=? OR mobile=?", [$uid, $mobile]);
+            $run("DELETE FROM {$T('newsletter')} WHERE mobile=?", [$mobile]);
+            $run("DELETE FROM {$T('sessions')} WHERE user_id=?", [$uid]);
+            $run("DELETE FROM {$T('users')} WHERE id=?", [$uid]);
+        } finally {
+            try { DB::run("SET FOREIGN_KEY_CHECKS=1"); } catch (Throwable $e) {}
+        }
+    }
+}
+
+

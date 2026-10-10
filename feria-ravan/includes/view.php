@@ -126,6 +126,7 @@ function panel_layout(array $user, string $active): void
         ['تراکنش‌ها', 'payments', '💳', fr_panel_url('payments.php')],
         ['پروفایل', 'profile', '👤', fr_panel_url('profile.php')],
         ['تیکت پشتیبانی', 'tickets', '🎫', fr_panel_url('tickets.php')],
+        ['سطل زباله', 'trash', '🗑', fr_panel_url('trash.php')],
         ['خروج', 'logout', '🚪', fr_panel_url('logout.php')],
     ];
     // حذف بخش‌های غیرفعال‌شده توسط مدیر (داشبورد/پروفایل/خروج همیشه می‌مانند)

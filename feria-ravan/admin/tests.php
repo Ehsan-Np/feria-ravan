@@ -2,11 +2,29 @@
 /** مدیریت تست‌های روانشناسی — قیمت، وضعیت، دستورالعمل + عملیات گروهی و زباله‌دان (۱٫۹) */
 declare(strict_types=1);
 require_once __DIR__ . '/boot.php';
+require_once __DIR__ . '/../core/TrashManager.php';
 $adm = require_admin(['superadmin','manager','support']);
+TrashManager::ensureSchema();
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ۰) حذف تکی تست روانشناسی (سریع یا نهایی)
+   ۰) حذف تکی یا بازیابی تست روانشناسی
    ══════════════════════════════════════════════════════════════════════════ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'restore_single') {
+    csrf_guard();
+    $tid = (int)post('id');
+    if ($tid > 0) {
+        $row = DB::one('SELECT id, title FROM ' . DB::t('tests') . ' WHERE id=?', [$tid]);
+        if ($row && TrashManager::restore('test', $tid)) {
+            require_once __DIR__ . '/../includes/seo.php';
+            fr_permalinks_flush();
+            flash('تست روانشناسی «' . $row['title'] . '» با موفقیت بازیابی و فعال گردید ♻️', 'ok');
+        } else {
+            flash('خطا در بازیابی تست روانشناسی.', 'err');
+        }
+    }
+    redirect(SITE_URL . '/admin/tests.php?view=trash');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'delete_single') {
     csrf_guard();
     $tid = (int)post('id');
@@ -15,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'delete_single') {
         $row = DB::one('SELECT id, title FROM ' . DB::t('tests') . ' WHERE id=?', [$tid]);
         if ($row) {
             if ($force) {
-                if (fr_purge_test($tid)) {
+                if (TrashManager::purge('test', $tid)) {
                     require_once __DIR__ . '/../includes/seo.php';
                     fr_permalinks_flush();
                     flash('تست روانشناسی «' . $row['title'] . '» و تمامی سوالات و داده‌های آن با موفقیت پاکسازی و حذف شد 🗑', 'ok');
@@ -23,8 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'delete_single') {
                     flash('خطا در پاکسازی تست روانشناسی.', 'err');
                 }
             } else {
-                DB::update('tests', ['status' => 'trash'], 'id=?', [$tid]);
-                log_activity('test_trash', 'test', $tid);
+                TrashManager::trash('test', $tid, (int)($adm['id'] ?? 0));
                 flash('تست روانشناسی «' . $row['title'] . '» به زباله‌دان منتقل شد.', 'ok');
             }
         }
@@ -358,12 +375,36 @@ endif;
               : ($t['status']==='trash' ? '<span class="fr-chip warn">زباله‌دان</span>'
               : '<span class="fr-chip warn">'.e($t['status']).'</span>') ?></td>
         <td class="actions" style="white-space:nowrap">
-          <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?><?= $view==='trash'?'&view=trash':'' ?>" title="ویرایش تست روانشناسی">ویرایش</a>
-          <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>" title="مدیریت سوالات">سوالات</a>
-          <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>" title="قالب‌های تحلیل">الگوها</a>
-          <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?test_id=<?= $t['id'] ?>" title="مشاهده نتایج و تحلیل‌های مراجعین">📊 تحلیل مراجعین</a>
-          <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" title="مدیریت شرکت‌کنندگان">👥</a>
-          <button type="button" class="fr-btn sm danger" onclick="frDeleteTest(<?= (int)$t['id'] ?>, '<?= e(addslashes($t['title'])) ?>')" title="حذف این تست روانشناسی">🗑</button>
+          <?php if ($view === 'trash'): ?>
+            <form method="post" style="display:inline" onsubmit="return confirm('آیا از بازیابی این تست روانشناسی اطمینان دارید؟');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="restore_single">
+              <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+              <button class="fr-btn sm ok" style="background:#059669;color:#fff" type="submit">♻️ بازیابی</button>
+            </form>
+            <form method="post" style="display:inline" onsubmit="return confirm('⚠️ حذف نهایی و پاکسازی کامل:\n\nاین عملیات تست، سؤالات و تمامی اطلاعات آن را برای همیشه پاک می‌کند و غیرقابل بازگشت است.');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="delete_single">
+              <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+              <input type="hidden" name="force" value="1">
+              <input type="hidden" name="view" value="trash">
+              <button class="fr-btn sm danger" type="submit">❌ حذف قطعی</button>
+            </form>
+          <?php else: ?>
+            <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?>" title="ویرایش تست روانشناسی">ویرایش</a>
+            <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>" title="مدیریت سوالات">سوالات</a>
+            <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>" title="قالب‌های تحلیل">الگوها</a>
+            <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?test_id=<?= $t['id'] ?>" title="مشاهده نتایج و تحلیل‌های مراجعین">📊 تحلیل مراجعین</a>
+            <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" title="مدیریت شرکت‌کنندگان">👥</a>
+            <form method="post" style="display:inline" onsubmit="return confirm('انتقال تست «<?= htmlspecialchars($t['title'], ENT_QUOTES, 'UTF-8') ?>» به سطل زباله؟');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="delete_single">
+              <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+              <input type="hidden" name="force" value="0">
+              <input type="hidden" name="view" value="active">
+              <button class="fr-btn sm danger" type="submit" title="انتقال به سطل زباله">🗑</button>
+            </form>
+          <?php endif; ?>
         </td>
       </tr>
       <?php endforeach; ?>

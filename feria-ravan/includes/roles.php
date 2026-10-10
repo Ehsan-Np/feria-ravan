@@ -52,6 +52,7 @@ function fr_page_cap_map(): array
         'contacts.php' => 'newsletter', 'campaigns.php' => 'newsletter',
         'settings.php' => 'settings', 'texts.php' => 'texts',
         'roles.php' => 'roles', 'admins.php' => 'roles', 'updater.php' => 'settings',
+        'trash.php' => null,
     ];
 }
 

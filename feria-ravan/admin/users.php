@@ -1,13 +1,20 @@
 <?php
-/** مدیریت کاربران — جستجو، مسدودسازی، خروجی Excel/CSV فارسی */
+/** مدیریت کاربران — جستجو، مسدودسازی، ویرایش، سطل زباله، خروجی Excel/CSV فارسی */
 declare(strict_types=1);
 require_once __DIR__ . '/boot.php';
+require_once __DIR__ . '/../core/TrashManager.php';
 $adm = require_admin();
+TrashManager::ensureSchema();
 
+$viewMode = (string)($_GET['view'] ?? 'active');
 $q = trim((string)($_GET['q'] ?? ''));
-$where = "status!='deleted'";
+
+$where = ($viewMode === 'trash') ? "(status='deleted' OR deleted_at IS NOT NULL)" : "(status!='deleted' AND deleted_at IS NULL)";
 $params = [];
 if ($q !== '') { $where .= " AND (mobile LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR national_code LIKE ? OR username LIKE ?)"; $p = "%$q%"; $params = [$p,$p,$p,$p,$p]; }
+
+$activeCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('users') . " WHERE status!='deleted' AND deleted_at IS NULL");
+$trashCount  = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('users') . " WHERE status='deleted' OR deleted_at IS NOT NULL");
 
 /* خروجی اکسل/CSV */
 if (isset($_GET['export'])) {
@@ -32,6 +39,7 @@ if (isset($_GET['export'])) {
 require_once __DIR__ . '/../includes/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
     $act = (string)post('act');
 
     if ($act === 'add_user') {
@@ -81,6 +89,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(SITE_URL . '/admin/users.php' . ($q ? '?q='.urlencode($q) : ''));
     }
 
+    if ($act === 'edit_user') {
+        $id    = (int)post('id');
+        $first = mb_substr(trim((string)post('first_name')), 0, 100);
+        $last  = mb_substr(trim((string)post('last_name')), 0, 100);
+        $mob   = en_num(trim((string)post('mobile')));
+        $nc    = en_num(trim((string)post('national_code')));
+        $un    = mb_substr(trim((string)post('username')), 0, 60);
+        $job   = mb_substr(trim((string)post('job_title')), 0, 100);
+        $st    = in_array(post('status'), ['active', 'blocked', 'banned'], true) ? post('status') : 'active';
+        $pass  = (string)($_POST['password'] ?? '');
+
+        if (!valid_mobile($mob)) {
+            flash('شماره موبایل واردشده معتبر نیست.', 'err');
+        } else {
+            $dupMob = (int)DB::val("SELECT id FROM " . DB::t('users') . " WHERE mobile=? AND id<>?", [$mob, $id]);
+            if ($dupMob > 0) {
+                flash('این شماره موبایل به کاربر دیگری تعلق دارد.', 'err');
+            } else {
+                $upData = [
+                    'first_name'    => $first !== '' ? $first : null,
+                    'last_name'     => $last !== '' ? $last : null,
+                    'mobile'        => $mob,
+                    'national_code' => $nc !== '' ? $nc : null,
+                    'username'      => $un !== '' ? $un : null,
+                    'job_title'     => $job !== '' ? $job : null,
+                    'status'        => $st,
+                ];
+                if ($pass !== '') {
+                    if (strlen($pass) < 6) {
+                        flash('رمز عبور باید حداقل ۶ کاراکتر باشد.', 'err');
+                        redirect(SITE_URL . '/admin/users.php?edit_u=' . $id);
+                    }
+                    $upData['password_hash'] = password_hash($pass, PASSWORD_ARGON2ID);
+                }
+                DB::update('users', $upData, 'id=?', [$id]);
+                log_activity('admin_user_edit', 'user', $id);
+                flash('اطلاعات کاربر با موفقیت ویرایش و ذخیره شد ✅', 'ok');
+                redirect(SITE_URL . '/admin/users.php');
+            }
+        }
+        redirect(SITE_URL . '/admin/users.php?edit_u=' . $id);
+    }
+
     if ($act === 'toggle_block') {
         $id = (int)post('id');
         $row = DB::one("SELECT status FROM " . DB::t('users') . " WHERE id=?", [$id]);
@@ -88,47 +139,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         DB::update('users', ['status'=>$new], 'id=?', [$id]);
         log_activity('admin_user_'.($new==='blocked'?'block':'unblock'), 'user', $id);
         flash($new==='blocked' ? 'کاربر مسدود شد.' : 'کاربر رفع‌مسدود شد ✅');
+        redirect(SITE_URL . '/admin/users.php' . ($q ? '?q='.urlencode($q) : ''));
     }
+
     if ($act === 'reset_pass') {
         $id = (int)post('id');
         $newPass = 'Fr' . random_int(100000, 999999);
         DB::update('users', ['password_hash'=>password_hash($newPass, PASSWORD_ARGON2ID)], 'id=?', [$id]);
         log_activity('admin_reset_pass', 'user', $id);
         flash('رمز جدید کاربر: ' . $newPass . ' (یک‌بار نمایش داده شد — برای کاربر ارسال کنید)', 'warn');
+        redirect(SITE_URL . '/admin/users.php' . ($q ? '?q='.urlencode($q) : ''));
     }
-    /* ── ۲٫۳: حذف کامل کاربر و همهٔ داده‌هایش ── */
-    if ($act === 'del_user') {
+
+    /* ── انتقال به سطل زباله ── */
+    if ($act === 'trash_user') {
+        $id = (int)post('id');
+        $urow = DB::one("SELECT first_name, last_name, mobile FROM " . DB::t('users') . " WHERE id=?", [$id]);
+        if ($urow && TrashManager::trash('user', $id, (int)($adm['id'] ?? 0))) {
+            $nm = trim(($urow['first_name'] ?? '') . ' ' . ($urow['last_name'] ?? '')) ?: (string)$urow['mobile'];
+            flash('کاربر «' . $nm . '» به سطل زباله منتقل گردید 🗑 (امکان بازیابی در سطل زباله وجود دارد)', 'ok');
+        } else {
+            flash('خطا در انتقال کاربر به سطل زباله.', 'err');
+        }
+        redirect(SITE_URL . '/admin/users.php' . ($viewMode === 'trash' ? '?view=trash' : ''));
+    }
+
+    /* ── بازیابی کاربر از سطل زباله ── */
+    if ($act === 'restore_user') {
+        $id = (int)post('id');
+        $urow = DB::one("SELECT first_name, last_name, mobile FROM " . DB::t('users') . " WHERE id=?", [$id]);
+        if ($urow && TrashManager::restore('user', $id)) {
+            $nm = trim(($urow['first_name'] ?? '') . ' ' . ($urow['last_name'] ?? '')) ?: (string)$urow['mobile'];
+            flash('کاربر «' . $nm . '» با موفقیت از سطل زباله بازیابی و فعال گردید ♻️', 'ok');
+        } else {
+            flash('خطا در بازیابی کاربر.', 'err');
+        }
+        redirect(SITE_URL . '/admin/users.php?view=trash');
+    }
+
+    /* ── حذف کامل و دائمی ── */
+    if ($act === 'del_user' || $act === 'purge_user') {
         $id = (int)post('id');
         $urow = DB::one("SELECT * FROM " . DB::t('users') . " WHERE id=?", [$id]);
         if (!$urow) {
-            flash('کاربر یافت نشد (شاید قبلاً حذف شده).', 'err');
+            flash('کاربر یافت نشد.', 'err');
         } elseif ((int)DB::val("SELECT COUNT(*) FROM " . DB::t('admins') . " WHERE user_id=?", [$id]) > 0) {
-            flash('این کاربر هنوز حساب مدیر دارد؛ ابتدا از صفحهٔ «نقش‌ها و مدیران» تنزیلش کنید، بعد حذف نمایید.', 'err');
+            flash('این کاربر حساب مدیر دارد؛ ابتدا از صفحهٔ «نقش‌ها و مدیران» تنزیلش کنید، بعد حذف نمایید.', 'err');
         } else {
-            $confirmMob = trim(en_num((string)post('confirm_mobile')));
-            if ($confirmMob !== (string)$urow['mobile']) {
-                flash('حذف انجام نشد: برای تأیید باید موبایل کاربر را دقیق وارد کنید.', 'err');
-            } else {
-                $nm = trim(($urow['first_name'] ?? '') . ' ' . ($urow['last_name'] ?? '')) ?: (string)$urow['mobile'];
-                fr_admin_delete_user_fully($id, (string)$urow['mobile']);
-                log_activity('admin_user_delete', 'user', $id, ['mobile' => (string)$urow['mobile'], 'name' => $nm]);
-                flash('کاربر «' . $nm . '» و کلِ داده‌هایش (تاریخچهٔ تست‌ها، ثبت‌نام‌ها، سفارش‌ها، دیدگاه‌ها و…) به‌طور کامل و غیرقابل‌بازگشت حذف شد. 🗑');
-            }
+            $nm = trim(($urow['first_name'] ?? '') . ' ' . ($urow['last_name'] ?? '')) ?: (string)$urow['mobile'];
+            TrashManager::purge('user', $id);
+            flash('کاربر «' . $nm . '» و کلِ داده‌هایش به‌طور کامل و برای همیشه از سیستم حذف گردید ❌');
         }
+        redirect(SITE_URL . '/admin/users.php' . ($viewMode === 'trash' ? '?view=trash' : ''));
     }
-    redirect(SITE_URL . '/admin/users.php' . ($q ? '?q='.urlencode($q) : ''));
 }
 
 /**
  * حذف کامل کاربر از همهٔ جدول‌ها — نسخهٔ ۲٫۳
- * (با خاموش‌کردن موقت بررسی کلیدهای خارجی تا ترتیب حذف مهم نباشد؛ هر جدول جداگانه و امن پاک می‌شود)
  */
 function fr_admin_delete_user_fully(int $uid, string $mobile): void
 {
     $T = fn(string $t) => DB::t($t);
     try { DB::run("SET FOREIGN_KEY_CHECKS=0"); } catch (Throwable $e) {}
     try {
-        /* مجموعه‌های وابسته » سفارش‌ها و تلاش‌های تست */
         $oids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('orders')} WHERE user_id=?", [$uid]), 'id'));
         $aids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('attempts')} WHERE user_id=?", [$uid]), 'id'));
         $rids = array_map('intval', array_column(DB::all("SELECT id FROM {$T('event_registrations')} WHERE user_id=?", [$uid]), 'id'));
@@ -141,6 +214,7 @@ function fr_admin_delete_user_fully(int $uid, string $mobile): void
         $run("DELETE FROM {$T('answers')} WHERE attempt_id IN " . $in($aids));
         $run("DELETE FROM {$T('results')} WHERE attempt_id IN " . $in($aids));
         $run("DELETE FROM {$T('reports')} WHERE attempt_id IN " . $in($aids));
+        $run("DELETE FROM {$T('clinical_notes')} WHERE attempt_id IN " . $in($aids));
         $run("DELETE FROM {$T('attempts')} WHERE user_id=?", [$uid]);
         $run("DELETE FROM {$T('orders')} WHERE user_id=?", [$uid]);
         $run("DELETE FROM {$T('wallet_transactions')} WHERE user_id=?", [$uid]);
@@ -165,16 +239,78 @@ function fr_admin_delete_user_fully(int $uid, string $mobile): void
     }
 }
 
+$editUserId = (int)($_GET['edit_u'] ?? 0);
+$editUser = $editUserId > 0 ? DB::one("SELECT * FROM " . DB::t('users') . " WHERE id=?", [$editUserId]) : null;
+
 $page   = max(1, (int)($_GET['page'] ?? 1));
 $per    = 20;
 $rows   = DB::all("SELECT * FROM " . DB::t('users') . " WHERE $where ORDER BY id DESC LIMIT $per OFFSET " . (($page-1)*$per), $params);
 $total  = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('users') . " WHERE $where", $params);
 $pages  = max(1, (int)ceil($total/$per));
 
-admin_layout($adm, 'users', 'کاربران');
+admin_layout($adm, 'users', ($viewMode === 'trash' ? '🗑 سطل زباله کاربران' : 'کاربران'));
 echo flash();
 ?>
+
+<?php if ($editUser): ?>
+<!-- ── کارت ویرایش کاربر ── -->
+<div class="fr-card" style="margin-bottom:20px;border-top:3px solid var(--c-primary)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:10px">
+    <h3 style="margin:0">✏️ ویرایش مشخصات کاربر: <?= e(trim(($editUser['first_name'] ?? '') . ' ' . ($editUser['last_name'] ?? '')) ?: $editUser['mobile']) ?> (#<?= fa_num($editUser['id']) ?>)</h3>
+    <a class="fr-btn sm ghost" href="users.php">← بازگشت به لیست</a>
+  </div>
+  <form method="post" autocomplete="off">
+    <?= csrf_field() ?>
+    <input type="hidden" name="act" value="edit_user">
+    <input type="hidden" name="id" value="<?= (int)$editUser['id'] ?>">
+    <div class="fr-grid cols-3" style="gap:12px">
+      <div class="fr-field">
+        <label>نام</label>
+        <input class="fr-input" name="first_name" value="<?= e($editUser['first_name'] ?? '') ?>" maxlength="100">
+      </div>
+      <div class="fr-field">
+        <label>نام خانوادگی</label>
+        <input class="fr-input" name="last_name" value="<?= e($editUser['last_name'] ?? '') ?>" maxlength="100">
+      </div>
+      <div class="fr-field">
+        <label>شماره موبایل *</label>
+        <input class="fr-input" name="mobile" value="<?= e($editUser['mobile'] ?? '') ?>" style="direction:ltr;text-align:center" required maxlength="11">
+      </div>
+      <div class="fr-field">
+        <label>کد ملی</label>
+        <input class="fr-input" name="national_code" value="<?= e($editUser['national_code'] ?? '') ?>" style="direction:ltr;text-align:center" maxlength="10">
+      </div>
+      <div class="fr-field">
+        <label>نام کاربری / آیدی</label>
+        <input class="fr-input" name="username" value="<?= e($editUser['username'] ?? '') ?>" style="direction:ltr" maxlength="60">
+      </div>
+      <div class="fr-field">
+        <label>شغل / تخصص</label>
+        <input class="fr-input" name="job_title" value="<?= e($editUser['job_title'] ?? '') ?>" maxlength="100">
+      </div>
+      <div class="fr-field">
+        <label>وضعیت حساب</label>
+        <select class="fr-select" name="status">
+          <option value="active" <?= $editUser['status']==='active'?'selected':'' ?>>فعال 🟢</option>
+          <option value="blocked" <?= in_array($editUser['status'],['blocked','banned'],true)?'selected':'' ?>>مسدود ⛔</option>
+        </select>
+      </div>
+      <div class="fr-field">
+        <label>رمز عبور جدید (اختیاری — فقط در صورت تغییر وارد کنید)</label>
+        <input class="fr-input" name="password" style="direction:ltr" placeholder="حداقل ۶ کاراکتر" maxlength="64" autocomplete="new-password">
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="fr-btn" type="submit">💾 ذخیره تغییرات کاربر</button>
+      <a class="fr-btn ghost" href="users.php">انصراف</a>
+      <a class="fr-btn sm" style="margin-right:auto;background:#4338ca;color:#fff" href="user-view.php?id=<?= $editUser['id'] ?>" target="_blank">مشاهده پرونده کامل کاربر ↗</a>
+    </div>
+  </form>
+</div>
+<?php endif; ?>
+
 <!-- ۲٫۲ — افزودن کاربر جدید از پیشخوان -->
+<?php if (!$editUser && $viewMode !== 'trash'): ?>
 <details class="fr-card" style="cursor:default" id="addUserCard">
   <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px">
     <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--c-primary),var(--c-secondary));color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:18px">＋</span>
@@ -194,21 +330,45 @@ echo flash();
     <button class="fr-btn">➕ ساخت کاربر</button>
   </form>
 </details>
+<?php endif; ?>
+
 <div class="fr-card">
-  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <input class="fr-input" name="q" value="<?= e($q) ?>" placeholder="جستجو: نام / موبایل / کد ملی / نام کاربری" style="max-width:320px">
-    <button class="fr-btn sm">جستجو</button>
-    <span class="fr-chip info"><?= fa_num($total) ?> کاربر</span>
-    <a class="fr-btn sm accent" href="?export=xls<?= $q?'&q='.urlencode($q):'' ?>">📊 خروجی Excel</a>
-    <a class="fr-btn sm ghost" href="?export=csv<?= $q?'&q='.urlencode($q):'' ?>">⬇ خروجی CSV</a>
-  </form>
-</div>
-<div class="fr-card">
+  <!-- نوار تغییر نما و خروجی -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <a class="fr-chip <?= $viewMode==='active'?'purple':'info' ?>" href="users.php?view=active" style="text-decoration:none">
+        کاربران فعال (<?= fa_num($activeCount) ?>)
+      </a>
+      <a class="fr-chip <?= $viewMode==='trash'?'purple':'info' ?>" href="users.php?view=trash" style="text-decoration:none">
+        🗑 سطل زباله (<?= fa_num($trashCount) ?>)
+      </a>
+      <a class="fr-chip ghost" href="<?= SITE_URL ?>/admin/trash.php?tab=users" style="text-decoration:none">
+        مدیریت سطل زباله سیستم ↗
+      </a>
+    </div>
+
+    <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="hidden" name="view" value="<?= e($viewMode) ?>">
+      <input class="fr-input" name="q" value="<?= e($q) ?>" placeholder="جستجو: نام / موبایل / کد ملی" style="max-width:240px">
+      <button class="fr-btn sm">جستجو</button>
+      <a class="fr-btn sm accent" href="?export=xls&view=<?= $viewMode ?><?= $q?'&q='.urlencode($q):'' ?>">📊 Excel</a>
+      <a class="fr-btn sm ghost" href="?export=csv&view=<?= $viewMode ?><?= $q?'&q='.urlencode($q):'' ?>">⬇ CSV</a>
+    </form>
+  </div>
+
   <div style="overflow-x:auto"><table class="fr-table">
-    <thead><tr><th>#</th><th>نام</th><th>موبایل</th><th>کد ملی</th><th>شغل</th><th>عضویت</th><th>آخرین ورود</th><th>وضعیت</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>نام</th><th>موبایل</th><th>کد ملی</th><th>شغل</th><th>عضویت</th><th>آخرین ورود</th><th>وضعیت</th><th style="min-width:220px">اقدامات</th></tr></thead>
     <tbody>
+    <?php if (empty($rows)): ?>
+      <tr>
+        <td colspan="9" style="text-align:center;padding:32px 0;color:var(--muted)">
+          <?= $viewMode === 'trash' ? 'هیچ کاربری در سطل زباله وجود ندارد.' : 'کاربری یافت نشد.' ?>
+        </td>
+      </tr>
+    <?php endif; ?>
+
     <?php foreach ($rows as $u): ?>
-    <tr style="<?= $u['status']==='active'?'':'opacity:.5' ?>">
+    <tr style="<?= $u['status']==='active'?'':'opacity:.7' ?>">
       <td><?= fa_num($u['id']) ?></td>
       <td><b><?= e(trim($u['first_name'].' '.$u['last_name']) ?: '—') ?></b></td>
       <td style="direction:ltr"><?= fa_num($u['mobile']) ?><?= !empty($u['username']) ? '<br><small style="color:var(--muted)">@' . e($u['username']) . '</small>' : '' ?></td>
@@ -216,30 +376,58 @@ echo flash();
       <td style="font-size:12px"><?= e($u['job_title'] ?? '—') ?></td>
       <td style="font-size:12px"><?= fa_num(jdate('j F Y', strtotime($u['created_at']))) ?></td>
       <td style="font-size:12px"><?= $u['last_login_at'] ? fa_num(jdate('j F Y - H:i', strtotime($u['last_login_at']))) : '—' ?></td>
-      <td><?= $u['status']==='active' ? '<span class="fr-chip ok">فعال</span>' : '<span class="fr-chip err">مسدود</span>' ?></td>
-      <td class="actions" style="white-space:nowrap">
-        <a class="fr-btn sm" href="user-view.php?id=<?= $u['id'] ?>">پرونده</a>
-        <form method="post" style="display:inline">
-          <?= csrf_field() ?><input type="hidden" name="act" value="toggle_block">
-          <input type="hidden" name="id" value="<?= $u['id'] ?>">
-          <button class="fr-btn sm <?= $u['status']==='active'?'danger':'accent' ?>"><?= $u['status']==='active'?'مسدود':'فعال‌سازی' ?></button>
-        </form>
-        <form method="post" style="display:inline" onsubmit="return confirm('رمز جدید ساخته شود؟')">
-          <?= csrf_field() ?><input type="hidden" name="act" value="reset_pass">
-          <input type="hidden" name="id" value="<?= $u['id'] ?>">
-          <button class="fr-btn sm ghost">ریست رمز</button>
-        </form>
-        <?php /* نسخهٔ ۲٫۱: تبدیل کاربر به مدیر با نقش دلخواه — فقط مدیر ارشد */ ?>
-        <?php if (($adm['role'] ?? '') === 'superadmin'): ?>
-        <a class="fr-btn sm ghost" href="admins.php?from_user=<?= (int)$u['id'] ?>" title="ساخت حساب مدیر برای این کاربر">🛂 مدیر کردن</a>
+      <td>
+        <?php if ($viewMode === 'trash'): ?>
+          <span class="fr-chip err">در سطل زباله</span>
+        <?php elseif ($u['status']==='active'): ?>
+          <span class="fr-chip ok">فعال</span>
+        <?php else: ?>
+          <span class="fr-chip err">مسدود</span>
         <?php endif; ?>
-        <?php /* نسخهٔ ۲٫۳: حذف کامل و غیرقابل‌بازگشت کاربر — با تأیید دومرحله‌ای (تایپ موبایل) */ ?>
-        <form method="post" style="display:inline" data-deluser data-mobile="<?= e($u['mobile']) ?>" data-name="<?= e(trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''))) ?>">
-          <?= csrf_field() ?><input type="hidden" name="act" value="del_user">
-          <input type="hidden" name="id" value="<?= $u['id'] ?>">
-          <input type="hidden" name="confirm_mobile" value="">
-          <button type="button" class="fr-btn sm danger" title="حذف کامل کاربر و همهٔ داده‌هایش">🗑 حذف کامل</button>
-        </form>
+      </td>
+      <td class="actions" style="white-space:nowrap">
+        <?php if ($viewMode === 'trash'): ?>
+          <!-- دکمه بازیابی -->
+          <form method="post" style="display:inline" onsubmit="return confirm('آیا از بازیابی این کاربر و بازگرداندن آن به لیست فعال اطمینان دارید؟');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="restore_user">
+            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+            <button class="fr-btn sm ok" style="background:#059669;color:#fff" type="submit">♻️ بازیابی</button>
+          </form>
+
+          <!-- دکمه حذف دائمی -->
+          <form method="post" style="display:inline" onsubmit="return confirm('⚠️ حذف نهایی و قطعی:\n\nآیا از حذف کامل و غیرقابل‌بازگشت این کاربر و همه سوابقش اطمینان دارید؟');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="purge_user">
+            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+            <button class="fr-btn sm danger" type="submit">❌ حذف قطعی</button>
+          </form>
+        <?php else: ?>
+          <a class="fr-btn sm ghost" href="?edit_u=<?= $u['id'] ?>" title="ویرایش اطلاعات کاربر">✏️ ویرایش</a>
+          <a class="fr-btn sm" href="user-view.php?id=<?= $u['id'] ?>" title="مشاهده پرونده کاربر">📁 پرونده</a>
+          <form method="post" style="display:inline">
+            <?= csrf_field() ?><input type="hidden" name="act" value="toggle_block">
+            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+            <button class="fr-btn sm <?= $u['status']==='active'?'danger':'accent' ?>"><?= $u['status']==='active'?'مسدود':'فعال‌سازی' ?></button>
+          </form>
+          <form method="post" style="display:inline" onsubmit="return confirm('رمز جدید ساخته شود؟')">
+            <?= csrf_field() ?><input type="hidden" name="act" value="reset_pass">
+            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+            <button class="fr-btn sm ghost">ریست رمز</button>
+          </form>
+
+          <?php if (($adm['role'] ?? '') === 'superadmin'): ?>
+          <a class="fr-btn sm ghost" href="admins.php?from_user=<?= (int)$u['id'] ?>" title="ساخت حساب مدیر برای این کاربر">🛂 مدیر کردن</a>
+          <?php endif; ?>
+
+          <!-- دکمه انتقال به سطل زباله بدون وابستگی به جاوااسکریپت نامطمئن -->
+          <form method="post" style="display:inline" onsubmit="return confirm('انتقال کاربر «<?= htmlspecialchars(user_fullname($u), ENT_QUOTES, 'UTF-8') ?>» به سطل زباله؟\n(امکان بازیابی در سطل زباله وجود دارد)');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="trash_user">
+            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+            <button type="submit" class="fr-btn sm danger" title="انتقال کاربر به سطل زباله">🗑 حذف</button>
+          </form>
+        <?php endif; ?>
       </td>
     </tr>
     <?php endforeach; ?>
@@ -248,23 +436,9 @@ echo flash();
   <?php if ($pages>1): ?>
   <div style="display:flex;gap:6px;justify-content:center;margin-top:14px">
     <?php for($p=1;$p<=$pages;$p++): ?>
-      <a class="fr-btn sm <?= $p===$page?'':'ghost' ?>" href="?page=<?= $p ?><?= $q?'&q='.urlencode($q):'' ?>"><?= fa_num($p) ?></a>
+      <a class="fr-btn sm <?= $p===$page?'':'ghost' ?>" href="?page=<?= $p ?>&view=<?= $viewMode ?><?= $q?'&q='.urlencode($q):'' ?>"><?= fa_num($p) ?></a>
     <?php endfor; ?>
   </div>
   <?php endif; ?>
 </div>
-<script>
-/* حذف کامل کاربر — تأیید دومرحله‌ای: تایپ موبایل + تأیید نهایی */
-document.querySelectorAll('form[data-deluser]').forEach(function(f){
-  f.querySelector('button').addEventListener('click', function(){
-    var mob = f.dataset.mobile, name = f.dataset.name || 'این کاربر';
-    var typed = prompt('⚠️ حذف کامل و غیرقابل‌بازگشت «' + name + '»\nهمهٔ داده‌ها (تست‌ها، ثبت‌نام‌ها، سفارش‌ها، دیدگاه‌ها، پلنر و…) حذف می‌شود.\nبرای تأیید، موبایل کاربر را وارد کنید:');
-    if (typed === null) return;
-    if (typed.trim() !== mob) { alert('موبایل واردشده مطابق نیست؛ حذف انجام نشد.'); return; }
-    if (!confirm('آخرین تأیید: حذف کامل ' + name + ' قطعی شود؟')) return;
-    f.querySelector('input[name="confirm_mobile"]').value = typed.trim();
-    f.submit();
-  });
-});
-</script>
 <?php admin_layout_end(); ?>

@@ -53,6 +53,7 @@ function admin_layout(array $admin, string $active, string $title): void
         ['monitor','🛡 رصد فعالیت','/admin/monitor.php'],
         ['texts','✏️ متن‌های سایت','/admin/texts.php'],
         ['roles','🛂 نقش‌ها و مدیران','/admin/roles.php'],
+        ['trash','🗑 سطل زباله','/admin/trash.php'],
         ['settings','⚙️ تنظیمات','/admin/settings.php'],
         ['updater','🚀 به‌روزرسانی سامانه','/admin/updater.php'],
     ];
@@ -84,7 +85,7 @@ function admin_layout(array $admin, string $active, string $title): void
         ['id' => 'grp-sales',    'label' => '💳 فروش و مالی',            'keys' => ['orders', 'discounts', 'refunds', 'tickets']],
         ['id' => 'grp-marketing','label' => '📨 بازاریابی و اطلاع‌رسانی', 'keys' => ['newsletter', 'contacts', 'campaigns', 'notifications', 'planner', 'sms']],
         ['id' => 'grp-content',  'label' => '🖼 محتوا و سئو',            'keys' => ['banners', 'texts', 'permalinks']],
-        ['id' => 'grp-system',   'label' => '⚙️ سیستم',                  'keys' => ['monitor', 'roles', 'settings', 'updater']],
+        ['id' => 'grp-system',   'label' => '⚙️ سیستم',                  'keys' => ['monitor', 'roles', 'trash', 'settings', 'updater']],
     ];
 
     /* هر کلیدِ باقی‌مانده (تعریف‌نشده در گروه‌ها) به‌صورت تکی نمایش داده می‌شود */

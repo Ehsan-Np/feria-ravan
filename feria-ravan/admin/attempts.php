@@ -12,11 +12,13 @@ require_once __DIR__ . '/boot.php';
 require_once __DIR__ . '/../includes/report.php';
 require_once __DIR__ . '/../core/Analyzer.php';
 require_once __DIR__ . '/../core/DyadAnalyzer.php';
+require_once __DIR__ . '/../core/TrashManager.php';
 
 $adm = require_admin(['superadmin', 'manager', 'support']);
+TrashManager::ensureSchema();
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ۱) عملیات POST (ارسال پیامک، محاسبه مجدد، ارتقای نسخه، حذف)
+   ۱) عملیات POST (ارسال پیامک، محاسبه مجدد، ارتقای نسخه، حذف و سطل زباله)
    ══════════════════════════════════════════════════════════════════════════ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_guard();
@@ -29,9 +31,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       JOIN ' . DB::t('users') . ' u ON u.id=a.user_id
                       WHERE a.id=?', [$attemptId]);
 
-    if (!$atRow && in_array($act, ['sms_report', 'sms_nudge', 'rescore', 'upgrade_mode', 'del_attempt'], true)) {
+    if (!$atRow && in_array($act, ['sms_report', 'sms_nudge', 'rescore', 'upgrade_mode', 'del_attempt', 'trash_attempt', 'restore_attempt', 'purge_attempt'], true)) {
         flash('جلسهٔ آزمون مورد نظر یافت نشد.', 'err');
         redirect(SITE_URL . '/admin/attempts.php');
+    }
+
+    // انتقال به سطل زباله
+    if ($act === 'trash_attempt' || $act === 'del_attempt') {
+        if (TrashManager::trash('attempt', $attemptId, (int)($adm['id'] ?? 0))) {
+            flash('جلسهٔ آزمون مراجع با موفقیت به سطل زباله منتقل گردید 🗑 (امکان بازیابی در سطل زباله وجود دارد)', 'ok');
+        } else {
+            flash('خطا در انتقال جلسهٔ آزمون به سطل زباله.', 'err');
+        }
+        redirect(SITE_URL . '/admin/attempts.php');
+    }
+
+    // بازیابی از سطل زباله
+    if ($act === 'restore_attempt') {
+        if (TrashManager::restore('attempt', $attemptId)) {
+            flash('جلسهٔ آزمون مراجع با موفقیت بازیابی و فعال گردید ♻️', 'ok');
+        } else {
+            flash('خطا در بازیابی جلسهٔ آزمون.', 'err');
+        }
+        redirect(SITE_URL . '/admin/attempts.php?view=trash');
+    }
+
+    // حذف قطعی و دائمی
+    if ($act === 'purge_attempt') {
+        if (TrashManager::purge('attempt', $attemptId)) {
+            flash('جلسهٔ آزمون و تمامی نتایج آن برای همیشه از سیستم حذف گردید ❌', 'ok');
+        } else {
+            flash('خطا در حذف قطعی جلسهٔ آزمون.', 'err');
+        }
+        redirect(SITE_URL . '/admin/attempts.php?view=trash');
     }
 
     // ارسال لینک کارنامه با پیامک برای مراجع
@@ -291,13 +323,14 @@ if ($viewAttemptId > 0) {
 /* ══════════════════════════════════════════════════════════════════════════
    ۳) فهرست جامع آزمون‌های مراجعین (Main List View)
    ══════════════════════════════════════════════════════════════════════════ */
+$viewMode       = (string)($_GET['view'] ?? 'active');
 $filterTest     = (int)($_GET['test_id'] ?? 0);
 $filterStatus   = (string)($_GET['status'] ?? '');
 $filterMode     = (string)($_GET['mode'] ?? '');
 $filterCategory = (string)($_GET['category'] ?? '');
 $searchQ        = trim((string)($_GET['q'] ?? ''));
 
-$whereParts = ["1=1"];
+$whereParts = ($viewMode === 'trash') ? ["a.deleted_at IS NOT NULL"] : ["a.deleted_at IS NULL"];
 $params = [];
 
 if ($filterTest > 0) {
@@ -350,15 +383,16 @@ $attempts = DB::all("
 ", $params);
 
 // آمارهای کلی
-$statTotal     = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts'));
-$statCompleted = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE status = 'completed'");
-$statFull      = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE mode = 'full'");
-$statOpen      = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE status = 'in_progress'");
+$statTotal     = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE deleted_at IS NULL");
+$statCompleted = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE deleted_at IS NULL AND status = 'completed'");
+$statFull      = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE deleted_at IS NULL AND mode = 'full'");
+$statOpen      = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE deleted_at IS NULL AND status = 'in_progress'");
+$statTrash     = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') . " WHERE deleted_at IS NOT NULL");
 
 // لیست تست‌ها جهت فیلتر
 $allTests = DB::all("SELECT id, title, category FROM " . DB::t('tests') . " WHERE status <> 'trash' ORDER BY sort_order");
 
-admin_layout($adm, 'attempts', '📊 نتایج و تحلیل تست‌های انجام‌شده توسط مراجعین');
+admin_layout($adm, 'attempts', ($viewMode === 'trash' ? '🗑 سطل زباله آزمون‌ها' : '📊 نتایج و تحلیل تست‌های انجام‌شده توسط مراجعین'));
 echo flash();
 ?>
 <div style="max-width:1160px;margin:0 auto">
@@ -368,7 +402,20 @@ echo flash();
     <?php stat_card('🧠', 'کل آزمون‌های انجام‌شده', fa_num($statTotal)); ?>
     <?php stat_card('✅', 'تکمیل و تحلیل‌شده', fa_num($statCompleted), '#ecfbf4'); ?>
     <?php stat_card('⭐', 'دارای تحلیل ویژه و کامل', fa_num($statFull), '#f6f1ff'); ?>
-    <?php stat_card('⏳', 'ناتمام و درحال‌پاسخ‌گویی', fa_num($statOpen), '#fff6e6'); ?>
+    <?php stat_card('🗑', 'موجود در سطل زباله', fa_num($statTrash), '#fee2e2'); ?>
+  </div>
+
+  <!-- نوار تغییر نما و فیلتر -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <a class="fr-chip <?= $viewMode==='active'?'purple':'info' ?>" href="attempts.php?view=active" style="text-decoration:none">
+      لیست آزمون‌های فعال (<?= fa_num($statTotal) ?>)
+    </a>
+    <a class="fr-chip <?= $viewMode==='trash'?'purple':'info' ?>" href="attempts.php?view=trash" style="text-decoration:none">
+      🗑 سطل زباله آزمون‌ها (<?= fa_num($statTrash) ?>)
+    </a>
+    <a class="fr-chip ghost" href="<?= SITE_URL ?>/admin/trash.php?tab=attempts" style="text-decoration:none;margin-right:auto">
+      مدیریت یکپارچه سطل زباله ↗
+    </a>
   </div>
 
   <!-- نوار فیلتر و جست‌وجوی چندمعیاره پیشرفته -->
@@ -527,37 +574,59 @@ echo flash();
               <?= fa_num(jdate('Y/m/d - H:i', strtotime($a['completed_at'] ?? $a['started_at']))) ?>
             </td>
             <td class="actions" style="white-space:nowrap">
-              <?php if ($isCompleted): ?>
-                <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?report=<?= $a['id'] ?>" title="مشاهده کارنامه و تحلیل کامل روان‌سنجی">
-                  👁 تحلیل کارنامه
-                </a>
-                <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">
-                  📋 پرونده
-                </a>
-                <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/panel/report-pdf.php?attempt=<?= $a['id'] ?>&auto=1" target="_blank" title="دریافت نسخه PDF">
-                  📄 PDF
-                </a>
-              <?php else: ?>
-                <form method="post" style="display:inline" onsubmit="return confirm('پیامک یادآوری به همراه لینک ادامه برای مراجع ارسال شود؟')">
+              <?php if ($viewMode === 'trash'): ?>
+                <!-- دکمه‌های حالت سطل زباله -->
+                <form method="post" style="display:inline" onsubmit="return confirm('آیا از بازیابی این آزمون و فعال‌سازی مجدد آن اطمینان دارید؟');">
                   <?= csrf_field() ?>
-                  <input type="hidden" name="act" value="sms_nudge">
+                  <input type="hidden" name="act" value="restore_attempt">
                   <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
-                  <button class="fr-btn sm" style="background:#f59e0b;color:#fff" type="submit" title="ارسال پیامک یادآوری تکمیل">
-                    📲 یادآوری
+                  <button class="fr-btn sm ok" style="background:#059669;color:#fff" type="submit" title="بازیابی آزمون">
+                    ♻️ بازیابی
                   </button>
                 </form>
+
+                <form method="post" style="display:inline" onsubmit="return confirm('⚠️ حذف نهایی:\n\nآیا از حذف دائمی این آزمون و پاکسازی تمام داده‌های آن اطمینان دارید؟');">
+                  <?= csrf_field() ?>
+                  <input type="hidden" name="act" value="purge_attempt">
+                  <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                  <button class="fr-btn sm danger" type="submit" title="حذف دائمی">
+                    ❌ حذف قطعی
+                  </button>
+                </form>
+              <?php else: ?>
+                <!-- دکمه‌های حالت فعال -->
+                <?php if ($isCompleted): ?>
+                  <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?report=<?= $a['id'] ?>" title="مشاهده کارنامه و تحلیل کامل روان‌سنجی">
+                    👁 تحلیل کارنامه
+                  </a>
+                  <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">
+                    📋 پرونده
+                  </a>
+                  <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/panel/report-pdf.php?attempt=<?= $a['id'] ?>&auto=1" target="_blank" title="دریافت نسخه PDF">
+                    📄 PDF
+                  </a>
+                <?php else: ?>
+                  <form method="post" style="display:inline" onsubmit="return confirm('پیامک یادآوری به همراه لینک ادامه برای مراجع ارسال شود؟')">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="act" value="sms_nudge">
+                    <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                    <button class="fr-btn sm" style="background:#f59e0b;color:#fff" type="submit" title="ارسال پیامک یادآوری تکمیل">
+                      📲 یادآوری
+                    </button>
+                  </form>
+                <?php endif; ?>
+
+                <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $a['id'] ?>" target="_blank" title="مشاهده و ویرایش سوالات و پاسخ‌ها">
+                  📝 پاسخ‌ها
+                </a>
+
+                <form method="post" style="display:inline" onsubmit="return confirm('انتقال این جلسه آزمون به سطل زباله؟\n(امکان بازیابی از سطل زباله وجود دارد.)');">
+                  <?= csrf_field() ?>
+                  <input type="hidden" name="act" value="trash_attempt">
+                  <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
+                  <button class="fr-btn sm danger" style="padding:5px 8px" type="submit" title="انتقال به سطل زباله">🗑</button>
+                </form>
               <?php endif; ?>
-
-              <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $a['id'] ?>" target="_blank" title="مشاهده و ویرایش سوالات و پاسخ‌ها">
-                📝 پاسخ‌ها
-              </a>
-
-              <form method="post" style="display:inline" onsubmit="return confirm('آیا از حذف این جلسه آزمون اطمینان دارید؟ تمام پاسخ‌ها پاک خواهند شد.')">
-                <?= csrf_field() ?>
-                <input type="hidden" name="act" value="del_attempt">
-                <input type="hidden" name="attempt_id" value="<?= $a['id'] ?>">
-                <button class="fr-btn sm danger" style="padding:5px 8px" type="submit" title="حذف آزمون">🗑</button>
-              </form>
             </td>
           </tr>
           <?php endforeach; ?>

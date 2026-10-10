@@ -156,33 +156,28 @@ function admin_events_page(array $adm, string $kind): void
             $op   = (string)post('op');
             $ids  = array_filter(array_map('intval', (array)($_POST['ids'] ?? [])));
             if (!$ids) { flash('هیچ موردی انتخاب نشده است.', 'warn'); redirect($self); }
-            if (!in_array($op, ['activate','deactivate','delete'], true)) { flash('عملیات نامعتبر است.', 'err'); redirect($self); }
-            $done = 0; $skipped = 0;
+            if (!in_array($op, ['activate','deactivate','trash','delete','restore','purge'], true)) { flash('عملیات نامعتبر است.', 'err'); redirect($self); }
+            $done = 0;
             foreach ($ids as $eid) {
                 $row = DB::one('SELECT id,image FROM ' . DB::t('events') . ' WHERE id=? AND kind=?', [$eid, $kind]);
-                if (!$row) { $skipped++; continue; }
-                if ($op === 'delete') {
-                    // حذف فقط وقتی هیچ ثبت‌نام پرداخت‌شده‌ای ندارد (حفاظت از پول کاربران)
-                    $paid = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') .
-                                         " WHERE event_id=? AND status='paid'", [$eid]);
-                    if ($paid > 0) { $skipped++; continue; }
-                    if ($row['image']) fr_delete_image($row['image']);
-                    DB::run('DELETE FROM ' . DB::t('event_companions') . ' WHERE reg_id IN (SELECT id FROM ' . DB::t('event_registrations') . ' WHERE event_id=?)', [$eid]);
-                    DB::run('DELETE FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status<>'paid'", [$eid]);
-                    DB::run('DELETE FROM ' . DB::t('events') . ' WHERE id=?', [$eid]);
-                    $done++;
+                if (!$row) continue;
+                if ($op === 'trash' || $op === 'delete') {
+                    if (TrashManager::trash('event', $eid, (int)($adm['id'] ?? 0))) $done++;
+                } elseif ($op === 'restore') {
+                    if (TrashManager::restore('event', $eid)) $done++;
+                } elseif ($op === 'purge') {
+                    if (TrashManager::purge('event', $eid)) $done++;
                 } else {
                     DB::update('events', ['status' => $op === 'activate' ? 'active' : 'inactive'], 'id=?', [$eid]);
                     $done++;
                 }
             }
-            log_activity('admin_event_bulk', 'event', 0, ['kind'=>$kind,'op'=>$op,'count'=>$done,'skipped'=>$skipped]);
+            log_activity('admin_event_bulk', 'event', 0, ['kind'=>$kind,'op'=>$op,'count'=>$done]);
             require_once FR_ROOT . '/includes/seo.php';
             fr_permalinks_flush();
-            $opFa = ['activate'=>'فعال','deactivate'=>'غیرفعال','delete'=>'حذف'][$op];
-            flash(fa_num($done) . ' ' . $kindFa . ' با موفقیت ' . $opFa . ' شد' .
-                  ($skipped ? ' — ' . fa_num($skipped) . ' مورد به‌خاطر داشتن ثبت‌نام پرداخت‌شده حذف نشد' : '') . ' ✅');
-            redirect($self);
+            $opFa = ['activate'=>'فعال','deactivate'=>'غیرفعال','trash'=>'انتقال به زباله‌دان','delete'=>'انتقال به زباله‌دان','restore'=>'بازیابی','purge'=>'حذف قطعی'][$op] ?? $op;
+            flash(fa_num($done) . ' ' . $kindFa . ' با موفقیت ' . $opFa . ' شد ✅');
+            redirect($self . (in_array($op, ['restore','purge'], true) ? '?view=trash' : ''));
         }
 
         /* ───────────────────── بازتولید کاور (Regenerate) ───────────────────── */
@@ -198,29 +193,48 @@ function admin_events_page(array $adm, string $kind): void
             redirect($self . '?edit_e=' . $id);
         }
 
-        /* ───────────────────────── حذف ───────────────────────── */
-        if ($act === 'delete') {
+        /* ───────────────────────── حذف / انتقال به سطل زباله ───────────────────────── */
+        if ($act === 'delete' || $act === 'trash_event') {
             $id  = (int)post('id');
-            $row = DB::one('SELECT image,title FROM ' . DB::t('events') . ' WHERE id=? AND kind=?', [$id, $kind]);
+            $row = DB::one('SELECT title FROM ' . DB::t('events') . ' WHERE id=? AND kind=?', [$id, $kind]);
             if ($row) {
-                // نسخهٔ ۱٫۷: حذف ناامن مسدود است — رویدادی که ثبت‌نام پرداخت‌شده دارد حذف نمی‌شود
-                $paid = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') .
-                                     " WHERE event_id=? AND status='paid'", [$id]);
-                if ($paid > 0) {
-                    flash('«' . $row['title'] . '» دارای ' . fa_num($paid) . ' ثبت‌نام پرداخت‌شده است و حذف نمی‌شود؛ ابتدا آن را غیرفعال (پیش‌نویس) کنید.', 'err');
-                    redirect($self);
+                if (TrashManager::trash('event', $id, (int)($adm['id'] ?? 0))) {
+                    flash('«' . $row['title'] . '» با موفقیت به سطل زباله منتقل گردید 🗑 (امکان بازیابی در سطل زباله وجود دارد)', 'ok');
+                } else {
+                    flash('خطا در انتقال ' . $kindFa . ' به سطل زباله.', 'err');
                 }
-                if ($row['image']) fr_delete_image($row['image']);
-                // پاک‌سازی همراهان و ثبت‌نام‌های ناپرداخت (۱٫۷ — بدون باقی‌گذاشتن دادهٔ یتیم)
-                DB::run('DELETE FROM ' . DB::t('event_companions') . ' WHERE reg_id IN (SELECT id FROM ' . DB::t('event_registrations') . ' WHERE event_id=?)', [$id]);
-                DB::run('DELETE FROM ' . DB::t('event_registrations') . ' WHERE event_id=?', [$id]);
-                DB::run('DELETE FROM ' . DB::t('events') . ' WHERE id=?', [$id]);
-                log_activity('admin_event_delete', 'event', $id, ['kind'=>$kind]);
                 require_once FR_ROOT . '/includes/seo.php';
                 fr_permalinks_flush();
             }
-            flash($kindFa . ' حذف شد.');
             redirect($self);
+        }
+
+        /* ───────────────────────── بازیابی از سطل زباله ───────────────────────── */
+        if ($act === 'restore_event') {
+            $id  = (int)post('id');
+            $row = DB::one('SELECT title FROM ' . DB::t('events') . ' WHERE id=? AND kind=?', [$id, $kind]);
+            if ($row && TrashManager::restore('event', $id)) {
+                flash('«' . $row['title'] . '» با موفقیت از سطل زباله بازیابی و فعال گردید ♻️', 'ok');
+                require_once FR_ROOT . '/includes/seo.php';
+                fr_permalinks_flush();
+            } else {
+                flash('خطا در بازیابی ' . $kindFa . '.', 'err');
+            }
+            redirect($self . '?view=trash');
+        }
+
+        /* ───────────────────────── حذف قطعی و دائمی ───────────────────────── */
+        if ($act === 'purge_event') {
+            $id  = (int)post('id');
+            $row = DB::one('SELECT title FROM ' . DB::t('events') . ' WHERE id=? AND kind=?', [$id, $kind]);
+            if ($row && TrashManager::purge('event', $id)) {
+                flash('«' . $row['title'] . '» و تمامی رکوردهای وابسته به صورت کامل از پایگاه داده پاکسازی شد ❌', 'ok');
+                require_once FR_ROOT . '/includes/seo.php';
+                fr_permalinks_flush();
+            } else {
+                flash('خطا در حذف قطعی ' . $kindFa . '.', 'err');
+            }
+            redirect($self . '?view=trash');
         }
 
         /* ───────────────────────── کپی با همهٔ تنظیمات ───────────────────────── */
@@ -287,9 +301,14 @@ function admin_events_page(array $adm, string $kind): void
     /* =========================================================================
      | داده‌های صفحه
      * ======================================================================*/
+    $view = (string)($_GET['view'] ?? 'active');
+    $whereSql = ($view === 'trash') ? "e.kind=? AND e.deleted_at IS NOT NULL" : "e.kind=? AND e.deleted_at IS NULL";
     $rows = DB::all("SELECT e.*, (SELECT COALESCE(SUM(1 + COALESCE(r.companion_count,0)),0)
                         FROM " . DB::t('event_registrations') . " r WHERE r.event_id=e.id AND r.status='paid') AS seats
-                     FROM " . DB::t('events') . " e WHERE e.kind=? ORDER BY e.id DESC", [$kind]);
+                     FROM " . DB::t('events') . " e WHERE {$whereSql} ORDER BY " . ($view === 'trash' ? "e.deleted_at DESC" : "e.id DESC"), [$kind]);
+    $activeCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('events') . " WHERE kind=? AND deleted_at IS NULL", [$kind]);
+    $trashCount  = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('events') . " WHERE kind=? AND deleted_at IS NOT NULL", [$kind]);
+
     $editE = ($ee = (int)($_GET['edit_e'] ?? 0))
            ? DB::one('SELECT * FROM ' . DB::t('events') . ' WHERE id=? AND kind=?', [$ee, $kind]) : null;
     $toJ = fn($dt) => $dt ? fa_num(jdate('Y/m/d', strtotime($dt))) : '';
@@ -305,8 +324,16 @@ function admin_events_page(array $adm, string $kind): void
 <!-- ── نوار ابزار بالای لیست ─────────────────────────────────────── -->
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
   <a class="fr-btn sm" href="<?= $self ?>?edit_e=new">➕ <?= $kindFa ?> جدید</a>
+  <a class="fr-chip <?= $view==='active'?'purple':'info' ?>" href="<?= $self ?>?view=active" style="text-decoration:none">
+    لیست فعال (<?= fa_num($activeCount) ?>)
+  </a>
+  <a class="fr-chip <?= $view==='trash'?'purple':'info' ?>" href="<?= $self ?>?view=trash" style="text-decoration:none">
+    🗑 سطل زباله (<?= fa_num($trashCount) ?>)
+  </a>
   <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/<?= $pageFa ?>.php" target="_blank" rel="noopener">🌐 صفحهٔ عمومی <?= $kindFa ?>‌ها</a>
-  <span style="color:var(--muted);font-size:12.5px"><?= fa_num(count($rows)) ?> <?= $kindFa ?> ثبت شده</span>
+  <a class="fr-chip ghost" href="<?= SITE_URL ?>/admin/trash.php?tab=events" style="text-decoration:none;margin-right:auto">
+    مدیریت سطل زباله سیستم ↗
+  </a>
 </div>
 <?php endif; ?>
 
@@ -558,10 +585,15 @@ function admin_events_page(array $adm, string $kind): void
       <div class="fr-bulkbar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#f7f4ff;border:1px solid #e9e2fb;border-radius:14px;padding:10px 12px;margin-bottom:12px">
         <label class="tog" style="margin:0"><input type="checkbox" id="bulkAll"> انتخاب همه</label>
         <span class="fr-chip purple" id="bulkCount" style="font-size:11px">۰ مورد انتخاب شد</span>
-        <select class="fr-select" name="op" style="max-width:230px">
-          <option value="deactivate">⏸ غیرفعال کردن انتخاب‌شده‌ها</option>
-          <option value="activate">▶ فعال‌سازی انتخاب‌شده‌ها</option>
-          <option value="delete">🗑 حذف انتخاب‌شده‌ها (فقط بدون ثبت‌نام پرداخت‌شده)</option>
+        <select class="fr-select" name="op" style="max-width:240px">
+          <?php if ($view === 'trash'): ?>
+            <option value="restore">♻️ بازگردانی انتخاب‌شده‌ها</option>
+            <option value="purge">❌ حذف قطعی و دائمی انتخاب‌شده‌ها</option>
+          <?php else: ?>
+            <option value="trash">🗑 انتقال انتخاب‌شده‌ها به سطل زباله</option>
+            <option value="deactivate">⏸ غیرفعال کردن انتخاب‌شده‌ها</option>
+            <option value="activate">▶ فعال‌سازی انتخاب‌شده‌ها</option>
+          <?php endif; ?>
         </select>
         <button class="fr-btn sm" type="submit">اعمال عملیات گروهی</button>
       </div>
@@ -597,14 +629,34 @@ function admin_events_page(array $adm, string $kind): void
         <td><?= fa_num((int)$e['views']) ?></td>
         <td style="font-size:11.5px;white-space:nowrap"><?= $e['starts_at'] ? fa_num(jdate('j F', strtotime($e['starts_at']))) : '—' ?></td>
         <td class="actions" style="white-space:nowrap">
-          <a class="fr-btn sm ghost" href="?edit_e=<?= $e['id'] ?>" title="ویرایش <?= $kindFa ?>">ویرایش</a>
-          <?php if ($e['slug']): ?>
-          <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/<?= $public ?>.php?s=<?= urlencode($e['slug']) ?>" target="_blank" rel="noopener" title="مشاهدهٔ صفحهٔ عمومی">🌐</a>
+          <?php if ($view === 'trash'): ?>
+            <form method="post" style="display:inline" onsubmit="return confirm('آیا از بازیابی این <?= $kindFa ?> اطمینان دارید؟');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="restore_event">
+              <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+              <button class="fr-btn sm ok" style="background:#059669;color:#fff" type="submit">♻️ بازیابی</button>
+            </form>
+            <form method="post" style="display:inline" onsubmit="return confirm('⚠️ حذف نهایی:\n\nآیا از حذف دائمی این <?= $kindFa ?> و کلیه وابستگی‌های آن اطمینان دارید؟');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="purge_event">
+              <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+              <button class="fr-btn sm danger" type="submit">❌ حذف قطعی</button>
+            </form>
+          <?php else: ?>
+            <a class="fr-btn sm ghost" href="?edit_e=<?= $e['id'] ?>" title="ویرایش <?= $kindFa ?>">ویرایش</a>
+            <?php if ($e['slug']): ?>
+            <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/<?= $public ?>.php?s=<?= urlencode($e['slug']) ?>" target="_blank" rel="noopener" title="مشاهدهٔ صفحهٔ عمومی">🌐</a>
+            <?php endif; ?>
+            <a class="fr-btn sm accent" href="?export_regs=<?= $e['id'] ?>" title="خروجی اکسل ثبت‌نام‌شدگان و همراهان">📊</a>
+            <a class="fr-btn sm ghost" href="registrants.php?ctx=<?= urlencode($kind) ?>&id=<?= $e['id'] ?>" title="مدیریت ثبت‌نام‌شدگان">👥</a>
+            <button type="button" class="fr-btn sm ghost" onclick="frCopyEvent(<?= (int)$e['id'] ?>)" title="کپی کردن با همهٔ تنظیمات">📋</button>
+            <form method="post" style="display:inline" onsubmit="return confirm('انتقال این <?= $kindFa ?> به سطل زباله؟');">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="trash_event">
+              <input type="hidden" name="id" value="<?= (int)$e['id'] ?>">
+              <button class="fr-btn sm danger" type="submit" title="انتقال به سطل زباله">🗑 حذف</button>
+            </form>
           <?php endif; ?>
-          <a class="fr-btn sm accent" href="?export_regs=<?= $e['id'] ?>" title="خروجی اکسل ثبت‌نام‌شدگان و همراهان">📊</a>
-          <a class="fr-btn sm ghost" href="registrants.php?ctx=<?= urlencode($kind) ?>&id=<?= $e['id'] ?>" title="مدیریت ثبت‌نام‌شدگان">👥</a>
-          <button type="button" class="fr-btn sm ghost" onclick="frCopyEvent(<?= (int)$e['id'] ?>)" title="کپی کردن با همهٔ تنظیمات">📋</button>
-          <button type="button" class="fr-btn sm danger" onclick="frDeleteEvent(<?= (int)$e['id'] ?>, '<?= e(addslashes($e['title'])) ?>')" title="حذف">حذف</button>
         </td>
       </tr>
       <?php endforeach; ?>
