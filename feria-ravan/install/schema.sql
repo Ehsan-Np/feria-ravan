@@ -752,13 +752,31 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}planner_tasks` (
   `title` VARCHAR(190) NOT NULL,
   `time_note` VARCHAR(5) DEFAULT NULL,
   `priority` ENUM('low','normal','high') NOT NULL DEFAULT 'normal',
-  `category` VARCHAR(30) NOT NULL DEFAULT 'personal',
+  `category` VARCHAR(60) NOT NULL DEFAULT 'personal',
+  `note` VARCHAR(500) NOT NULL DEFAULT '',
+  `recur_id` BIGINT UNSIGNED DEFAULT NULL,
   `done` TINYINT(1) NOT NULL DEFAULT 0,
   `done_at` DATETIME DEFAULT NULL,
+  `remind_at` DATETIME DEFAULT NULL,
+  `reminded_at` DATETIME DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `ix_user_day` (`user_id`,`day`),
-  KEY `ix_ref_att` (`ref_attempt_id`)
+  KEY `ix_ref_att` (`ref_attempt_id`),
+  KEY `ix_remind` (`reminded_at`,`remind_at`),
+  KEY `ix_recur` (`recur_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `{{prefix}}planner_cats` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `name` VARCHAR(60) NOT NULL,
+  `color` VARCHAR(20) NOT NULL DEFAULT '#1e3a6e',
+  `sort` INT NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_name` (`user_id`,`name`),
+  KEY `ix_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}clinical_notes` (

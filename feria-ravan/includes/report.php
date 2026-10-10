@@ -360,7 +360,7 @@ final class ReportBuilder
         </p>
       </div>
       <div>
-        <form method="post" action="report.php?attempt=<?= (int)$attempt['id'] ?>" style="margin:0">
+        <form method="post" action="<?= fr_panel_url('report.php?attempt=' . (int)$attempt['id']) ?>" style="margin:0">
           <?= csrf_field() ?>
           <input type="hidden" name="act" value="inject_growth">
           <button class="fr-btn" style="background:#7c3aed">

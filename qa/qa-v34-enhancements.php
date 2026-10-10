@@ -176,8 +176,9 @@ echo "  [PASS] Mock release ZIP package created ({$testZipPath})\n";
 $markerFile = FR_ROOT . '/updater_test_marker.txt';
 if (file_exists($markerFile)) @unlink($markerFile);
 
-// Save current config content to ensure it is preserved
+// Save current config and version content to ensure they are preserved
 $currentConfigContent = file_get_contents(FR_ROOT . '/config.php');
+$currentVersionContent = file_get_contents(FR_ROOT . '/includes/version.php');
 
 // Apply update using ProjectUpdater
 $updateResult = ProjectUpdater::applyUpdate($testZipPath, true);
@@ -197,8 +198,8 @@ echo "  [PASS] config.php was safely protected and preserved\n";
 // Clean up test marker
 @unlink($markerFile);
 
-// Restore version.php to 3.4.0
-file_put_contents(FR_ROOT . '/includes/version.php', "<?php\ndeclare(strict_types=1);\ndefine('FR_RELEASE', '3.4.0');\nif (!defined('FR_VERSION')) define('FR_VERSION', FR_RELEASE);\n");
+// Restore original version.php
+file_put_contents(FR_ROOT . '/includes/version.php', $currentVersionContent);
 
 echo "\n======================================================\n";
 echo "🎉 ALL 4 NEW FEATURES & FIXES PASSED WITH 100% SUCCESS!\n";

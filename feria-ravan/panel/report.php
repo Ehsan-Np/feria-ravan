@@ -47,12 +47,18 @@ log_activity('report_view', 'attempt', $attemptId);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'inject_growth') {
     check_csrf();
     require_once FR_ROOT . '/core/GrowthEngine.php';
-    $res = GrowthEngine::injectToPlanner((int)$u['id'], $attemptId);
-    if ($res['ok']) {
-        flash($res['message'], 'ok');
-        redirect(fr_panel_url('planner.php'));
-    } else {
-        flash($res['message'] ?? 'خطا در افزودن تمرین‌ها به پلنر.', 'err');
+    try {
+        $res = GrowthEngine::injectToPlanner((int)$u['id'], $attemptId);
+        if (!empty($res['ok'])) {
+            flash($res['message'], 'ok');
+            redirect(fr_panel_url('planner.php'));
+        } else {
+            flash($res['message'] ?? 'خطا در افزودن تمرین‌ها به پلنر.', 'err');
+            redirect(fr_panel_url('report.php?attempt=' . $attemptId));
+        }
+    } catch (Throwable $e) {
+        error_log('feria inject_growth: ' . $e->getMessage());
+        flash('خطا در ثبت تمرین‌ها: ' . $e->getMessage(), 'err');
         redirect(fr_panel_url('report.php?attempt=' . $attemptId));
     }
 }

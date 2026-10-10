@@ -77,7 +77,7 @@ function fr_update_pipeline(bool $force = false): void
         $verFile = dirname(__DIR__) . '/includes/version.php';
         if (file_exists($verFile)) require_once $verFile;
     }
-    $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : '3.4.4');
+    $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : '3.4.5');
     if (!$force && $tried) return;
     $tried = true;
 
@@ -976,6 +976,31 @@ function fr_update_pipeline(bool $force = false): void
             DB::run("UPDATE `{$p}settings` SET `value` = REPLACE(`value`, 'assets/uploads/', 'feria-uploads/general/') WHERE `key` IN ('logo', 'footer_badge1_img', 'footer_badge2_img', 'footer_badge3_img', 'footer_badge4_img') AND `value` LIKE '%assets/uploads/%'");
             DB::run("UPDATE `{$p}banners` SET `image` = REPLACE(`image`, 'assets/uploads/', 'feria-uploads/banners/') WHERE `image` LIKE '%assets/uploads/%'");
         } catch (Throwable $e) { error_log('feria: 3.3 feria-uploads: ' . $e->getMessage()); }
+
+        /* ─── ۳٫۴٫۵: تصحیح و تضمین ساختار پلنر روزانه و موتور تمرین‌های رشد ─── */
+        try {
+            $p = DB_PREFIX;
+            fr_db_run_safe_ddl("CREATE TABLE IF NOT EXISTS `{$p}planner_cats` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `user_id` BIGINT UNSIGNED NOT NULL,
+                `name` VARCHAR(60) NOT NULL,
+                `color` VARCHAR(20) NOT NULL DEFAULT '#1e3a6e',
+                `sort` INT NOT NULL DEFAULT 0,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uq_user_name` (`user_id`,`name`),
+                KEY `ix_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `note` VARCHAR(500) NOT NULL DEFAULT '' AFTER `category`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `remind_at` DATETIME DEFAULT NULL AFTER `done_at`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `reminded_at` DATETIME DEFAULT NULL AFTER `remind_at`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `recur_id` BIGINT UNSIGNED DEFAULT NULL AFTER `note`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD COLUMN IF NOT EXISTS `ref_attempt_id` BIGINT UNSIGNED DEFAULT NULL AFTER `user_id`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD KEY IF NOT EXISTS `ix_remind` (`reminded_at`,`remind_at`)");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}planner_tasks` ADD KEY IF NOT EXISTS `ix_ref_att` (`ref_attempt_id`)");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}attempts` ADD COLUMN IF NOT EXISTS `growth_injected` TINYINT(1) NOT NULL DEFAULT 0 AFTER `validity_json`");
+        } catch (Throwable $e) { error_log('feria: 3.4.5 planner ddl: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
