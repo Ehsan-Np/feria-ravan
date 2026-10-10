@@ -105,6 +105,9 @@ assert_true(($res['ok'] ?? true) === false, "ok is false on invalid mobile");
 assert_true(str_contains($res['message'] ?? '', 'نامعتبر'), "Helpful Persian error message returned");
 
 // B. Empty CSRF does not block send_otp (public rate-limited auth endpoint)
+if (!find_user_by('09129876543')) {
+    DB::insert('users', ['first_name' => 'تست', 'last_name' => 'کاربر', 'mobile' => '09129876543', 'status' => 'active']);
+}
 $cmd = 'php -r ' . escapeshellarg('
 define("DB_HOST", "127.0.0.1");
 define("DB_NAME", "feria_test");

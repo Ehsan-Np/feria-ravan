@@ -1,10 +1,11 @@
 <?php
 /**
  * ============================================================================
- *  صفحهٔ ورود/ثبت‌نام — نسخهٔ ۱٫۷ (بازنویسی کامل ظاهری و ساختاری)
- *  ─ دو روش ورود: کد یک‌بارمصرف پیامکی یا رمز عبور
- *  ─ ثبت‌نام تازه‌کارها فقط با یک فیلد: «نام و نام خانوادگی»
- *  ─ کاملاً واکنش‌گرا (موبایل‌محور)، کارت شیشه‌ای با هویت بنفش فریا
+ *  صفحهٔ ورود / ثبت‌نام تفکیک‌شده و بازیابی رمز عبور — فریا روان (نسخه ۳٫۴٫۷)
+ *  ─ تفکیک کامل و مشخص فرم ورود از فرم ثبت‌نام
+ *  ─ ثبت‌نام با نام، موبایل، آیدی (نام کاربری) و رمز عبور دلخواه
+ *  ─ سیستم هوشمند هدایت کاربر ثبت‌نام‌نشده به فرم عضویت
+ *  ─ بازیابی کامل رمز عبور با شماره تلفن، نام کاربری یا کد ملی
  * ============================================================================
  */
 declare(strict_types=1);
@@ -20,20 +21,25 @@ fr_bootstrap();
 $back = fr_safe_back((string)($_GET['back'] ?? ''));
 if (current_user()) redirect($back !== '' ? $back : fr_panel_url());
 
+$initialTab = trim((string)($_GET['tab'] ?? 'login'));
+if (!in_array($initialTab, ['login', 'register', 'forgot'], true)) {
+    $initialTab = 'login';
+}
+
 $siteTitle = (string)DB::setting('site_title', 'فریا روان');
 $slogan    = (string)DB::setting('site_slogan', 'مسیر رشد فردی شما از اینجا آغاز می‌شود!');
 $otpLen    = (int)DB::setting('otp_length', 5);
 
-render_header('ورود / ثبت‌نام');
+render_header('ورود / ثبت‌نام / بازیابی رمز');
 ?>
 <style>
 /* ==========================================================================
-   استایل اختصاصی صفحهٔ ورود — پیشوند au- (بدون تداخل با پنل/سایت)
+   استایل اختصاصی صفحهٔ احراز هویت فریا — تفکیک ورود، ثبت‌نام و بازیابی رمز
    ========================================================================== */
 .au-wrap{min-height:100vh;display:flex;align-items:stretch;background:
   radial-gradient(1200px 600px at 100% -10%,rgba(143,108,245,.22),transparent 60%),
   radial-gradient(900px 500px at -10% 110%,rgba(30,58,110,.16),transparent 55%),#f4f2ff}
-.au-shell{margin:auto;width:100%;max-width:1020px;display:grid;grid-template-columns:1.05fr 1fr;
+.au-shell{margin:auto;width:100%;max-width:1060px;display:grid;grid-template-columns:1.08fr 1fr;
   gap:26px;padding:26px;align-items:stretch}
 .au-side{position:relative;overflow:hidden;border-radius:26px;padding:42px 36px;color:#fff;
   background:linear-gradient(155deg,#1e3a6e,#3e5f9e 55%,#6a4fd8);box-shadow:0 24px 60px rgba(30,58,110,.35);
@@ -46,32 +52,55 @@ render_header('ورود / ثبت‌نام');
 .au-side .au-brand .mark{width:52px;height:52px;border-radius:16px;background:rgba(255,255,255,.18);
   display:flex;align-items:center;justify-content:center;font-size:27px;flex:0 0 auto}
 .au-side .au-brand img.fr-logo{width:52px;height:52px;border-radius:16px;object-fit:contain;background:#fff;padding:6px}
-.au-side h1{font-size:24px;margin:22px 0 10px;position:relative}
+.au-side h1{font-size:23px;margin:22px 0 10px;position:relative;line-height:1.6}
 .au-side p{font-size:13.5px;line-height:2.1;opacity:.94;margin:0;position:relative}
 .au-side ul{list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:12px;position:relative}
 .au-side li{display:flex;gap:10px;align-items:center;font-size:13px;font-weight:600}
 .au-side li i{width:30px;height:30px;border-radius:10px;background:rgba(255,255,255,.2);display:inline-flex;
   align-items:center;justify-content:center;font-style:normal;flex:0 0 auto}
+
 .au-box{background:var(--panel);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);
-  padding:38px 34px;display:flex;flex-direction:column;justify-content:center}
-.au-box .au-head{text-align:center;margin-bottom:22px}
-.au-box .au-head .ico{width:62px;height:62px;border-radius:20px;margin:0 auto 12px;font-size:30px;
+  padding:34px 32px;display:flex;flex-direction:column;justify-content:center}
+.au-box .au-head{text-align:center;margin-bottom:18px}
+.au-box .au-head .ico{width:58px;height:58px;border-radius:18px;margin:0 auto 10px;font-size:28px;
   background:linear-gradient(135deg,#eaf0f8,#e2d8fa);display:flex;align-items:center;justify-content:center}
 .au-box .au-head h2{font-size:19px;color:var(--c-primary);margin:0 0 6px}
 .au-box .au-head p{color:var(--muted);font-size:13px;margin:0}
-.au-tabs{display:flex;background:#f2efff;border-radius:14px;padding:5px;margin-bottom:22px;gap:5px}
-.au-tabs button{flex:1;border:none;background:transparent;padding:11px 8px;border-radius:11px;font-family:inherit;
-  font-size:13.5px;font-weight:600;cursor:pointer;color:#6b658e;transition:.2s}
-.au-tabs button.on{background:#fff;color:var(--c-primary);box-shadow:0 3px 12px rgba(30,58,110,.18)}
-.au-pane{display:none}.au-pane.on{display:block;animation:auIn .25s ease}
+
+/* تب‌های تفکیک اصلی (ورود / ثبت‌نام) */
+.au-main-tabs{display:flex;background:#eef2f9;border-radius:16px;padding:5px;margin-bottom:20px;gap:6px}
+.au-main-tabs button{flex:1;border:none;background:transparent;padding:11px 10px;border-radius:12px;font-family:inherit;
+  font-size:14px;font-weight:700;cursor:pointer;color:#50596b;transition:.2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.au-main-tabs button.on{background:#fff;color:#1e3a6e;box-shadow:0 3px 14px rgba(30,58,110,.14)}
+
+/* زیرتب‌های روش ورود (پیامک / رمز) */
+.au-sub-tabs{display:flex;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:4px;margin-bottom:18px;gap:4px}
+.au-sub-tabs button{flex:1;border:none;background:transparent;padding:9px 6px;border-radius:9px;font-family:inherit;
+  font-size:12.5px;font-weight:600;cursor:pointer;color:#64748b;transition:.2s}
+.au-sub-tabs button.on{background:#fff;color:#6366f1;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+
+.au-view{display:none}
+.au-view.on{display:block;animation:auIn .25s ease}
 @keyframes auIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.au-sub-pane{display:none}
+.au-sub-pane.on{display:block;animation:auIn .25s ease}
+
 .au-btn{width:100%;justify-content:center;margin-top:4px;padding:13px;font-size:14.5px}
-.au-link{display:block;text-align:center;margin-top:18px;font-size:13px;color:var(--c-primary)}
-.au-steps{display:flex;justify-content:center;gap:6px;margin-bottom:18px}
+.au-steps{display:flex;justify-content:center;gap:6px;margin-bottom:16px}
 .au-steps i{width:26px;height:5px;border-radius:6px;background:#e4defa;transition:.25s}
 .au-steps i.on{background:var(--c-primary)}
+
 .au-hint{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.9;margin-top:12px}
+.au-foot-link{text-align:center;margin-top:18px;font-size:13px;color:#64748b}
+.au-foot-link a{color:#6366f1;font-weight:700;text-decoration:none}
+.au-foot-link a:hover{text-decoration:underline}
+
+.au-forgot-link{display:inline-block;color:#6366f1;font-size:12.5px;font-weight:600;text-decoration:none;margin-top:10px}
+.au-forgot-link:hover{text-decoration:underline}
+
 input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr;font-weight:800}
+
 /* موبایل */
 @media (max-width:880px){
   .au-shell{grid-template-columns:1fr;padding:14px;max-width:480px}
@@ -86,85 +115,216 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
 <div class="au-wrap">
   <main class="au-shell">
 
-    <!-- کارت فرم -->
-    <section class="au-box" id="loginBox" data-back="<?= e($back) ?>">
+    <!-- کارت فرم اصلی -->
+    <section class="au-box" id="authBox" data-back="<?= e($back) ?>">
       <div class="au-head">
         <div class="ico">🦢</div>
-        <h2><?= $siteTitle ? ($siteTitle) : '' ?> — خوش آمدید</h2>
-        <p>با موبایل‌تان وارد شوید یا حساب تازه بسازید؛ فقط چند ثانیه طول می‌کشد.</p>
+        <h2 id="auTitle"><?= e($siteTitle) ?></h2>
+        <p id="auSubtitle">ورود به حساب کاربری یا عضویت جدید در سامانه</p>
       </div>
 
-      <div class="au-tabs" role="tablist">
-        <button id="tabOtp" class="on" type="button">کد یک‌بارمصرف 📩</button>
-        <button id="tabPwd" type="button">رمز عبور 🔑</button>
+      <!-- تب‌های تفکیک اصلی: ورود / ثبت‌نام -->
+      <div class="au-main-tabs" role="tablist" id="mainTabContainer">
+        <button id="btnMainLogin" class="<?= $initialTab === 'login' ? 'on' : '' ?>" type="button">
+          <span>🔐</span> ورود به حساب
+        </button>
+        <button id="btnMainRegister" class="<?= $initialTab === 'register' ? 'on' : '' ?>" type="button">
+          <span>📝</span> ثبت‌نام جدید
+        </button>
       </div>
 
-      <!-- روش OTP -->
-      <div class="au-pane on" id="paneOtp">
-        <div class="au-steps" id="otpSteps"><i class="on"></i><i></i><i></i></div>
-
-        <!-- گام ۱: موبایل -->
-        <div id="stepMobile">
-          <div class="fr-field">
-            <label>شماره موبایل (تمامی اپراتورها: همراه اول، ایرانسل، رایتل، آپتل، سامان‌تل و...)</label>
-            <input class="fr-input" id="otpMobile" inputmode="tel" maxlength="20"
-                   placeholder="مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱..." autocomplete="tel" style="direction:ltr;text-align:center">
-            <div id="opBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
-          </div>
-          <button class="fr-btn au-btn" id="btnSendOtp">ارسال کد تأیید</button>
-          <div style="text-align:center;margin-top:10px">
-            <a href="javascript:void(0)" onclick="const m=$('otpMobile').value.trim(); if(m){ $('otpSentTo').textContent=m; setOtpStep(2); } else { toast('ابتدا شماره موبایل را وارد نمایید.','warn'); $('otpMobile').focus(); }" style="font-size:12px;color:#6366f1;text-decoration:none">کد تأیید را از قبل دارید؟ ورود کد ↵</a>
-          </div>
-          <p class="au-hint">کد <?= fa_num($otpLen) ?> رقمی برایتان پیامک می‌شود؛ نیازی به رمز عبور نیست.</p>
+      <!-- ================================================================== -->
+      <!-- ویو ۱: ورود به حساب کاربری -->
+      <!-- ================================================================== -->
+      <div class="au-view <?= $initialTab === 'login' ? 'on' : '' ?>" id="viewLogin">
+        <!-- زیرتب‌های روش ورود -->
+        <div class="au-sub-tabs" role="tablist">
+          <button id="subTabOtp" class="on" type="button">کد پیامکی یک‌بارمصرف 📩</button>
+          <button id="subTabPwd" type="button">رمز عبور 🔑</button>
         </div>
 
-        <!-- گام ۲: کد -->
-        <div id="stepCode" style="display:none">
-          <p class="fr-alert info" id="otpInfoAlert" style="font-size:13px">کد تأیید به <b id="otpSentTo" style="direction:ltr;display:inline-block"></b> پیامک شد.</p>
-          <div id="otpDebugBox" class="fr-alert warn" style="display:none;font-size:13.5px;line-height:2;text-align:center;margin-bottom:14px"></div>
-          <div class="fr-field">
-            <label>کد <?= fa_num($otpLen) ?> رقمی</label>
-            <input class="fr-input au-code" id="otpCode" inputmode="numeric" maxlength="<?= (int)$otpLen ?>"
-                   placeholder="– – – – –" autocomplete="one-time-code">
+        <!-- روش ۱: ورود با کد یک‌بارمصرف -->
+        <div class="au-sub-pane on" id="subPaneOtp">
+          <!-- گام ۱: شماره موبایل -->
+          <div id="loginOtpStep1">
+            <div class="fr-field">
+              <label>شماره موبایل حساب شما</label>
+              <input class="fr-input" id="loginMobile" inputmode="tel" maxlength="20"
+                     placeholder="مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱..." autocomplete="tel" style="direction:ltr;text-align:center">
+              <div id="loginOpBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
+            </div>
+            <button class="fr-btn au-btn" id="btnLoginSendOtp">ارسال کد تأیید ورود</button>
+            <div style="text-align:center;margin-top:10px">
+              <a href="javascript:void(0)" onclick="const m=$('loginMobile').value.trim(); if(m){ $('loginSentTo').textContent=m; setLoginOtpStep(2); } else { toast('ابتدا شماره موبایل را وارد نمایید.','warn'); $('loginMobile').focus(); }" style="font-size:12px;color:#6366f1;text-decoration:none">کد ورود را از قبل دارید؟ ورود کد ↵</a>
+            </div>
+            <p class="au-hint">کد <?= fa_num($otpLen) ?> رقمی برای شما پیامک می‌شود و بدون نیاز به رمز وارد می‌شوید.</p>
           </div>
-          <button class="fr-btn au-btn" id="btnVerifyOtp">تأیید و ورود ✨</button>
-          <button class="fr-btn ghost sm" style="width:100%;justify-content:center;margin-top:10px" id="btnResend" disabled>
-            ارسال مجدد (<span id="resendTimer">۱۲۰</span>)
-          </button>
-          <button type="button" class="fr-btn ghost xs" style="width:100%;margin-top:8px;font-size:12px" onclick="setOtpStep(1);$('otpMobile').focus();">
-            ✏️ ویرایش شماره موبایل
-          </button>
+
+          <!-- گام ۲: ورود کد -->
+          <div id="loginOtpStep2" style="display:none">
+            <p class="fr-alert info" style="font-size:13px">کد تأیید ورود به <b id="loginSentTo" style="direction:ltr;display:inline-block"></b> ارسال شد.</p>
+            <div id="loginOtpDebugBox" class="fr-alert warn" style="display:none;font-size:13.5px;line-height:2;text-align:center;margin-bottom:14px"></div>
+            <div class="fr-field">
+              <label>کد تأیید <?= fa_num($otpLen) ?> رقمی</label>
+              <input class="fr-input au-code" id="loginOtpCode" inputmode="numeric" maxlength="<?= (int)$otpLen ?>"
+                     placeholder="– – – – –" autocomplete="one-time-code">
+            </div>
+            <button class="fr-btn au-btn" id="btnLoginVerifyOtp">تأیید و ورود به پنل ✨</button>
+            <button class="fr-btn ghost sm" style="width:100%;justify-content:center;margin-top:10px" id="btnLoginResend" disabled>
+              ارسال مجدد (<span id="loginResendTimer">۱۲۰</span>)
+            </button>
+            <button type="button" class="fr-btn ghost xs" style="width:100%;margin-top:8px;font-size:12px" onclick="setLoginOtpStep(1);$('loginMobile').focus();">
+              ✏️ ویرایش شماره موبایل
+            </button>
+          </div>
         </div>
 
-        <!-- گام ۳: نام (فقط کاربران تازه) -->
-        <div id="stepName" style="display:none">
-          <p class="fr-alert ok" style="font-size:13px">موبایل شما تأیید شد ✅ برای ساخت حساب، فقط نام‌تان را بنویسید.</p>
+        <!-- روش ۲: ورود با رمز عبور -->
+        <div class="au-sub-pane" id="subPanePwd">
+          <div class="fr-field">
+            <label>شناسه کاربری (شماره همراه، نام کاربری یا کد ملی)</label>
+            <input class="fr-input" id="pwdIdentity" inputmode="text" autocomplete="username" style="direction:ltr;text-align:center"
+                   placeholder="09xxxxxxxxx / آیدی / کد ملی">
+          </div>
+          <div class="fr-field">
+            <label>رمز عبور</label>
+            <input class="fr-input" id="pwdPassword" type="password" autocomplete="current-password" style="direction:ltr">
+          </div>
+          <button class="fr-btn au-btn" id="btnPwdLogin">ورود به حساب کاربری ✨</button>
+          
+          <div style="text-align:center;margin-top:14px">
+            <a href="javascript:void(0)" onclick="switchMainTab('forgot')" class="au-forgot-link">🔑 رمز عبور خود را فراموش کرده‌اید؟ بازیابی رمز</a>
+          </div>
+        </div>
+
+        <div class="au-foot-link">
+          حساب کاربری ندارید؟ <a href="javascript:void(0)" onclick="switchMainTab('register')">ثبت‌نام جدید در سامانه</a>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- ویو ۲: ثبت‌نام مجزا و کامل -->
+      <!-- ================================================================== -->
+      <div class="au-view <?= $initialTab === 'register' ? 'on' : '' ?>" id="viewRegister">
+        <!-- گام ۱: تکمیل اطلاعات عضویت -->
+        <div id="regStep1">
           <div class="fr-field">
             <label>نام و نام خانوادگی <span class="req">*</span></label>
-            <input class="fr-input" id="regFull" maxlength="200" placeholder="مثل: سارا محمدی" autocomplete="name" style="text-align:center">
-            <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:6px">نام و نام خانوادگی را با هم و با فاصله بنویسید.</small>
+            <input class="fr-input" id="regFullName" maxlength="150" placeholder="مثل: سارا محمدی" autocomplete="name" style="text-align:center">
+            <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">نام و نام خانوادگی را با فاصله وارد نمایید.</small>
           </div>
-          <button class="fr-btn au-btn" id="btnRegister">ساخت حساب و ورود 🎉</button>
-          <p class="au-hint">بقیهٔ اطلاعات (تصویر، کد ملی و…) را هر وقت خواستید داخل پنل تکمیل می‌کنید.</p>
+
+          <div class="fr-field">
+            <label>شماره تلفن همراه <span class="req">*</span></label>
+            <input class="fr-input" id="regMobile" inputmode="tel" maxlength="20"
+                   placeholder="مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱..." autocomplete="tel" style="direction:ltr;text-align:center">
+            <div id="regOpBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
+          </div>
+
+          <div class="fr-field">
+            <label>آیدی / نام کاربری دلخواه <small style="color:var(--muted);font-weight:normal">(اختیاری — جهت ورود آسان)</small></label>
+            <input class="fr-input" id="regUsername" maxlength="30" placeholder="حروف لاتین مثلاً sara_m" autocomplete="username" style="direction:ltr;text-align:center">
+            <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">حروف انگلیسی، عدد یا نقطه (حداقل ۴ کاراکتر)</small>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fr-field">
+              <label>رمز عبور <span class="req">*</span></label>
+              <input class="fr-input" id="regPassword" type="password" maxlength="60" placeholder="حداقل ۶ نویسه" autocomplete="new-password" style="direction:ltr">
+            </div>
+            <div class="fr-field">
+              <label>تکرار رمز عبور <span class="req">*</span></label>
+              <input class="fr-input" id="regPasswordConfirm" type="password" maxlength="60" placeholder="تکرار رمز" autocomplete="new-password" style="direction:ltr">
+            </div>
+          </div>
+
+          <div class="fr-field">
+            <label>کد ملی ۱۰ رقمی <small style="color:var(--muted);font-weight:normal">(اختیاری — جهت صدور دقیق گواهی و آزمون‌ها)</small></label>
+            <input class="fr-input" id="regNationalCode" inputmode="numeric" maxlength="10" placeholder="– – – – – – – – – –" autocomplete="off" style="direction:ltr;text-align:center">
+          </div>
+
+          <button class="fr-btn au-btn" id="btnRegStart">ثبت‌نام و دریافت کد تأیید 📩</button>
+        </div>
+
+        <!-- گام ۲: تأیید شماره موبایل ثبت‌نام -->
+        <div id="regStep2" style="display:none">
+          <p class="fr-alert info" style="font-size:13px">کد تأیید عضویت به <b id="regSentTo" style="direction:ltr;display:inline-block"></b> پیامک شد.</p>
+          <div id="regDebugBox" class="fr-alert warn" style="display:none;font-size:13.5px;line-height:2;text-align:center;margin-bottom:14px"></div>
+          <div class="fr-field">
+            <label>کد تأیید <?= fa_num($otpLen) ?> رقمی</label>
+            <input class="fr-input au-code" id="regOtpCode" inputmode="numeric" maxlength="<?= (int)$otpLen ?>"
+                   placeholder="– – – – –" autocomplete="one-time-code">
+          </div>
+          <button class="fr-btn au-btn" id="btnRegComplete">تأیید نهایی و ساخت حساب 🎉</button>
+          <button class="fr-btn ghost sm" style="width:100%;justify-content:center;margin-top:10px" id="btnRegResend" disabled>
+            ارسال مجدد (<span id="regResendTimer">۱۲۰</span>)
+          </button>
+          <button type="button" class="fr-btn ghost xs" style="width:100%;margin-top:8px;font-size:12px" onclick="setRegStep(1);">
+            ✏️ بازگشت و ویرایش مشخصات
+          </button>
+        </div>
+
+        <div class="au-foot-link">
+          قبلاً در سایت حساب کاربری ساخته‌اید؟ <a href="javascript:void(0)" onclick="switchMainTab('login')">ورود به حساب</a>
         </div>
       </div>
 
-      <!-- روش رمز -->
-      <div class="au-pane" id="panePwd">
-        <div class="fr-field">
-          <label>نام کاربری، موبایل یا کد ملی</label>
-          <input class="fr-input" id="pwdIdentity" inputmode="text" autocomplete="username" style="direction:ltr;text-align:center"
-                 placeholder="username / 09xxxxxxxxx / کد ملی">
+      <!-- ================================================================== -->
+      <!-- ویو ۳: بازیابی رمز عبور (شماره موبایل، نام کاربری یا کد ملی) -->
+      <!-- ================================================================== -->
+      <div class="au-view <?= $initialTab === 'forgot' ? 'on' : '' ?>" id="viewForgot">
+        <!-- گام ۱: وارد کردن هویت -->
+        <div id="forgotStep1">
+          <div class="fr-alert info" style="font-size:12.5px;line-height:2;margin-bottom:18px">
+            با وارد کردن هر یک از شناسه‌های حساب خود (شماره تلفن همراه، نام کاربری یا کد ملی)، کد تأیید پیامک می‌شود و می‌توانید رمز عبور جدید تعیین کنید.
+          </div>
+          <div class="fr-field">
+            <label>شماره تلفن همراه، نام کاربری یا کد ملی <span class="req">*</span></label>
+            <input class="fr-input" id="forgotIdentity" inputmode="text" style="direction:ltr;text-align:center"
+                   placeholder="09xxxxxxxxx / آیدی کاربری / کد ملی">
+          </div>
+          <button class="fr-btn au-btn" id="btnForgotSend">ارسال کد تأیید بازیابی 📩</button>
         </div>
-        <div class="fr-field">
-          <label>رمز عبور</label>
-          <input class="fr-input" id="pwdPassword" type="password" autocomplete="current-password" style="direction:ltr">
+
+        <!-- گام ۲: ورود کد و رمز عبور جدید -->
+        <div id="forgotStep2" style="display:none">
+          <p class="fr-alert info" style="font-size:13px">کد تأیید بازیابی به شمارهٔ <b id="forgotMaskedMobile" style="direction:ltr;display:inline-block"></b> پیامک شد.</p>
+          <div id="forgotDebugBox" class="fr-alert warn" style="display:none;font-size:13.5px;line-height:2;text-align:center;margin-bottom:14px"></div>
+
+          <div class="fr-field">
+            <label>کد تأیید <?= fa_num($otpLen) ?> رقمی پیامک‌شده <span class="req">*</span></label>
+            <input class="fr-input au-code" id="forgotCode" inputmode="numeric" maxlength="<?= (int)$otpLen ?>"
+                   placeholder="– – – – –" autocomplete="one-time-code">
+          </div>
+
+          <div class="fr-field">
+            <label>رمز عبور جدید <span class="req">*</span></label>
+            <input class="fr-input" id="forgotNewPass" type="password" maxlength="60" placeholder="حداقل ۶ نویسه" autocomplete="new-password" style="direction:ltr">
+          </div>
+
+          <div class="fr-field">
+            <label>تکرار رمز عبور جدید <span class="req">*</span></label>
+            <input class="fr-input" id="forgotNewPassConfirm" type="password" maxlength="60" placeholder="تکرار رمز جدید" autocomplete="new-password" style="direction:ltr">
+          </div>
+
+          <button class="fr-btn au-btn" id="btnForgotVerify">ثبت رمز جدید و ورود به حساب ✨</button>
+
+          <button class="fr-btn ghost sm" style="width:100%;justify-content:center;margin-top:10px" id="btnForgotResend" disabled>
+            ارسال مجدد (<span id="forgotResendTimer">۱۲۰</span>)
+          </button>
+          <button type="button" class="fr-btn ghost xs" style="width:100%;margin-top:8px;font-size:12px" onclick="setForgotStep(1);">
+            ✏️ تغییر شناسه / شماره تلفن
+          </button>
         </div>
-        <button class="fr-btn au-btn" id="btnPwdLogin">ورود</button>
-        <p class="au-hint">نام کاربری و رمز را هم می‌توانید از پنل کاربری (برگهٔ پروفایل) تنظیم کنید. رمزتان را ندارید؟ از تب «کد یک‌بارمصرف» وارد شوید.</p>
+
+        <div class="au-foot-link">
+          <a href="javascript:void(0)" onclick="switchMainTab('login')">← بازگشت به فرم ورود</a>
+        </div>
       </div>
 
-      <a class="au-link" href="<?= SITE_URL ?>/">→ بازگشت به صفحهٔ اصلی</a>
+      <a class="au-link" href="<?= SITE_URL ?>/" style="display:block;text-align:center;margin-top:20px;font-size:13px;color:#64748b;text-decoration:none">
+        → بازگشت به صفحهٔ اصلی وب‌سایت
+      </a>
     </section>
 
     <!-- پنل برند -->
@@ -178,14 +338,14 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
       </div>
       <h1>از همین‌جا خودشناسی شروع می‌شود 🧠</h1>
       <p>
-        با ورود به حسابتان، تست‌های روانشناسی، کارگاه‌ها، دوره‌ها و نوبت‌های مشاوره
-        همه در یک پنلِ تمیز در اختیارتان است؛ تحلیل‌ها همیشه بمانند و هر جا بخواهید دوباره ببینید.
+        با عضویت یا ورود به حسابتان، تست‌های روانشناسی، کارگاه‌ها، دوره‌ها و نوبت‌های مشاوره
+        همه در یک پنل یکپارچه در اختیارتان است؛ نتایج و تحلیل‌ها همیشه ماندگار خواهند بود.
       </p>
       <ul>
-        <li><i>📩</i> ورود سریع با پیامک — بدون دردسر رمز</li>
-        <li><i>🔐</i> اطلاعات‌تان محرمانه و امن نزد ما می‌ماند</li>
-        <li><i>🪪</i> اطلاعات هویتی فقط یک‌بار پرسیده می‌شود</li>
-        <li><i>💌</i> نتیجهٔ هر رزرو، پیامک برایتان می‌آید</li>
+        <li><i>📩</i> ورود سریع با پیامک بدون نیاز به حفظ رمز</li>
+        <li><i>🔑</i> امکان تعیین رمز عبور دلخواه و نام کاربری اختصاصی</li>
+        <li><i>🛡️</i> بازیابی آسان رمز با شماره موبایل، آیدی یا کد ملی</li>
+        <li><i>🔐</i> تضمین حریم خصوصی و امنیت کامل داده‌های شما</li>
       </ul>
     </aside>
   </main>
@@ -193,39 +353,52 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
 
 <script>
 const $=id=>document.getElementById(id);
-/* مقصد پس از ورود: مسیر داخلی‌ای که سرور تأییدش کرده (رزومهٔ رزرو/ثبت‌نام) */
-const FR_BACK=($('loginBox')||{getAttribute:()=>''}).getAttribute('data-back')||'';
+const FR_BACK=($('authBox')||{getAttribute:()=>''}).getAttribute('data-back')||'';
+const FR_AUTH_API = '<?= rtrim(SITE_URL, "/") ?>/api/auth.php';
 
-/* ---------- تب‌ها ---------- */
-function selectTab(t){
-  $('tabOtp').classList.toggle('on',t==='otp');
-  $('tabPwd').classList.toggle('on',t==='pwd');
-  $('paneOtp').classList.toggle('on',t==='otp');
-  $('panePwd').classList.toggle('on',t==='pwd');
-}
-$('tabOtp').onclick=()=>selectTab('otp');
-$('tabPwd').onclick=()=>selectTab('pwd');
+/* ==========================================================================
+   مدیریت تب‌های اصلی (ورود / ثبت‌نام / بازیابی رمز)
+   ========================================================================== */
+function switchMainTab(tab){
+  const views = { login: $('viewLogin'), register: $('viewRegister'), forgot: $('viewForgot') };
+  const tabContainer = $('mainTabContainer');
+  
+  if (tab === 'forgot') {
+    tabContainer.style.display = 'none';
+    $('auTitle').textContent = 'بازیابی رمز عبور';
+    $('auSubtitle').textContent = 'تغییر رمز عبور با شماره همراه، نام کاربری یا کد ملی';
+  } else {
+    tabContainer.style.display = 'flex';
+    $('auTitle').textContent = '<?= e($siteTitle) ?>';
+    $('auSubtitle').textContent = tab === 'login' ? 'ورود به حساب کاربری' : 'ثبت‌نام جدید و ساخت حساب در سامانه';
+  }
 
-/* ---------- گام‌نمای OTP ---------- */
-function setOtpStep(n){
-  const bars=$('otpSteps').children;
-  for(let i=0;i<bars.length;i++) bars[i].classList.toggle('on', i<n);
-  $('stepMobile').style.display=n===1?'block':'none';
-  $('stepCode').style.display=n===2?'block':'none';
-  $('stepName').style.display=n===3?'block':'none';
-  (n===1?$('otpMobile'):n===2?$('otpCode'):$('regFull')).focus();
-}
+  $('btnMainLogin').classList.toggle('on', tab === 'login');
+  $('btnMainRegister').classList.toggle('on', tab === 'register');
 
-/* ---------- شمارش معکوس ارسال مجدد ---------- */
-let timer=null;
-function startTimer(sec){
-  clearInterval(timer); $('btnResend').disabled=true; $('resendTimer').textContent=faNum(sec);
-  let left=sec;
-  timer=setInterval(()=>{left--; $('resendTimer').textContent=faNum(Math.max(left,0));
-    if(left<=0){clearInterval(timer);$('btnResend').disabled=false;$('btnResend').innerHTML='ارسال مجدد کد';}},1000);
+  for (let k in views) {
+    if (views[k]) views[k].classList.toggle('on', k === tab);
+  }
 }
 
-/* ---------- تشخیص هوشمند اپراتور موبایل (همراه اول، ایرانسل، رایتل، آپتل، سامان‌تل، شاتل) ---------- */
+$('btnMainLogin').onclick = () => switchMainTab('login');
+$('btnMainRegister').onclick = () => switchMainTab('register');
+
+/* ==========================================================================
+   زیرتب‌های روش ورود (پیامک / رمز)
+   ========================================================================== */
+function selectLoginSubTab(sub){
+  $('subTabOtp').classList.toggle('on', sub === 'otp');
+  $('subTabPwd').classList.toggle('on', sub === 'pwd');
+  $('subPaneOtp').classList.toggle('on', sub === 'otp');
+  $('subPanePwd').classList.toggle('on', sub === 'pwd');
+}
+$('subTabOtp').onclick = () => selectLoginSubTab('otp');
+$('subTabPwd').onclick = () => selectLoginSubTab('pwd');
+
+/* ==========================================================================
+   تشخیص هوشمند اپراتور موبایل ایران
+   ========================================================================== */
 function detectOpJs(m){
   m = (m||'').replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[^\d\+]/g, '');
   if (m.startsWith('+98')) m = m.substring(3);
@@ -256,98 +429,368 @@ function detectOpJs(m){
   return null;
 }
 
-$('otpMobile').addEventListener('input', e => {
-  const op = detectOpJs(e.target.value.trim());
-  const b = $('opBadge');
-  if (b) {
+function attachOpBadge(inputId, badgeId){
+  const inp = $(inputId);
+  const badge = $(badgeId);
+  if (!inp || !badge) return;
+  inp.addEventListener('input', e => {
+    const op = detectOpJs(e.target.value.trim());
     if (op) {
-      b.style.display = 'block';
-      b.innerHTML = '<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:' + op.color + ';font-weight:700">📱 اپراتور شناسایی‌شده: ' + op.name + '</span>';
+      badge.style.display = 'block';
+      badge.innerHTML = '<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:' + op.color + ';font-weight:700">📱 اپراتور شناسایی‌شده: ' + op.name + '</span>';
     } else {
-      b.style.display = 'none';
+      badge.style.display = 'none';
     }
-  }
-});
-
-const FR_AUTH_API = '<?= rtrim(SITE_URL, "/") ?>/api/auth.php';
-
-/* ---------- ارسال OTP ---------- */
-async function sendOtp(){
-  const mobile=$('otpMobile').value.trim();
-  if(!mobile){ toast('لطفاً شماره موبایل را وارد کنید.','err'); $('otpMobile').focus(); return; }
-  if($('stepName').style.display==='block'){ setOtpStep(1); }
-  const btn=$('btnSendOtp'); btn.disabled=true;
-  try{
-    const r=await api(FR_AUTH_API,{action:'send_otp',mobile});
-    if(!r.ok){toast(r.message,'err');}
-    else{
-      toast(r.message);
-      const dbgBox = $('otpDebugBox');
-      if(r.debug_code){
-        if (dbgBox) {
-          dbgBox.style.display = 'block';
-          dbgBox.innerHTML = 'کد تأیید ورود شما: <b style="font-size:18px;letter-spacing:4px;color:#5b21b6;direction:ltr;display:inline-block">' + r.debug_code + '</b>';
-        }
-        $('otpCode').value = r.debug_code;
-      } else {
-        if (dbgBox) dbgBox.style.display = 'none';
-        $('otpCode').value = '';
-      }
-      $('otpSentTo').textContent=mobile;
-      setOtpStep(2);
-      startTimer(r.ttl||120);
-      $('otpCode').focus();
-    }
-  }catch(e){
-    toast('خطایی در ارتباط با سرور رخ داد؛ لطفاً دوباره تلاش کنید.','err');
-  }finally{btn.disabled=false;}
+  });
 }
-$('btnSendOtp').onclick=sendOtp;
-$('btnResend').onclick=sendOtp;
-$('otpMobile').addEventListener('keydown',e=>{if(e.key==='Enter')sendOtp();});
+attachOpBadge('loginMobile', 'loginOpBadge');
+attachOpBadge('regMobile', 'regOpBadge');
 
-/* ---------- تأیید OTP ---------- */
-$('btnVerifyOtp').onclick=async()=>{
-  const btn=$('btnVerifyOtp'); btn.disabled=true;
-  try{
-    const r=await api(FR_AUTH_API,{action:'verify_otp',mobile:$('otpMobile').value.trim(),code:$('otpCode').value.trim(),back:FR_BACK});
-    if(!r.ok){ toast(r.message,'err'); }
-    else if(r.needs_register){
-      toast(r.message);
-      setOtpStep(3);
+/* ==========================================================================
+   ۱. بخش ورود با کد یک‌بارمصرف (OTP Login)
+   ========================================================================== */
+function setLoginOtpStep(step){
+  $('loginOtpStep1').style.display = step === 1 ? 'block' : 'none';
+  $('loginOtpStep2').style.display = step === 2 ? 'block' : 'none';
+  if (step === 1) $('loginMobile').focus(); else $('loginOtpCode').focus();
+}
+
+let loginTimer = null;
+function startLoginTimer(sec){
+  clearInterval(loginTimer);
+  $('btnLoginResend').disabled = true;
+  $('loginResendTimer').textContent = faNum(sec);
+  let left = sec;
+  loginTimer = setInterval(() => {
+    left--;
+    $('loginResendTimer').textContent = faNum(Math.max(left, 0));
+    if (left <= 0) {
+      clearInterval(loginTimer);
+      $('btnLoginResend').disabled = false;
+      $('btnLoginResend').innerHTML = 'ارسال مجدد کد ورود';
     }
-    else{ toast(r.message||'خوش آمدید 🦢'); location.href=r.redirect; }
-  }finally{btn.disabled=false;}
-};
-$('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnVerifyOtp').click();});
-$('otpCode').addEventListener('input',e=>{
-  const val = e.target.value.trim();
-  if (val.length === <?= (int)$otpLen ?>) {
-    $('btnVerifyOtp').click();
+  }, 1000);
+}
+
+async function doSendLoginOtp(){
+  const mobile = $('loginMobile').value.trim();
+  if (!mobile) { toast('لطفاً شماره موبایل خود را وارد کنید.', 'err'); $('loginMobile').focus(); return; }
+  const btn = $('btnLoginSendOtp');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, { action: 'send_otp', mobile, purpose: 'login' });
+    if (!r.ok) {
+      // اگر شماره ثبت‌نام نشده بود، انتقال خودکار و راهنما به تب ثبت‌نام
+      if (r.not_registered) {
+        toast(r.message, 'warn');
+        switchMainTab('register');
+        $('regMobile').value = mobile;
+        attachOpBadge('regMobile', 'regOpBadge');
+        const badge = $('regOpBadge');
+        const op = detectOpJs(mobile);
+        if (op && badge) {
+          badge.style.display = 'block';
+          badge.innerHTML = '<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:' + op.color + ';font-weight:700">📱 اپراتور شناسایی‌شده: ' + op.name + '</span>';
+        }
+        $('regFullName').focus();
+        return;
+      }
+      toast(r.message, 'err');
+    } else {
+      toast(r.message);
+      const dbg = $('loginOtpDebugBox');
+      if (r.debug_code) {
+        if (dbg) {
+          dbg.style.display = 'block';
+          dbg.innerHTML = 'کد ورود شما (آزمایشی): <b style="font-size:18px;letter-spacing:4px;color:#5b21b6;direction:ltr;display:inline-block">' + r.debug_code + '</b>';
+        }
+        $('loginOtpCode').value = r.debug_code;
+      } else {
+        if (dbg) dbg.style.display = 'none';
+        $('loginOtpCode').value = '';
+      }
+      $('loginSentTo').textContent = mobile;
+      setLoginOtpStep(2);
+      startLoginTimer(r.ttl || 120);
+      $('loginOtpCode').focus();
+    }
+  } catch(e) {
+    toast('خطایی در ارتباط با سرور رخ داد؛ لطفاً دوباره تلاش کنید.', 'err');
+  } finally {
+    btn.disabled = false;
   }
+}
+$('btnLoginSendOtp').onclick = doSendLoginOtp;
+$('btnLoginResend').onclick = doSendLoginOtp;
+$('loginMobile').addEventListener('keydown', e => { if (e.key === 'Enter') doSendLoginOtp(); });
+
+async function doVerifyLoginOtp(){
+  const mobile = $('loginMobile').value.trim();
+  const code = $('loginOtpCode').value.trim();
+  if (!code) { toast('لطفاً کد تأیید را وارد کنید.', 'err'); $('loginOtpCode').focus(); return; }
+  const btn = $('btnLoginVerifyOtp');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, { action: 'verify_otp', mobile, code, purpose: 'login', back: FR_BACK });
+    if (!r.ok) {
+      toast(r.message, 'err');
+    } else {
+      toast(r.message || 'خوش آمدید 🦢');
+      location.href = r.redirect || 'panel/';
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnLoginVerifyOtp').onclick = doVerifyLoginOtp;
+$('loginOtpCode').addEventListener('keydown', e => { if (e.key === 'Enter') doVerifyLoginOtp(); });
+$('loginOtpCode').addEventListener('input', e => {
+  if (e.target.value.trim().length === <?= (int)$otpLen ?>) doVerifyLoginOtp();
 });
 
-/* ---------- تکمیل ثبت‌نام سبک — «نام و نام خانوادگی» یک فیلد ---------- */
-$('btnRegister').onclick=async()=>{
-  const btn=$('btnRegister'); btn.disabled=true;
-  try{
-    const r=await api(FR_AUTH_API,{action:'register_name',full_name:$('regFull').value.trim(),back:FR_BACK});
-    if(!r.ok){ toast(r.message,'err');
-      if(/مهلت/.test(r.message||'')){ setOtpStep(1); }
+/* ==========================================================================
+   ۲. بخش ورود با رمز عبور
+   ========================================================================== */
+async function doPwdLogin(){
+  const identity = $('pwdIdentity').value.trim();
+  const password = $('pwdPassword').value;
+  if (!identity) { toast('شماره تلفن، نام کاربری یا کد ملی را وارد کنید.', 'err'); $('pwdIdentity').focus(); return; }
+  if (!password) { toast('رمز عبور را وارد کنید.', 'err'); $('pwdPassword').focus(); return; }
+  const btn = $('btnPwdLogin');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, { action: 'password_login', identity, password, back: FR_BACK });
+    if (!r.ok) {
+      toast(r.message, 'err');
+      if (r.no_password) {
+        // هدایت سریع به کد پیامکی
+        selectLoginSubTab('otp');
+        if (r.mobile) {
+          $('loginMobile').value = r.mobile;
+          doSendLoginOtp();
+        }
+      }
+    } else {
+      toast('خوش آمدید 🦢');
+      location.href = r.redirect || 'panel/';
     }
-    else{ toast(r.message); location.href=r.redirect; }
-  }finally{btn.disabled=false;}
-};
-$('regFull').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnRegister').click();});
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnPwdLogin').onclick = doPwdLogin;
+$('pwdPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doPwdLogin(); });
+$('pwdIdentity').addEventListener('keydown', e => { if (e.key === 'Enter') $('pwdPassword').focus(); });
 
-/* ---------- ورود با رمز ---------- */
-$('btnPwdLogin').onclick=async()=>{
-  const btn=$('btnPwdLogin'); btn.disabled=true;
-  try{
-    const r=await api(FR_AUTH_API,{action:'password_login',identity:$('pwdIdentity').value.trim(),password:$('pwdPassword').value,back:FR_BACK});
-    if(!r.ok) toast(r.message,'err'); else location.href=r.redirect;
-  }finally{btn.disabled=false;}
-};
-$('pwdPassword').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnPwdLogin').click();});
+/* ==========================================================================
+   ۳. بخش ثبت‌نام کامل و مجزا (Full Registration)
+   ========================================================================== */
+function setRegStep(step){
+  $('regStep1').style.display = step === 1 ? 'block' : 'none';
+  $('regStep2').style.display = step === 2 ? 'block' : 'none';
+  if (step === 1) $('regFullName').focus(); else $('regOtpCode').focus();
+}
+
+let regTimer = null;
+function startRegTimer(sec){
+  clearInterval(regTimer);
+  $('btnRegResend').disabled = true;
+  $('regResendTimer').textContent = faNum(sec);
+  let left = sec;
+  regTimer = setInterval(() => {
+    left--;
+    $('regResendTimer').textContent = faNum(Math.max(left, 0));
+    if (left <= 0) {
+      clearInterval(regTimer);
+      $('btnRegResend').disabled = false;
+      $('btnRegResend').innerHTML = 'ارسال مجدد کد';
+    }
+  }, 1000);
+}
+
+async function doRegStart(){
+  const full_name = $('regFullName').value.trim();
+  const mobile = $('regMobile').value.trim();
+  const username = $('regUsername').value.trim();
+  const password = $('regPassword').value;
+  const password_confirm = $('regPasswordConfirm').value;
+  const national_code = $('regNationalCode').value.trim();
+
+  if (!full_name) { toast('لطفاً نام و نام خانوادگی را وارد کنید.', 'err'); $('regFullName').focus(); return; }
+  if (!mobile) { toast('شماره تلفن همراه الزامی است.', 'err'); $('regMobile').focus(); return; }
+  if (!password) { toast('رمز عبور الزامی است.', 'err'); $('regPassword').focus(); return; }
+  if (password.length < 6) { toast('رمز عبور باید حداقل ۶ کاراکتر باشد.', 'err'); $('regPassword').focus(); return; }
+  if (password !== password_confirm) { toast('رمز عبور و تکرار آن یکسان نیستند.', 'err'); $('regPasswordConfirm').focus(); return; }
+
+  const btn = $('btnRegStart');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, {
+      action: 'register_start',
+      full_name, mobile, username, password, password_confirm, national_code
+    });
+    if (!r.ok) {
+      if (r.already_registered) {
+        toast(r.message, 'warn');
+        switchMainTab('login');
+        $('loginMobile').value = mobile;
+        selectLoginSubTab('otp');
+        doSendLoginOtp();
+        return;
+      }
+      toast(r.message, 'err');
+    } else {
+      toast(r.message);
+      const dbg = $('regDebugBox');
+      if (r.debug_code) {
+        if (dbg) {
+          dbg.style.display = 'block';
+          dbg.innerHTML = 'کد تأیید عضویت شما: <b style="font-size:18px;letter-spacing:4px;color:#5b21b6;direction:ltr;display:inline-block">' + r.debug_code + '</b>';
+        }
+        $('regOtpCode').value = r.debug_code;
+      } else {
+        if (dbg) dbg.style.display = 'none';
+        $('regOtpCode').value = '';
+      }
+      $('regSentTo').textContent = mobile;
+      setRegStep(2);
+      startRegTimer(r.ttl || 120);
+      $('regOtpCode').focus();
+    }
+  } catch(e) {
+    toast('خطایی در برقراری ارتباط رخ داد.', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnRegStart').onclick = doRegStart;
+$('btnRegResend').onclick = doRegStart;
+
+async function doRegComplete(){
+  const mobile = $('regMobile').value.trim();
+  const code = $('regOtpCode').value.trim();
+  if (!code) { toast('کد تأیید پیامک‌شده را وارد نمایید.', 'err'); $('regOtpCode').focus(); return; }
+  const btn = $('btnRegComplete');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, { action: 'register_complete', mobile, code, back: FR_BACK });
+    if (!r.ok) {
+      toast(r.message, 'err');
+    } else {
+      toast(r.message);
+      location.href = r.redirect || 'panel/?welcome=1';
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnRegComplete').onclick = doRegComplete;
+$('regOtpCode').addEventListener('keydown', e => { if (e.key === 'Enter') doRegComplete(); });
+$('regOtpCode').addEventListener('input', e => {
+  if (e.target.value.trim().length === <?= (int)$otpLen ?>) doRegComplete();
+});
+
+/* ==========================================================================
+   ۴. بخش بازیابی رمز عبور (Password Recovery)
+   ========================================================================== */
+function setForgotStep(step){
+  $('forgotStep1').style.display = step === 1 ? 'block' : 'none';
+  $('forgotStep2').style.display = step === 2 ? 'block' : 'none';
+  if (step === 1) $('forgotIdentity').focus(); else $('forgotCode').focus();
+}
+
+let forgotTimer = null;
+let currentForgotMobile = '';
+function startForgotTimer(sec){
+  clearInterval(forgotTimer);
+  $('btnForgotResend').disabled = true;
+  $('forgotResendTimer').textContent = faNum(sec);
+  let left = sec;
+  forgotTimer = setInterval(() => {
+    left--;
+    $('forgotResendTimer').textContent = faNum(Math.max(left, 0));
+    if (left <= 0) {
+      clearInterval(forgotTimer);
+      $('btnForgotResend').disabled = false;
+      $('btnForgotResend').innerHTML = 'ارسال مجدد کد بازیابی';
+    }
+  }, 1000);
+}
+
+async function doForgotSend(){
+  const identity = $('forgotIdentity').value.trim();
+  if (!identity) {
+    toast('لطفاً شماره تلفن همراه، نام کاربری یا کد ملی خود را وارد نمایید.', 'err');
+    $('forgotIdentity').focus();
+    return;
+  }
+  const btn = $('btnForgotSend');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, { action: 'forgot_password_send', identity });
+    if (!r.ok) {
+      toast(r.message, 'err');
+    } else {
+      toast(r.message);
+      currentForgotMobile = r.mobile || '';
+      $('forgotMaskedMobile').textContent = r.masked_mobile || r.mobile;
+      const dbg = $('forgotDebugBox');
+      if (r.debug_code) {
+        if (dbg) {
+          dbg.style.display = 'block';
+          dbg.innerHTML = 'کد بازیابی رمز (آزمایشی): <b style="font-size:18px;letter-spacing:4px;color:#5b21b6;direction:ltr;display:inline-block">' + r.debug_code + '</b>';
+        }
+        $('forgotCode').value = r.debug_code;
+      } else {
+        if (dbg) dbg.style.display = 'none';
+        $('forgotCode').value = '';
+      }
+      setForgotStep(2);
+      startForgotTimer(r.ttl || 120);
+      $('forgotCode').focus();
+    }
+  } catch(e) {
+    toast('خطایی در ارتباط با سرور رخ داد.', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnForgotSend').onclick = doForgotSend;
+$('btnForgotResend').onclick = doForgotSend;
+$('forgotIdentity').addEventListener('keydown', e => { if (e.key === 'Enter') doForgotSend(); });
+
+async function doForgotVerify(){
+  const code = $('forgotCode').value.trim();
+  const new_password = $('forgotNewPass').value;
+  const new_password_confirm = $('forgotNewPassConfirm').value;
+
+  if (!code) { toast('کد تأیید پیامک‌شده را وارد کنید.', 'err'); $('forgotCode').focus(); return; }
+  if (!new_password) { toast('رمز عبور جدید را وارد کنید.', 'err'); $('forgotNewPass').focus(); return; }
+  if (new_password.length < 6) { toast('رمز عبور باید حداقل ۶ کاراکتر باشد.', 'err'); $('forgotNewPass').focus(); return; }
+  if (new_password !== new_password_confirm) { toast('رمز جدید با تکرار آن همخوانی ندارد.', 'err'); $('forgotNewPassConfirm').focus(); return; }
+
+  const btn = $('btnForgotVerify');
+  btn.disabled = true;
+  try {
+    const r = await api(FR_AUTH_API, {
+      action: 'forgot_password_verify',
+      mobile: currentForgotMobile,
+      code,
+      new_password,
+      new_password_confirm,
+      back: FR_BACK
+    });
+    if (!r.ok) {
+      toast(r.message, 'err');
+    } else {
+      toast(r.message);
+      location.href = r.redirect || 'panel/';
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btnForgotVerify').onclick = doForgotVerify;
+$('forgotNewPassConfirm').addEventListener('keydown', e => { if (e.key === 'Enter') doForgotVerify(); });
 </script>
 <?php render_footer(); ?>

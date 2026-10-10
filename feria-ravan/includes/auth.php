@@ -365,17 +365,58 @@ function find_user_by(string $mobile): ?array
     return DB::one('SELECT * FROM ' . DB::t('users') . " WHERE mobile=? AND status!='deleted'", [$mobile]);
 }
 
+/**
+ * یافتن کاربر با هر یک از شناسه‌های هویتی: شماره موبایل، کد ملی یا نام کاربری (آیدی)
+ */
+function find_user_by_identity(string $identity): ?array
+{
+    $clean = en_num(trim($identity));
+    if ($clean === '') return null;
+
+    // ۱. بررسی بر مبنای شماره موبایل
+    $mob = clean_mobile($clean);
+    if (valid_mobile($mob)) {
+        $u = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE mobile=? AND status!='deleted'", [$mob]);
+        if ($u) return $u;
+    }
+
+    // ۲. بررسی بر مبنای کد ملی ۱۰ رقمی
+    if (valid_national_code($clean)) {
+        $u = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE national_code=? AND status!='deleted'", [$clean]);
+        if ($u) return $u;
+    }
+
+    // ۳. بررسی بر مبنای نام کاربری / آیدی
+    $u = DB::one('SELECT * FROM ' . DB::t('users') . " WHERE LOWER(username)=LOWER(?) AND status!='deleted'", [$clean]);
+    if ($u) return $u;
+
+    // ۴. جستجوی عمومی بر روی فیلدهای شناسایی
+    return DB::one('SELECT * FROM ' . DB::t('users') . " WHERE (mobile=? OR national_code=? OR username=?) AND status!='deleted'", [$clean, $clean, $clean]);
+}
+
 /** ورود با رمز عبور (نام کاربری یا موبایل یا کد ملی — ۲٫۲) */
 function password_login(string $identity, string $password): array
 {
     $identity = en_num(trim($identity));
-    if (!rate_limit('login', 10, 600)) return ['ok'=>false,'message'=>'تلاش‌های زیاد؛ کمی بعد تلاش کنید.'];
+    if (!rate_limit('login', 10, 600)) return ['ok'=>false,'message'=>'تعداد تلاش‌های ناموفق بیش از حد مجاز است؛ لطفاً کمی بعد تلاش کنید.'];
 
-    $u = DB::one('SELECT * FROM ' . DB::t('users') .
-                 " WHERE (mobile=? OR national_code=? OR (username IS NOT NULL AND username<>'' AND username=?)) AND status='active'",
-                 [$identity, $identity, $identity]);
-    if (!$u || empty($u['password_hash']) || !password_verify($password, $u['password_hash'])) {
-        return ['ok'=>false,'message'=>'نام کاربری یا رمز عبور نادرست است.'];
+    $u = find_user_by_identity($identity);
+    if (!$u) {
+        return ['ok'=>false,'message'=>'حسابی با این مشخصات یافت نشد؛ لطفاً ثبت‌نام کنید.'];
+    }
+    if ($u['status'] !== 'active') {
+        return ['ok'=>false,'message'=>'حساب کاربری شما مسدود یا غیرفعال است؛ با پشتیبانی در تماس باشید.'];
+    }
+    if (empty($u['password_hash'])) {
+        return [
+            'ok'          => false,
+            'no_password' => true,
+            'mobile'      => $u['mobile'],
+            'message'     => 'برای این حساب هنوز رمز عبوری تعیین نشده است؛ لطفاً با «کد یک‌بارمصرف پیامکی» وارد شوید یا از گزینه «بازیابی رمز» استفاده نمایید.'
+        ];
+    }
+    if (!password_verify($password, $u['password_hash'])) {
+        return ['ok'=>false,'message'=>'نام کاربری، شماره تلفن یا رمز عبور نادرست است.'];
     }
     do_user_login($u, 'password');
     return ['ok'=>true,'message'=>'خوش آمدید 🦢'];

@@ -20,7 +20,9 @@ function fr_session_start(): void
     ]);
     session_start();
     // چرخش شناسهٔ سشن هر ۳۰ دقیقه (ضد Session Fixation)
-    if (!isset($_SESSION['_rotated']) || time() - $_SESSION['_rotated'] > 1800) {
+    if (!isset($_SESSION['_rotated'])) {
+        $_SESSION['_rotated'] = time();
+    } elseif (time() - $_SESSION['_rotated'] > 1800) {
         session_regenerate_id(true);
         $_SESSION['_rotated'] = time();
     }
