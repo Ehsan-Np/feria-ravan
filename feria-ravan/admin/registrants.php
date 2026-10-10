@@ -170,40 +170,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($back());
     }
 
-    /* ─────────── رویداد: حذف عضو (امن) ─────────── */
+    /* ─────────── رویداد: حذف عضو (امن به سطل زباله) ─────────── */
     if ($act === 'reg_del') {
         $rid = (int)post('reg_id');
         $r   = DB::one('SELECT r.*, u.first_name, u.last_name FROM ' . DB::t('event_registrations') . ' r
                         JOIN ' . DB::t('users') . ' u ON u.id=r.user_id WHERE r.id=?', [$rid]);
         if (!$r) { flash('ثبت‌نام یافت نشد.', 'err'); redirect($back()); }
-        /* گارد سوابق مالی: درخواست عودتِ باز/ثبت‌شده یا سفارش پرداخت‌شده → حذف فیزیکی ممنوع */
-        $refs = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('refund_requests') .
-                    " WHERE context='event' AND reference_id=?", [$rid])
-              + (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('refund_requests') .
-                    " WHERE context='companion' AND reference_id IN (SELECT id FROM " . DB::t('event_companions') . ' WHERE reg_id=?)', [$rid]);
-        if ($refs > 0) {
-            flash('⛔ برای این ثبت‌نام سابقهٔ درخواست عودت وجه وجود دارد؛ ابتدا از صفحهٔ «عودت وجه» رسیدگی کنید، سپس می‌توانید وضعیت را «لغوشده» کنید.', 'err');
-            redirect($back());
+
+        require_once FR_ROOT . '/core/TrashManager.php';
+        TrashManager::ensureSchema();
+
+        if ($r['order_id']) {
+            DB::run('UPDATE ' . DB::t('orders') . " SET status='canceled' WHERE id=? AND status<>'paid'", [(int)$r['order_id']]);
         }
-        $paidOrder = $r['order_id'] && DB::val('SELECT status FROM ' . DB::t('orders') . ' WHERE id=?', [(int)$r['order_id']]) === 'paid';
-        if ($paidOrder) {
-            flash('⛔ این ثبت‌نام سفارشِ پرداخت‌شده دارد؛ حذف فیزیکی ممنوع است. مسیر درست: «عودت وجه» یا تغییر وضعیت به «لغوشده».', 'err');
-            redirect($back());
-        }
-        try {
-            DB::pdo()->beginTransaction();
-            if ($r['order_id']) {   // سفارش معلق/ناموفقِ مرتبط، لغو می‌شود تا سفارش یتیم نماند
-                DB::run('UPDATE ' . DB::t('orders') . " SET status='canceled' WHERE id=? AND status<>'paid'", [(int)$r['order_id']]);
-            }
-            DB::run('DELETE FROM ' . DB::t('event_companions') . ' WHERE reg_id=?', [$rid]);
-            DB::run('DELETE FROM ' . DB::t('event_registrations') . ' WHERE id=?', [$rid]);
-            DB::pdo()->commit();
-            log_activity('admin_reg_del', 'event', (int)$r['event_id'], ['reg' => $rid, 'name' => trim($r['first_name'] . ' ' . $r['last_name'])]);
-            flash('عضو حذف شد 🗑 (سفارش معلق مرتبط نیز لغو شد)');
-        } catch (Throwable $e) {
-            if (DB::pdo()->inTransaction()) DB::pdo()->rollBack();
-            flash('خطا در حذف: ' . $e->getMessage(), 'err');
-        }
+        TrashManager::trash('registration', $rid, (int)$adm['id']);
+        log_activity('admin_reg_trash', 'event', (int)$r['event_id'], ['reg' => $rid, 'name' => trim($r['first_name'] . ' ' . $r['last_name'])]);
+        flash('عضو با موفقیت به سطل زباله منتقل گردید 🗑 (امکان بازیابی یا پاکسازی قطعی از سطل زباله وجود دارد)');
         redirect($back());
     }
 
@@ -315,31 +297,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($back());
     }
 
-    /* ─────────── تست روانشناسی: حذف تلاش (کاسکید پاسخ/نتیجه/گزارش) ─────────── */
+    /* ─────────── تست روانشناسی: حذف تلاش (انتقال امن به سطل زباله) ─────────── */
     if ($act === 'att_del') {
         $aid = (int)post('attempt_id');
         $a   = DB::one('SELECT a.*, u.first_name, u.last_name, o.status AS os FROM ' . DB::t('attempts') . ' a
                         JOIN ' . DB::t('users') . ' u ON u.id=a.user_id
                         LEFT JOIN ' . DB::t('orders') . ' o ON o.id=a.order_id WHERE a.id=?', [$aid]);
         if (!$a) { flash('تلاش یافت نشد.', 'err'); redirect($back()); }
-        if ($a['os'] === 'paid') {
-            flash('⛔ این تلاش سفارشِ پرداخت‌شده دارد؛ حذف فیزیکی ممنوع است. ابتدا از «سفارش‌ها/عودت وجه» رسیدگی کنید.', 'err');
-            redirect($back());
-        }
-        try {
-            DB::pdo()->beginTransaction();
-            /* بسیاری از نصب‌ها FK کاسکید دارند؛ برای اطمینانِ کامل صریح پاک می‌کنیم */
-            DB::run('DELETE FROM ' . DB::t('reports') . ' WHERE attempt_id=?', [$aid]);
-            DB::run('DELETE FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$aid]);
-            DB::run('DELETE FROM ' . DB::t('answers') . ' WHERE attempt_id=?', [$aid]);
-            DB::run('DELETE FROM ' . DB::t('attempts') . ' WHERE id=?', [$aid]);
-            DB::pdo()->commit();
-            log_activity('admin_att_del', 'test', (int)$a['test_id'], ['attempt' => $aid, 'name' => trim($a['first_name'] . ' ' . $a['last_name'])]);
-            flash('تلاش و تمام پاسخ‌ها/نتایج/گزارش‌هایش حذف شد 🗑');
-        } catch (Throwable $e) {
-            if (DB::pdo()->inTransaction()) DB::pdo()->rollBack();
-            flash('خطا در حذف: ' . $e->getMessage(), 'err');
-        }
+
+        require_once FR_ROOT . '/core/TrashManager.php';
+        TrashManager::ensureSchema();
+        TrashManager::trash('attempt', $aid, (int)$adm['id']);
+        log_activity('admin_att_trash', 'test', (int)$a['test_id'], ['attempt' => $aid, 'name' => trim($a['first_name'] . ' ' . $a['last_name'])]);
+        flash('تلاش آزمون با موفقیت به سطل زباله منتقل گردید 🗑 (امکان بازیابی یا پاکسازی قطعی از سطل زباله وجود دارد)');
         redirect($back());
     }
 }
@@ -357,7 +327,7 @@ if ($ctx === 'test') {
 
 if ($ctx === 'test') {
     if ($item) {
-        $w = 'a.test_id=?'; $p = [(int)$item['id']];
+        $w = 'a.test_id=? AND a.deleted_at IS NULL'; $p = [(int)$item['id']];
         if (in_array($fStatus, ['in_progress','completed','analyzed'], true)) { $w .= ' AND a.status=?'; $p[] = $fStatus; }
         if (in_array($fStatus, ['free','full'], true))                        { $w .= ' AND a.mode=?';   $p[] = $fStatus; }
         if ($q !== '') { $w .= ' AND (u.mobile LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)';
@@ -369,18 +339,18 @@ if ($ctx === 'test') {
                          LEFT JOIN " . DB::t('orders') . " o ON o.id=a.order_id
                          WHERE $w ORDER BY a.id DESC LIMIT 300", $p);
         $sum = [
-            'total'  => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . ' WHERE test_id=?', [(int)$item['id']]),
-            'open'   => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . " WHERE test_id=? AND status='in_progress'", [(int)$item['id']]),
-            'done'   => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . " WHERE test_id=? AND status<>'in_progress'", [(int)$item['id']]),
-            'full'   => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . " WHERE test_id=? AND mode='full'", [(int)$item['id']]),
+            'total'  => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . ' WHERE test_id=? AND deleted_at IS NULL', [(int)$item['id']]),
+            'open'   => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . " WHERE test_id=? AND status='in_progress' AND deleted_at IS NULL", [(int)$item['id']]),
+            'done'   => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . " WHERE test_id=? AND status<>'in_progress' AND deleted_at IS NULL", [(int)$item['id']]),
+            'full'   => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('attempts') . " WHERE test_id=? AND mode='full' AND deleted_at IS NULL", [(int)$item['id']]),
             'rev'    => (int)DB::val('SELECT COALESCE(SUM(payable),0) FROM ' . DB::t('orders') . " WHERE test_id=? AND status='paid'", [(int)$item['id']]),
             'ref'    => (int)DB::val('SELECT COALESCE(SUM(payable),0) FROM ' . DB::t('orders') . " WHERE test_id=? AND status='refunded'", [(int)$item['id']]),
         ];
     }
-    $picker = DB::all('SELECT id, title, status FROM ' . DB::t('tests') . " WHERE status<>'trash' ORDER BY sort_order");
+    $picker = DB::all('SELECT id, title, status FROM ' . DB::t('tests') . " WHERE status<>'trash' AND deleted_at IS NULL ORDER BY sort_order");
 } else {
     if ($item) {
-        $w = 'r.event_id=?'; $p = [(int)$item['id']];
+        $w = 'r.event_id=? AND r.deleted_at IS NULL'; $p = [(int)$item['id']];
         if (in_array($fStatus, ['pending','deposit','paid','canceled'], true)) { $w .= ' AND r.status=?'; $p[] = $fStatus; }
         if ($q !== '') { $w .= ' AND (u.mobile LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)';
                          $like = '%' . $q . '%'; $p = array_merge($p, [$like, $like, $like]); }
@@ -394,18 +364,18 @@ if ($ctx === 'test') {
                          LEFT JOIN " . DB::t('orders') . " o ON o.id=r.order_id
                          WHERE $w ORDER BY r.id DESC LIMIT 300", $p);
         $sum = [
-            'total'    => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . ' WHERE event_id=?', [(int)$item['id']]),
-            'paid'     => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='paid'", [(int)$item['id']]),
-            'pending'  => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='pending'", [(int)$item['id']]),
-            'deposit'  => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='deposit'", [(int)$item['id']]),
-            'dep_remain' => (int)DB::val('SELECT COALESCE(SUM(GREATEST(0, COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.discount_meta,\'$.payable\')) AS UNSIGNED), r.amount_base - r.discount_amount) - r.paid_total)),0) FROM ' . DB::t('event_registrations') . " r WHERE r.event_id=? AND r.status='deposit'", [(int)$item['id']]),
-            'canceled' => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='canceled'", [(int)$item['id']]),
+            'total'    => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . ' WHERE event_id=? AND deleted_at IS NULL', [(int)$item['id']]),
+            'paid'     => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='paid' AND deleted_at IS NULL", [(int)$item['id']]),
+            'pending'  => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='pending' AND deleted_at IS NULL", [(int)$item['id']]),
+            'deposit'  => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='deposit' AND deleted_at IS NULL", [(int)$item['id']]),
+            'dep_remain' => (int)DB::val('SELECT COALESCE(SUM(GREATEST(0, COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.discount_meta,\'$.payable\')) AS UNSIGNED), r.amount_base - r.discount_amount) - r.paid_total)),0) FROM ' . DB::t('event_registrations') . " r WHERE r.event_id=? AND r.status='deposit' AND r.deleted_at IS NULL", [(int)$item['id']]),
+            'canceled' => (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('event_registrations') . " WHERE event_id=? AND status='canceled' AND deleted_at IS NULL", [(int)$item['id']]),
             'seats'    => ev_paid_seats((int)$item['id']),
             'rev'      => (int)DB::val('SELECT COALESCE(SUM(payable),0) FROM ' . DB::t('orders') . " WHERE event_id=? AND status='paid'", [(int)$item['id']]),
             'ref'      => (int)DB::val('SELECT COALESCE(SUM(payable),0) FROM ' . DB::t('orders') . " WHERE event_id=? AND status='refunded'", [(int)$item['id']]),
         ];
     }
-    $picker = DB::all('SELECT id, title, status FROM ' . DB::t('events') . ' WHERE kind=? ORDER BY id DESC', [$ctx]);
+    $picker = DB::all('SELECT id, title, status FROM ' . DB::t('events') . " WHERE kind=? AND deleted_at IS NULL ORDER BY id DESC", [$ctx]);
 }
 
 /* ── ۲٫۳: فهرست یکپارچهٔ همهٔ موارد برای سلکتور گروه‌بندی‌شده + نمای کلی ── */

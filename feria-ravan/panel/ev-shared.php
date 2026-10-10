@@ -60,6 +60,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['act'] ?? '') === '
     }
 }
 
+/* ── انتقال ثبت‌نام به سطل زباله (توسط خود کاربر) ── */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['act'] ?? '') === 'trash_reg') {
+    csrf_guard();
+    $regId = (int)post('reg');
+    require_once FR_ROOT . '/core/TrashManager.php';
+    TrashManager::ensureSchema();
+    $check = DB::one("SELECT id, status FROM " . DB::t('event_registrations') . " WHERE id=? AND user_id=?", [$regId, (int)$u['id']]);
+    if ($check) {
+        if ($check['status'] === 'paid') {
+            redirect($self . '?err=' . urlencode('برای ثبت‌نام‌های پرداخت‌شده، ابتدا باید درخواست عودت وجه ثبت فرمایید.'));
+        } else {
+            TrashManager::trash('registration', $regId, (int)$u['id']);
+            redirect($self . '?ok=' . urlencode('ثبت‌نام با موفقیت به سطل زباله منتقل گردید 🗑 (از بخش سطل زباله قابل بازیابی است)'));
+        }
+    } else {
+        redirect($self . '?err=' . urlencode('ثبت‌نام یافت نشد.'));
+    }
+}
+
 /* رویدادهای فعالِ همین نوع */
 $events = DB::all("SELECT e.*,
         (SELECT COALESCE(SUM(1 + COALESCE(r.companion_count,0)),0)
@@ -73,7 +92,7 @@ $events = DB::all("SELECT e.*,
 $mine = DB::all("SELECT r.*, e.title, e.kind, e.starts_at, e.teacher, e.price
                  FROM " . DB::t('event_registrations') . " r
                  JOIN " . DB::t('events') . " e ON e.id=r.event_id
-                 WHERE r.user_id=? AND e.kind=? ORDER BY r.id DESC", [$u['id'], $EV_KIND]);
+                 WHERE r.user_id=? AND e.kind=? AND r.deleted_at IS NULL ORDER BY r.id DESC", [$u['id'], $EV_KIND]);
 
 /* رویدادهایی از همین نوع که من به‌عنوان «همراه» ثبت شده‌ام */
 $myCompanions = DB::all("SELECT c.*, r.status AS reg_status, r.discount_meta, e.id AS event_id, e.title, e.kind, e.starts_at,
@@ -242,8 +261,19 @@ panel_layout($u, $pageKey);
           <?php endif; ?>
         <?php elseif ($m['status'] === 'canceled'): ?>
           <span class="fr-chip err" style="font-size:11px">لغوشده</span>
+          <form method="post" style="display:inline;margin-top:6px" onsubmit="return confirm('آیا این ثبت‌نام لغوشده به سطل زباله منتقل شود؟');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="trash_reg">
+            <input type="hidden" name="reg" value="<?= (int)$m['id'] ?>">
+            <button class="fr-btn sm danger ghost" type="submit" title="انتقال به سطل زباله">🗑 حذف</button>
+          </form>
         <?php else: ?>
-          <small style="color:var(--muted);font-size:11px">—</small>
+          <form method="post" style="display:inline;margin-top:6px" onsubmit="return confirm('آیا این پیش‌ثبت‌نام به سطل زباله منتقل شود؟');">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="trash_reg">
+            <input type="hidden" name="reg" value="<?= (int)$m['id'] ?>">
+            <button class="fr-btn sm danger ghost" type="submit" title="انتقال به سطل زباله">🗑 حذف</button>
+          </form>
         <?php endif; ?>
       </td>
     </tr>

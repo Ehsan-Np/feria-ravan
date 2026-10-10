@@ -8,6 +8,7 @@ $testId = (int)($_GET['test'] ?? 0) ?: (int)(DB::val("SELECT id FROM " . DB::t('
 $test = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$testId]);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $test) {
+    csrf_guard();
     $act = (string)post('act');
     $tid = (int)$test['id'];
 

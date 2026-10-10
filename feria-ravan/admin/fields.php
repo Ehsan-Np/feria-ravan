@@ -5,6 +5,7 @@ require_once __DIR__ . '/boot.php';
 $adm = require_admin(['superadmin','manager']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
     $act = (string)post('act');
     if ($act === 'save') {
         $id = (int)post('id');

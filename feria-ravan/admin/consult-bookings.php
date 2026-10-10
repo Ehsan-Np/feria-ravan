@@ -15,6 +15,7 @@ $adm = require_admin(['superadmin','manager']);
  | اقدامات POST — تغییر وضعیت رزرو
  * ==========================================================================*/
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
     $act = (string)post('act'); $id = (int)post('id');
     $a = DB::one('SELECT a.*, s.starts_at FROM ' . DB::t('consult_appointments') . ' a
                   JOIN ' . DB::t('consult_slots') . ' s ON s.id=a.slot_id WHERE a.id=?', [$id]);

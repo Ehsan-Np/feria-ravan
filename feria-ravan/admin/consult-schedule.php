@@ -26,6 +26,7 @@ $serviceId = (int)($_GET['service'] ?? ($services[0]['id'] ?? 0));
  | اقدامات POST
  * ==========================================================================*/
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
     $act = (string)post('act');
 
     /* ── افزودن قانون هفتگی ── */

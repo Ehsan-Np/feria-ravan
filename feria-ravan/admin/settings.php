@@ -8,6 +8,7 @@ $tab = (string)($_GET['tab'] ?? 'brand');
 
 /* ذخیره تنظیمات */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
+    csrf_guard();
     /* ۲٫۴: نوبت‌های یادآوری پلنر (JSON چندنوبتی) پیش از حلقهٔ عمومی هندل می‌شود */
     if (isset($_POST['planner_remind_times']) || isset($_POST['planner_remind_count'])) {
         fr_planner_remind_save((int)($_POST['planner_remind_count'] ?? 1), (array)($_POST['planner_remind_times'] ?? []));

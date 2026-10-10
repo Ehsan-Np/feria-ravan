@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    ۲) خواندن داده‌ها و آمار
    ══════════════════════════════════════════════════════════════════════════ */
 $currentTab = (string)($_GET['tab'] ?? 'all');
-$validTabs  = ['all', 'attempts', 'tests', 'events', 'users', 'tickets', 'reviews'];
+$validTabs  = ['all', 'attempts', 'tests', 'events', 'users', 'tickets', 'registrations', 'reviews'];
 if (!in_array($currentTab, $validTabs, true)) {
     $currentTab = 'all';
 }
@@ -106,6 +106,9 @@ echo flash();
         </a>
         <a class="fr-btn sm <?= $currentTab==='tickets' ? '' : 'ghost' ?>" href="?tab=tickets">
           🎫 تیکت‌ها (<?= fa_num($stats['tickets']) ?>)
+        </a>
+        <a class="fr-btn sm <?= $currentTab==='registrations' ? '' : 'ghost' ?>" href="?tab=registrations">
+          📝 ثبت‌نام‌ها (<?= fa_num($stats['registrations']) ?>)
         </a>
         <a class="fr-btn sm <?= $currentTab==='reviews' ? '' : 'ghost' ?>" href="?tab=reviews">
           💬 دیدگاه‌ها (<?= fa_num($stats['reviews']) ?>)

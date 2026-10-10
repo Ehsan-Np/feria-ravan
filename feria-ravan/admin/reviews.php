@@ -27,18 +27,21 @@ function fr_review_item_opts(string $ctx): array
 
 /* ════════════════════════ عملیات POST ════════════════════════ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
+    require_once FR_ROOT . '/core/TrashManager.php';
     $act = (string)post('act');
 
-    /* ── تغییر وضعیت/حذف ── */
+    /* ── تغییر وضعیت/حذف (انتقال به سطل زباله) ── */
     if (in_array($act, ['approve','reject','delete'], true)) {
         $id = (int)post('id');
         $r  = DB::one('SELECT * FROM ' . DB::t('reviews') . ' WHERE id=?', [$id]);
         if (!$r) flash('دیدگاه یافت نشد.', 'err');
         else {
             if ($act === 'delete') {
-                DB::run('DELETE FROM ' . DB::t('reviews') . ' WHERE id=?', [$id]);
+                TrashManager::ensureSchema();
+                TrashManager::trash('review', $id, (int)$adm['id']);
                 log_activity('review_del', $r['context'], (int)$r['ref_id'], ['review' => $id]);
-                flash('دیدگاه حذف شد 🗑');
+                flash('دیدگاه با موفقیت به سطل زباله منتقل گردید 🗑 (امکان بازیابی یا حذف قطعی در سطل زباله وجود دارد)');
             } else {
                 DB::update('reviews', ['status' => $act === 'approve' ? 'approved' : 'rejected'], 'id=?', [$id]);
                 log_activity('review_' . $act, $r['context'], (int)$r['ref_id'], ['review' => $id]);
@@ -194,7 +197,7 @@ $fq   = trim((string)($_GET['q'] ?? ''));
 
 $rows = []; $sum = [];
 if ($tab === 'list') {
-    $w = '1=1'; $p = [];
+    $w = 'r.deleted_at IS NULL'; $p = [];
     if ($fCtx) { $w .= ' AND r.context=?'; $p[] = $fCtx; }
     if ($fRef) { $w .= ' AND r.ref_id=?';  $p[] = $fRef; }
     if ($fSt)  { $w .= ' AND r.status=?';  $p[] = $fSt; }
@@ -204,11 +207,11 @@ if ($tab === 'list') {
                      FROM ' . DB::t('reviews') . ' r LEFT JOIN ' . DB::t('review_labels') . ' l ON l.id=r.label_id
                      WHERE ' . $w . ' ORDER BY r.id DESC LIMIT 300', $p);
     $sum = [
-        'pending'  => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE status='pending'"),
-        'approved' => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE status='approved'"),
-        'avg'      => round((float)DB::val("SELECT COALESCE(AVG(rating),0) FROM " . DB::t('reviews') . " WHERE status='approved' AND kind='review' AND rating IS NOT NULL"), 1),
-        'today'    => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE DATE(created_at)=CURDATE()"),
-        'openq'    => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE kind='question' AND status='approved' AND (admin_reply IS NULL OR admin_reply='')"),
+        'pending'  => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE status='pending' AND deleted_at IS NULL"),
+        'approved' => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE status='approved' AND deleted_at IS NULL"),
+        'avg'      => round((float)DB::val("SELECT COALESCE(AVG(rating),0) FROM " . DB::t('reviews') . " WHERE status='approved' AND kind='review' AND rating IS NOT NULL AND deleted_at IS NULL"), 1),
+        'today'    => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE DATE(created_at)=CURDATE() AND deleted_at IS NULL"),
+        'openq'    => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('reviews') . " WHERE kind='question' AND status='approved' AND (admin_reply IS NULL OR admin_reply='') AND deleted_at IS NULL"),
     ];
 }
 $editId = (int)($_GET['edit'] ?? 0);

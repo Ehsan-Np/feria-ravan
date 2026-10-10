@@ -13,6 +13,7 @@ $kv = new Kavenegar();
 
 /* ---------- پردازش فرم تست یا ذخیره ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
     $act = (string)post('act', '');
 
     // تست ارسال پیامک از صفحهٔ قالب‌ها

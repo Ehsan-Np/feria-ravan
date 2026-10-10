@@ -17,6 +17,7 @@ $adm = require_admin(['superadmin','manager']);
  | اقدامات POST
  * ==========================================================================*/
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_guard();
     $act = (string)post('act');
 
     /* ── مشاور ── */

@@ -92,12 +92,37 @@ final class TrashManager
     }
 
     /**
+     * نرمال‌سازی نوع موجودیت به فرمت استاندارد یکنواخت
+     */
+    public static function normalizeType(string $type): string
+    {
+        $type = strtolower(trim($type));
+        $map = [
+            'attempts'            => 'attempt',
+            'events'              => 'event',
+            'workshops'           => 'event',
+            'workshop'            => 'event',
+            'courses'             => 'event',
+            'course'              => 'event',
+            'tests'               => 'test',
+            'users'               => 'user',
+            'tickets'             => 'ticket',
+            'registrations'       => 'registration',
+            'event_registrations' => 'registration',
+            'event_registration'  => 'registration',
+            'reviews'             => 'review',
+        ];
+        return $map[$type] ?? $type;
+    }
+
+    /**
      * انتقال یک مورد به سطل زباله (Soft Delete)
      */
     public static function trash(string $type, int $id, ?int $operatorId = null): bool
     {
         self::ensureSchema();
         if ($id <= 0) return false;
+        $type = self::normalizeType($type);
         $now = date('Y-m-d H:i:s');
 
         try {
@@ -191,6 +216,7 @@ final class TrashManager
     {
         self::ensureSchema();
         if ($id <= 0) return false;
+        $type = self::normalizeType($type);
 
         try {
             switch ($type) {
@@ -300,6 +326,7 @@ final class TrashManager
     {
         self::ensureSchema();
         if ($id <= 0) return false;
+        $type = self::normalizeType($type);
 
         try {
             switch ($type) {
@@ -436,6 +463,7 @@ final class TrashManager
     {
         self::ensureSchema();
         $count = 0;
+        $type = self::normalizeType($type);
         $types = ($type === 'all') ? ['attempt', 'event', 'test', 'user', 'ticket', 'registration', 'review'] : [$type];
 
         foreach ($types as $t) {
@@ -456,6 +484,7 @@ final class TrashManager
     public static function getTrashedIds(string $type, ?int $userId = null): array
     {
         self::ensureSchema();
+        $type = self::normalizeType($type);
         try {
             switch ($type) {
                 case 'attempt':
@@ -541,6 +570,7 @@ final class TrashManager
     public static function getList(string $type = 'all', int $limit = 100, int $offset = 0, ?int $userId = null): array
     {
         self::ensureSchema();
+        $type = self::normalizeType($type);
         $items = [];
 
         try {
@@ -662,7 +692,7 @@ final class TrashManager
             }
 
             // ۶. نظرات و دیدگاه‌ها
-            if (($type === 'all' || $type === 'reviews') && $userId === null) {
+            if (($type === 'all' || $type === 'review') && $userId === null) {
                 $rows = DB::all("SELECT id, author_name, context, body, deleted_at, created_at FROM " . DB::t('reviews') . "
                                  WHERE deleted_at IS NOT NULL
                                  ORDER BY deleted_at DESC LIMIT {$limit} OFFSET {$offset}");
@@ -677,6 +707,35 @@ final class TrashManager
                         'deleted_at'  => $r['deleted_at'] ?? $r['created_at'],
                         'restore_act' => 'restore_review',
                         'purge_act'   => 'purge_review',
+                    ];
+                }
+            }
+
+            // ۷. ثبت‌نام‌های رویدادها (کارگاه‌ها / دوره‌ها)
+            if ($type === 'all' || $type === 'registration') {
+                $sql = "SELECT r.id, r.status, r.deleted_at, r.created_at, e.title AS event_title, e.kind,
+                               u.first_name, u.last_name, u.mobile
+                        FROM " . DB::t('event_registrations') . " r
+                        JOIN " . DB::t('events') . " e ON e.id=r.event_id
+                        LEFT JOIN " . DB::t('users') . " u ON u.id=r.user_id
+                        WHERE r.deleted_at IS NOT NULL";
+                $p = [];
+                if ($userId !== null) { $sql .= " AND r.user_id=?"; $p[] = $userId; }
+                $sql .= " ORDER BY r.deleted_at DESC LIMIT {$limit} OFFSET {$offset}";
+                $rows = DB::all($sql, $p);
+                foreach ($rows as $r) {
+                    $uName = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['mobile'] ?? 'کاربر');
+                    $kindFa = ($r['kind'] === 'course') ? 'دوره' : 'کارگاه';
+                    $items[] = [
+                        'type'        => 'registration',
+                        'type_label'  => 'ثبت‌نام ' . $kindFa,
+                        'type_icon'   => ($r['kind'] === 'course') ? '📚' : '🛠',
+                        'id'          => (int)$r['id'],
+                        'title'       => $r['event_title'],
+                        'meta'        => 'کاربر: ' . $uName . ' · وضعیت قبلی: ' . $r['status'],
+                        'deleted_at'  => $r['deleted_at'] ?? $r['created_at'],
+                        'restore_act' => 'restore_registration',
+                        'purge_act'   => 'purge_registration',
                     ];
                 }
             }
