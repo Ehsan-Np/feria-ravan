@@ -161,6 +161,10 @@ admin_layout($adm, 'monitor', 'رصد فعالیت و امنیت');
           <a href="?tab=sms&q=<?= urlencode((string)$l['mobile']) ?>" title="فیلتر پیامک‌های این شماره" style="color:inherit;text-decoration:none">
             <?= fa_num($l['mobile']) ?>
           </a>
+          <?php $op = fr_mobile_operator((string)$l['mobile']); ?>
+          <div style="font-size:10.5px;direction:rtl;font-family:inherit;font-weight:normal;color:#64748b;margin-top:2px">
+            <?= e($op['name']) ?>
+          </div>
         </td>
         <td style="font-size:12px;white-space:nowrap">
           <span class="fr-chip info" style="font-size:11px;padding:3px 8px;display:inline-block">

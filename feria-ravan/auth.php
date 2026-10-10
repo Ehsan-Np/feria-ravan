@@ -106,9 +106,10 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
         <!-- گام ۱: موبایل -->
         <div id="stepMobile">
           <div class="fr-field">
-            <label>شماره موبایل</label>
-            <input class="fr-input" id="otpMobile" inputmode="numeric" maxlength="11"
-                   placeholder="مثلاً ۰۹۱۲۳۴۵۶۷۸۹" autocomplete="tel" style="direction:ltr;text-align:center">
+            <label>شماره موبایل (تمامی اپراتورها: همراه اول، ایرانسل، رایتل، آپتل، سامان‌تل و...)</label>
+            <input class="fr-input" id="otpMobile" inputmode="tel" maxlength="20"
+                   placeholder="مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱..." autocomplete="tel" style="direction:ltr;text-align:center">
+            <div id="opBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
           </div>
           <button class="fr-btn au-btn" id="btnSendOtp">ارسال کد تأیید</button>
           <p class="au-hint">کد <?= fa_num($otpLen) ?> رقمی برایتان پیامک می‌شود؛ نیازی به رمز عبور نیست.</p>
@@ -217,6 +218,50 @@ function startTimer(sec){
   timer=setInterval(()=>{left--; $('resendTimer').textContent=faNum(Math.max(left,0));
     if(left<=0){clearInterval(timer);$('btnResend').disabled=false;$('btnResend').innerHTML='ارسال مجدد کد';}},1000);
 }
+
+/* ---------- تشخیص هوشمند اپراتور موبایل (همراه اول، ایرانسل، رایتل، آپتل، سامان‌تل، شاتل) ---------- */
+function detectOpJs(m){
+  m = (m||'').replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[^\d\+]/g, '');
+  if (m.startsWith('+98')) m = m.substring(3);
+  else if (m.startsWith('0098')) m = m.substring(4);
+  else if (m.startsWith('98') && m.length >= 12) m = m.substring(2);
+  m = m.replace(/^0+/, '');
+  if (m.startsWith('9')) m = '0' + m;
+
+  if (m.length < 4) return null;
+  const p3 = m.substring(0, 4);
+  const p4 = m.substring(0, 5);
+
+  if (p4 === '09991') return { name: 'آپتل (Aptel)', color: '#0284c7' };
+  if (p4 === '09999' || p4 === '09996') return { name: 'سامان‌تل (SamanTel)', color: '#0d9488' };
+  if (p3 === '0998') return { name: 'شاتل موبایل', color: '#d97706' };
+  if (p4 === '09990') return { name: 'لوتوس‌تل', color: '#6366f1' };
+  if (p4 === '09998') return { name: 'آرین‌تل', color: '#8b5cf6' };
+  if (p4 === '09997') return { name: 'فناپ موبایل', color: '#ec4899' };
+  if (p3 === '0932') return { name: 'تالیا (Taliya)', color: '#ea580c' };
+  if (['0920','0921','0922','0923'].includes(p3)) return { name: 'رایتل (Rightel)', color: '#7c3aed' };
+  if (['0930','0933','0935','0936','0937','0938','0939','0900','0901','0902','0903','0904','0905','0941'].includes(p3)) {
+    return { name: 'ایرانسل (Irancell)', color: '#ca8a04' };
+  }
+  if (['0910','0911','0912','0913','0914','0915','0916','0917','0918','0919','0990','0991','0992','0993','0994','0996'].includes(p3)) {
+    return { name: p3 === '0994' ? 'همراه اول (سیم‌کارت انارستان)' : 'همراه اول (ارتباطات سیار)', color: '#0284c7' };
+  }
+  if (m.startsWith('09') && m.length >= 4) return { name: 'اپراتور همراه ایران', color: '#475569' };
+  return null;
+}
+
+$('otpMobile').addEventListener('input', e => {
+  const op = detectOpJs(e.target.value.trim());
+  const b = $('opBadge');
+  if (b) {
+    if (op) {
+      b.style.display = 'block';
+      b.innerHTML = '<span style="display:inline-block;padding:2px 10px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;color:' + op.color + ';font-weight:700">📱 اپراتور شناسایی‌شده: ' + op.name + '</span>';
+    } else {
+      b.style.display = 'none';
+    }
+  }
+});
 
 /* ---------- ارسال OTP ---------- */
 async function sendOtp(){

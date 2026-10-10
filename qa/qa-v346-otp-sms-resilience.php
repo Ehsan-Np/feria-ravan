@@ -75,17 +75,73 @@ $dbVer = DB::setting('fr_version');
 assert_true($dbVer === '3.4.6', "Database settings fr_version upgraded to '3.4.6' (got {$dbVer})");
 
 // -------------------------------------------------------------
-// 3. Mobile Number Cleaning & Formatting
+// 3. Mobile Normalization & Operator Matrix (All Iranian Carriers)
 // -------------------------------------------------------------
-echo "\n3. Testing Mobile Normalization across Variants:\n";
-assert_true(clean_mobile('09121234567') === '09121234567', "Standard format 09121234567 unchanged");
-assert_true(clean_mobile('+989121234567') === '09121234567', "International +98 converted to 09");
-assert_true(clean_mobile('00989121234567') === '09121234567', "International 0098 converted to 09");
-assert_true(clean_mobile('989121234567') === '09121234567', "Prefixed 98 converted to 09");
-assert_true(clean_mobile('9121234567') === '09121234567', "10-digit without leading 0 converted to 09");
-assert_true(clean_mobile('۰۹۱۲۱۲۳۴۵۶۷') === '09121234567', "Persian digits converted to English 09121234567");
-assert_true(clean_mobile('0912 123 4567') === '09121234567', "Spaces stripped correctly");
-assert_true(clean_mobile(' ۰۹۱۲-۱۲۳-۴۵۶۷ ') === '09121234567', "Dashes and whitespace stripped with Persian digits");
+echo "\n3. Testing Mobile Normalization across Iranian Operators:\n";
+assert_true(clean_mobile('09121234567') === '09121234567', "MCI standard format 09121234567 unchanged");
+assert_true(clean_mobile('+989121234567') === '09121234567', "MCI +98 converted to 09");
+assert_true(clean_mobile('00989121234567') === '09121234567', "MCI 0098 converted to 09");
+assert_true(clean_mobile('989121234567') === '09121234567', "MCI prefixed 98 converted to 09");
+assert_true(clean_mobile('9121234567') === '09121234567', "MCI 10-digit without leading 0 converted to 09");
+assert_true(clean_mobile('۰۹۱۲۱۲۳۴۵۶۷') === '09121234567', "MCI Persian digits converted to English 09121234567");
+assert_true(clean_mobile('0912 123 4567') === '09121234567', "MCI spaces stripped correctly");
+assert_true(clean_mobile(' ۰۹۱۲-۱۲۳-۴۵۶۷ ') === '09121234567', "MCI dashes and whitespace stripped with Persian digits");
+assert_true(clean_mobile('+9809121234567') === '09121234567', "MCI +980 extra-zero mistake corrected to 09121234567");
+
+// Testing Aptel (آپتل - 09991)
+echo "\n   Testing Aptel (آپتل) Series:\n";
+assert_true(clean_mobile('09991234567') === '09991234567', "Aptel 09991234567 valid");
+assert_true(clean_mobile('+989991234567') === '09991234567', "Aptel +989991234567 converted to 09991234567");
+assert_true(clean_mobile(' ۰۹۹۹۱-۲۳۴۵۶۷ ') === '09991234567', "Aptel Persian digits and dashes normalized");
+assert_true(valid_mobile('09991234567'), "valid_mobile accepts Aptel 09991234567");
+$opAptel = fr_mobile_operator('09991234567');
+assert_true($opAptel['valid'] && $opAptel['slug'] === 'aptel', "fr_mobile_operator identifies Aptel (got {$opAptel['name']})");
+
+// Testing SamanTel (سامان‌تل - 09999 / 09996)
+echo "\n   Testing SamanTel (سامان‌تل) Series:\n";
+assert_true(clean_mobile('09999876543') === '09999876543', "SamanTel 09999876543 valid");
+assert_true(clean_mobile('+989999876543') === '09999876543', "SamanTel +989999876543 converted to 09999876543");
+assert_true(clean_mobile('۰۹۹۹۹۸۷۶۵۴۳') === '09999876543', "SamanTel Persian digits normalized");
+assert_true(valid_mobile('09999876543'), "valid_mobile accepts SamanTel 09999876543");
+assert_true(valid_mobile('09996123456'), "valid_mobile accepts SamanTel 09996123456");
+$opSaman = fr_mobile_operator('09999876543');
+assert_true($opSaman['valid'] && $opSaman['slug'] === 'samantel', "fr_mobile_operator identifies SamanTel (got {$opSaman['name']})");
+
+// Testing Irancell (ایرانسل - 0935 / 0902 / 0941)
+echo "\n   Testing Irancell (ایرانسل) Series:\n";
+assert_true(valid_mobile('09351234567'), "valid_mobile accepts Irancell 09351234567");
+assert_true(valid_mobile('09021234567'), "valid_mobile accepts Irancell 09021234567");
+assert_true(valid_mobile('09411234567'), "valid_mobile accepts Irancell 09411234567");
+$opIrancell = fr_mobile_operator('09351234567');
+assert_true($opIrancell['valid'] && $opIrancell['slug'] === 'irancell', "fr_mobile_operator identifies Irancell (got {$opIrancell['name']})");
+
+// Testing Rightel (رایتل - 0921)
+echo "\n   Testing Rightel (رایتل) Series:\n";
+assert_true(valid_mobile('09211234567'), "valid_mobile accepts Rightel 09211234567");
+assert_true(valid_mobile('09221234567'), "valid_mobile accepts Rightel 09221234567");
+$opRightel = fr_mobile_operator('09211234567');
+assert_true($opRightel['valid'] && $opRightel['slug'] === 'rightel', "fr_mobile_operator identifies Rightel (got {$opRightel['name']})");
+
+// Testing Shatel Mobile (شاتل موبایل - 0998)
+echo "\n   Testing Shatel Mobile (شاتل موبایل) Series:\n";
+assert_true(valid_mobile('09981012345'), "valid_mobile accepts Shatel Mobile 09981012345");
+$opShatel = fr_mobile_operator('09981012345');
+assert_true($opShatel['valid'] && $opShatel['slug'] === 'shatel', "fr_mobile_operator identifies Shatel Mobile (got {$opShatel['name']})");
+
+// Testing MCI Anarestan (انارستان - 0994)
+echo "\n   Testing MCI Anarestan (انارستان) Series:\n";
+assert_true(valid_mobile('09941234567'), "valid_mobile accepts Anarestan 09941234567");
+$opAnar = fr_mobile_operator('09941234567');
+assert_true($opAnar['valid'] && $opAnar['slug'] === 'mci' && str_contains($opAnar['name'], 'انارستان'), "fr_mobile_operator identifies Anarestan (got {$opAnar['name']})");
+
+// Testing Other MVNOs & Carriers (LotusTel, Taliya, TeleKish, MTCE)
+echo "\n   Testing Other Operators (LotusTel, Taliya, TeleKish, MTCE):\n";
+assert_true(valid_mobile('09990123456'), "valid_mobile accepts LotusTel 09990123456");
+assert_true(valid_mobile('09321234567'), "valid_mobile accepts Taliya 09321234567");
+assert_true(valid_mobile('09341234567'), "valid_mobile accepts TeleKish 09341234567");
+assert_true(valid_mobile('09311234567'), "valid_mobile accepts MTCE 09311234567");
+assert_true(fr_mobile_operator('09321234567')['slug'] === 'taliya', "fr_mobile_operator identifies Taliya");
+assert_true(fr_mobile_operator('09990123456')['slug'] === 'lotustel', "fr_mobile_operator identifies LotusTel");
 
 // -------------------------------------------------------------
 // 4. Kavenegar Gateway Defaults & Error Handling
@@ -164,6 +220,27 @@ assert_true($newSend1['debug_code'] !== $newSend2['debug_code'], "Subsequent OTP
 
 $oldCodes = DB::all("SELECT * FROM " . DB::t('otps') . " WHERE mobile=? AND used_at IS NULL", [$userMob]);
 assert_true(count($oldCodes) === 1, "Only the latest OTP code remains active/unused");
+
+// Cross-Operator OTP verification tests
+echo "\n   Testing OTP Delivery & Verification Across Different Operators:\n";
+$opTestNumbers = [
+    '09991001122' => 'Aptel (آپتل)',
+    '09999112233' => 'SamanTel (سامان‌تل)',
+    '09981001234' => 'Shatel Mobile (شاتل موبایل)',
+    '09123456789' => 'MCI (همراه اول)',
+    '09351234567' => 'Irancell (ایرانسل)',
+    '09211234567' => 'Rightel (رایتل)',
+];
+
+foreach ($opTestNumbers as $opMob => $opTitle) {
+    DB::run("DELETE FROM " . DB::t('rate_limits') . " WHERE bucket LIKE 'otp:%'");
+    $res = otp_send($opMob, 'login');
+    assert_true($res['ok'] === true, "otp_send succeeded for {$opTitle} ({$opMob})");
+    assert_true(!empty($res['debug_code']), "debug_code received for {$opTitle}");
+
+    $vRes = otp_verify($opMob, $res['debug_code'], 'login');
+    assert_true($vRes['ok'] === true, "otp_verify successfully authenticated {$opTitle}");
+}
 
 // -------------------------------------------------------------
 // 6. Template Saving & Customization

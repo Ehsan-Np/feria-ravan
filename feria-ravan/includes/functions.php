@@ -161,27 +161,114 @@ function valid_national_code(string $code): bool
     $c = (int)$code[9];
     return ($r < 2 && $c === $r) || ($r >= 2 && $c === 11-$r);
 }
-/** پاک‌سازی و استانداردسازی شماره موبایل ایران */
+/** پاک‌سازی و استانداردسازی شماره موبایل ایران (تمامی اپراتورها: همراه اول، ایرانسل، رایتل، آپتل، سامان‌تل، شاتل و...) */
 function clean_mobile(string $m): string
 {
     $m = en_num(trim($m));
-    $m = (string)preg_replace('/[\s\-\_\(\)\.]+/', '', $m);
+    // حذف هرگونه کاراکتر غیر از ارقام و علامت +
+    $m = (string)preg_replace('/[^\d\+]/', '', $m);
     if (str_starts_with($m, '+98')) {
-        $m = '0' . substr($m, 3);
+        $m = substr($m, 3);
     } elseif (str_starts_with($m, '0098')) {
-        $m = '0' . substr($m, 4);
-    } elseif (str_starts_with($m, '98') && strlen($m) === 12) {
-        $m = '0' . substr($m, 2);
-    } elseif (str_starts_with($m, '9') && strlen($m) === 10) {
+        $m = substr($m, 4);
+    } elseif (str_starts_with($m, '98') && strlen($m) >= 12) {
+        $m = substr($m, 2);
+    }
+    // حذف صفر یا صفرهای اضافی پس از پیش‌شماره بین‌المللی
+    $m = ltrim($m, '0');
+    // شماره استاندارد ایران پس از حذف صفر، ۱۰ رقم با ۹ شروع می‌شود
+    if (str_starts_with($m, '9') && strlen($m) === 10) {
         $m = '0' . $m;
+    } elseif (str_starts_with($m, '09') && strlen($m) === 11) {
+        // در صورت وجود، دست‌نخورده باقی بماند
     }
     return $m;
 }
 
-/** صحت موبایل ایران */
+/** صحت موبایل ایران (پشتیبانی کامل از تمامی سرشماره‌های ۱۱ رقمی 09xxxxxxxxx) */
 function valid_mobile(string $m): bool
 {
     return (bool)preg_match('/^09\d{9}$/', clean_mobile($m));
+}
+
+/**
+ * تشخیص نام و نوع اپراتور تلفن همراه بر اساس سرشماره
+ * پشتیبانی از: همراه اول، ایرانسل، رایتل، آپتل، سامان‌تل، شاتل موبایل، تالیا، تله‌کیش، لوتوس‌تل و سایر MVNOها
+ * @return array{valid:bool, name:string, slug:string, type:string, prefix:string}
+ */
+function fr_mobile_operator(string $m): array
+{
+    $m = clean_mobile($m);
+    if (!valid_mobile($m)) {
+        return ['valid' => false, 'name' => 'نامعتبر', 'slug' => 'invalid', 'type' => 'unknown', 'prefix' => ''];
+    }
+
+    $pre3 = substr($m, 0, 4); // 09xx
+    $pre4 = substr($m, 0, 5); // 09xxx
+    $pre5 = substr($m, 0, 6); // 09xxxx
+
+    // ۱. آپتل (Aptel - نگین ارتباطات همراه / نقش اول کیفیت)
+    if ($pre4 === '09991') {
+        return ['valid' => true, 'name' => 'آپتل (Aptel)', 'slug' => 'aptel', 'type' => 'mvno', 'prefix' => $pre4];
+    }
+
+    // ۲. سامان‌تل (SamanTel - کیش سل پارس)
+    if (in_array($pre4, ['09999', '09996'], true)) {
+        return ['valid' => true, 'name' => 'سامان‌تل (SamanTel)', 'slug' => 'samantel', 'type' => 'mvno', 'prefix' => $pre4];
+    }
+
+    // ۳. شاتل موبایل (Shatel Mobile)
+    if ($pre3 === '0998') {
+        return ['valid' => true, 'name' => 'شاتل موبایل (Shatel Mobile)', 'slug' => 'shatel', 'type' => 'mvno', 'prefix' => $pre3];
+    }
+
+    // ۴. لوتوس تل (LotusTel - پارسیان همراه لوتوس)
+    if ($pre4 === '09990') {
+        return ['valid' => true, 'name' => 'لوتوس‌تل (LotusTel)', 'slug' => 'lotustel', 'type' => 'mvno', 'prefix' => $pre4];
+    }
+
+    // ۵. آرین‌تل (ArianTel)
+    if ($pre4 === '09998') {
+        return ['valid' => true, 'name' => 'آرین‌تل (ArianTel)', 'slug' => 'ariantel', 'type' => 'mvno', 'prefix' => $pre4];
+    }
+
+    // ۶. فناپ موبایل (Fanap Mobile / پادین)
+    if ($pre4 === '09997') {
+        return ['valid' => true, 'name' => 'فناپ موبایل (Fanap)', 'slug' => 'fanap', 'type' => 'mvno', 'prefix' => $pre4];
+    }
+
+    // ۷. تالیا (Taliya)
+    if ($pre3 === '0932') {
+        return ['valid' => true, 'name' => 'تالیا (Taliya)', 'slug' => 'taliya', 'type' => 'mno', 'prefix' => $pre3];
+    }
+
+    // ۸. تله‌کیش (TeleKish)
+    if ($pre3 === '0934') {
+        return ['valid' => true, 'name' => 'تله‌کیش (TeleKish)', 'slug' => 'telekish', 'type' => 'mno', 'prefix' => $pre3];
+    }
+
+    // ۹. اسپادان (MTCE)
+    if ($pre3 === '0931') {
+        return ['valid' => true, 'name' => 'اسپادان (MTCE)', 'slug' => 'mtce', 'type' => 'mno', 'prefix' => $pre3];
+    }
+
+    // ۱۰. رایتل (Rightel)
+    if (in_array($pre3, ['0920', '0921', '0922', '0923'], true)) {
+        return ['valid' => true, 'name' => 'رایتل (Rightel)', 'slug' => 'rightel', 'type' => 'mno', 'prefix' => $pre3];
+    }
+
+    // ۱۱. ایرانسل (MTN Irancell)
+    if (in_array($pre3, ['0930', '0933', '0935', '0936', '0937', '0938', '0939', '0900', '0901', '0902', '0903', '0904', '0905', '0941'], true)) {
+        return ['valid' => true, 'name' => 'ایرانسل (Irancell)', 'slug' => 'irancell', 'type' => 'mno', 'prefix' => $pre3];
+    }
+
+    // ۱۲. همراه اول (MCI - ارتباطات سیار ایران)
+    if (in_array($pre3, ['0910', '0911', '0912', '0913', '0914', '0915', '0916', '0917', '0918', '0919', '0990', '0991', '0992', '0993', '0994', '0996'], true)) {
+        $extra = ($pre3 === '0994') ? ' (سیم‌کارت انارستان)' : '';
+        return ['valid' => true, 'name' => 'همراه اول (MCI)' . $extra, 'slug' => 'mci', 'type' => 'mno', 'prefix' => $pre3];
+    }
+
+    return ['valid' => true, 'name' => 'اپراتور همراه ایران', 'slug' => 'other_iran', 'type' => 'mno', 'prefix' => $pre3];
 }
 
 /* ---------------------------------------------------------------------------
