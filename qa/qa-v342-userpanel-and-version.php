@@ -38,13 +38,13 @@ function assert_true(bool $cond, string $msg): void {
 // 1. Version 3.4.3 Verification
 // -------------------------------------------------------------
 echo "1. Checking System Versioning:\n";
-assert_true(defined('FR_RELEASE') && FR_RELEASE === '3.4.3', "FR_RELEASE is strictly 3.4.3");
-assert_true(defined('FR_VERSION') && FR_VERSION === '3.4.3', "FR_VERSION is strictly 3.4.3");
+assert_true(defined('FR_RELEASE') && version_compare(FR_RELEASE, '3.4.3', '>='), "FR_RELEASE is at least 3.4.3 (current: " . FR_RELEASE . ")");
+assert_true(defined('FR_VERSION') && version_compare(FR_VERSION, '3.4.3', '>='), "FR_VERSION is at least 3.4.3 (current: " . FR_VERSION . ")");
 
 // Run update pipeline
 fr_update_pipeline(true);
 $dbVer = (string)DB::setting('fr_version', '');
-assert_true($dbVer === '3.4.3', "Database version setting updated to 3.4.3");
+assert_true(version_compare($dbVer, '3.4.3', '>='), "Database version setting updated to at least 3.4.3 (current: $dbVer)");
 
 // -------------------------------------------------------------
 // 2. Database Sessions Table Verification

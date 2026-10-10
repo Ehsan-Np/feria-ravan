@@ -77,7 +77,7 @@ function fr_update_pipeline(bool $force = false): void
         $verFile = dirname(__DIR__) . '/includes/version.php';
         if (file_exists($verFile)) require_once $verFile;
     }
-    $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : '3.4.3');
+    $codeVer = defined('FR_RELEASE') ? FR_RELEASE : (defined('FR_VERSION') ? FR_VERSION : '3.4.4');
     if (!$force && $tried) return;
     $tried = true;
 

@@ -4,6 +4,9 @@
 (function () {
   'use strict';
 
+  if (window.__FERIA_JS_LOADED__) return;
+  window.__FERIA_JS_LOADED__ = true;
+
   /* ---------- ابزارهای پایه ---------- */
   const $  = (s, c) => (c || document).querySelector(s);
   const $$ = (s, c) => Array.from((c || document).querySelectorAll(s));
@@ -118,11 +121,13 @@
   };
 
   /* ---------- منوی موبایل ---------- */
-  const burger = $('.fr-hamburger'), sidebar = $('.fr-sidebar'), overlay = $('.fr-overlay');
-  if (burger && sidebar) {
-    const toggle = on => { sidebar.classList.toggle('open', on); overlay && overlay.classList.toggle('on', on); };
-    burger.addEventListener('click', () => toggle(!sidebar.classList.contains('open')));
-    overlay && overlay.addEventListener('click', () => toggle(false));
+  function initMobileMenu() {
+    const burger = $('.fr-hamburger'), sidebar = $('.fr-sidebar'), overlay = $('.fr-overlay');
+    if (burger && sidebar) {
+      const toggle = on => { sidebar.classList.toggle('open', on); overlay && overlay.classList.toggle('on', on); };
+      burger.addEventListener('click', () => toggle(!sidebar.classList.contains('open')));
+      overlay && overlay.addEventListener('click', () => toggle(false));
+    }
   }
 
   /* ======================================================================
@@ -252,39 +257,45 @@
     });
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function initPcCanvas() {
+    $$('.pc-canvas').forEach(function (canvas) {
+      var cid = canvas.getAttribute('data-pc-id') || 'default';
+      var key = 'fr_pc_view_' + cid;
+      var btns = $$('[data-pc-view][data-pc-for="' + cid + '"]');
+      function apply(mode) {
+        canvas.classList.toggle('as-list', mode === 'list');
+        btns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-pc-view') === mode); });
+        try { localStorage.setItem(key, mode); } catch (e) {}
+      }
+      var saved = null;
+      try { saved = localStorage.getItem(key); } catch (e) {}
+      apply(saved === 'list' ? 'list' : 'grid');
+      btns.forEach(function (b) {
+        b.addEventListener('click', function (e) { e.preventDefault(); apply(b.getAttribute('data-pc-view')); });
+      });
+    });
+  }
+
+  function onDomReady() {
+    initMobileMenu();
     initRte();
     animateScaleBars();
+    initPcCanvas();
     $$('canvas[data-chart]').forEach(cnv => {
       try { drawBarChart(cnv, JSON.parse(cnv.dataset.chart), JSON.parse(cnv.dataset.opts || '{}')); }
       catch (e) { /* نادیده */ }
     });
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onDomReady);
+  } else {
+    onDomReady();
+  }
+
   window.addEventListener('resize', () => {
     $$('canvas[data-chart]').forEach(cnv => {
       try { drawBarChart(cnv, JSON.parse(cnv.dataset.chart), JSON.parse(cnv.dataset.opts || '{}')); } catch (e) {}
-    });
-  });
-
-  /* ======================================================================
-     نمایش حرفه‌ای فهرست‌ها (۱٫۸) — حالت شبکه‌ای/فهرستی با حافظهٔ کاربر
-     (در feria.js قرار گرفته تا پنل و سایت هر دو بهره ببرند)
-     ساختار: .pc-canvas[data-pc-id] + دکمه‌های [data-pc-view][data-pc-for=id]
-     ====================================================================== */
-  $$('.pc-canvas').forEach(function (canvas) {
-    var cid = canvas.getAttribute('data-pc-id') || 'default';
-    var key = 'fr_pc_view_' + cid;
-    var btns = $$('[data-pc-view][data-pc-for="' + cid + '"]');
-    function apply(mode) {
-      canvas.classList.toggle('as-list', mode === 'list');
-      btns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-pc-view') === mode); });
-      try { localStorage.setItem(key, mode); } catch (e) {}
-    }
-    var saved = null;
-    try { saved = localStorage.getItem(key); } catch (e) {}
-    apply(saved === 'list' ? 'list' : 'grid');
-    btns.forEach(function (b) {
-      b.addEventListener('click', function (e) { e.preventDefault(); apply(b.getAttribute('data-pc-view')); });
     });
   });
 
@@ -303,33 +314,41 @@
       i = AR.indexOf(ch); return i > -1 ? String(i) : ch;
     });
   }
-  document.querySelectorAll('input[data-t24]').forEach(function (inp) {
-    function clean(v, final) {
-      v = toEn(v).replace(/[^0-9]/g, '').slice(0, 4);
-      var h = v.slice(0, 2), m = v.slice(2);
-      if (h.length === 2 && +h > 23) h = '23';
-      if (m.length === 2 && +m > 59) m = '59';
-      if (final && h.length === 1) h = '0' + h;
-      if (final && m.length === 1) m = m + '0';
-      return h + (v.length > 2 || (final && h && m) ? ':' + m : (v.length === 2 && !final ? ':' : ''));
-    }
-    inp.addEventListener('input', function () {
-      var p = this.selectionStart;
-      this.value = clean(this.value, false);
-      try { this.setSelectionRange(this.value.length, this.value.length); } catch (e) {}
+  function initT24() {
+    document.querySelectorAll('input[data-t24]').forEach(function (inp) {
+      function clean(v, final) {
+        v = toEn(v).replace(/[^0-9]/g, '').slice(0, 4);
+        var h = v.slice(0, 2), m = v.slice(2);
+        if (h.length === 2 && +h > 23) h = '23';
+        if (m.length === 2 && +m > 59) m = '59';
+        if (final && h.length === 1) h = '0' + h;
+        if (final && m.length === 1) m = m + '0';
+        return h + (v.length > 2 || (final && h && m) ? ':' + m : (v.length === 2 && !final ? ':' : ''));
+      }
+      inp.addEventListener('input', function () {
+        var p = this.selectionStart;
+        this.value = clean(this.value, false);
+        try { this.setSelectionRange(this.value.length, this.value.length); } catch (e) {}
+      });
+      inp.addEventListener('blur', function () { this.value = clean(this.value, true); });
     });
-    inp.addEventListener('blur', function () { this.value = clean(this.value, true); });
-  });
-  document.querySelectorAll('[data-t24-wrap]').forEach(function (wrap) {
-    var sel = document.querySelector(wrap.getAttribute('data-t24-count'));
-    if (!sel) return;
-    var items = wrap.querySelectorAll('[data-t24-item]');
-    function sync() {
-      var n = Math.max(1, Math.min(items.length, parseInt(sel.value, 10) || 1));
-      items.forEach(function (it, i) { it.style.display = i < n ? '' : 'none'; });
-    }
-    sel.addEventListener('change', sync); sync();
-  });
+    document.querySelectorAll('[data-t24-wrap]').forEach(function (wrap) {
+      var sel = document.querySelector(wrap.getAttribute('data-t24-count'));
+      if (!sel) return;
+      var items = wrap.querySelectorAll('[data-t24-item]');
+      function sync() {
+        var n = Math.max(1, Math.min(items.length, parseInt(sel.value, 10) || 1));
+        items.forEach(function (it, i) { it.style.display = i < n ? '' : 'none'; });
+      }
+      sel.addEventListener('change', sync); sync();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initT24);
+  } else {
+    initT24();
+  }
 
   /* ── دکمهٔ خودکار و هوشمند بازگشت به بالای صفحه (Back to Top) ── */
   (function initBackToTop() {

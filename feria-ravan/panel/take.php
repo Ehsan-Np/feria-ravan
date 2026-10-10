@@ -1,10 +1,13 @@
 <?php
 /**
  * ============================================================================
- *  اسکرین انجام تست روانشناسی — نسخهٔ ۱٫۶
- *  ─ پاسخ‌گویی هوشمند: در پایان، سؤال‌های بی‌پاسخ به‌ترتیب به کاربر نشان داده
- *    می‌شود و با هر پاسخ، خودکار به سؤال بی‌پاسخ بعدی می‌رویم
- *  ─ ذخیرهٔ خودکار هر پاسخ + ادامه از محل قطع + دکمهٔ «پایان» همیشه در دسترس
+ *  اسکرین انجام تست روانشناسی — نسخهٔ ۲٫۱ (مقاوم، بدون معطلی و همگام)
+ *  ─ حل ریشه‌ای باگ نمایش سؤال ۱ در بدو ورود بدون نیاز به ناوبری به سؤال ۲ و بازگشت
+ *  ─ واکشی و تعبیهٔ مستقیم بستهٔ اولیهٔ سؤالات (INIT_QUESTIONS) سمت سرور (Zero-Latency)
+ *  ─ کش دوگانه بر مبنای ایندکس ترتیبی (offset + i) و شمارهٔ سؤال (q.number - 1)
+ *  ─ تشخیص هوشمند و دقیق اولین سؤال بی‌پاسخ جهت ادامهٔ تست روانشناسی
+ *  ─ مدیریت جامع وضعیت لودینگ، عدم بازگشت ساکت در رندر، و دکمهٔ تلاش دوباره در خطا
+ *  ─ پاسخ‌گویی هوشمند: مرور سؤال‌های بی‌پاسخ به‌ترتیب و ذخیرهٔ خودکار
  * ============================================================================
  */
 declare(strict_types=1);
@@ -32,6 +35,72 @@ $likertLabels = [
     5 => ['۱- کاملاً مخالفم','۲- مخالفم','۳- نظری ندارم','۴- موافقم','۵- کاملاً موافقم'],
 ];
 
+// تعداد دقیق کل سوالات فعال این آزمون
+$totalQuestions = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('questions') . ' WHERE test_id=? AND active=1', [$at['test_id']]);
+if ($totalQuestions === 0 && !empty($at['question_count'])) {
+    $totalQuestions = (int)$at['question_count'];
+}
+
+// تعداد پاسخ‌های ثبت شده
+$answeredCount = fr_attempt_answered($attemptId);
+
+// یافتن شماره اولین سؤال بی‌پاسخ جهت ادامهٔ دقیق
+$firstUnansweredNumber = (int)DB::val(
+    'SELECT q.number FROM ' . DB::t('questions') . ' q
+     LEFT JOIN ' . DB::t('answers') . ' a ON a.question_id=q.id AND a.attempt_id=?
+     WHERE q.test_id=? AND q.active=1
+       AND NOT (a.value IS NOT NULL OR (a.most_idx IS NOT NULL AND a.least_idx IS NOT NULL))
+     ORDER BY q.number LIMIT 1',
+    [$attemptId, $at['test_id']]
+);
+
+// ایندکس ترتیبی سؤال شروع (0-مبنا)
+$startIdx = 0;
+if ($firstUnansweredNumber > 0) {
+    $startIdx = (int)DB::val(
+        'SELECT COUNT(*) FROM ' . DB::t('questions') .
+        ' WHERE test_id=? AND active=1 AND number < ?',
+        [$at['test_id'], $firstUnansweredNumber]
+    );
+} elseif ($answeredCount > 0 && $totalQuestions > 0) {
+    // همه پاسخ داده شده‌اند
+    $startIdx = 0;
+}
+if ($startIdx >= $totalQuestions && $totalQuestions > 0) {
+    $startIdx = 0;
+}
+
+// واکشی دستهٔ اولیهٔ سوالات (۱۰ سؤال از محل شروع) در سمت سرور برای نمایش بدون معطلی
+$initOffset = (int)(floor($startIdx / 10) * 10);
+$initBatch = DB::all(
+    'SELECT id, number, text, format, options, labels, min_label, max_label, scale_min, scale_max
+     FROM ' . DB::t('questions') . '
+     WHERE test_id=? AND active=1 ORDER BY number LIMIT 10 OFFSET ?',
+    [$at['test_id'], $initOffset]
+);
+
+$qIds = array_column($initBatch, 'id');
+$initPrev = [];
+if ($qIds) {
+    $ph = implode(',', array_fill(0, count($qIds), '?'));
+    foreach (DB::all('SELECT question_id, value, most_idx, least_idx FROM ' . DB::t('answers') .
+                     " WHERE attempt_id=? AND question_id IN ($ph)",
+                     array_merge([$attemptId], $qIds)) as $a) {
+        $initPrev[(int)$a['question_id']] = $a;
+    }
+}
+
+foreach ($initBatch as &$q) {
+    $q['id']        = (int)$q['id'];
+    $q['number']    = (int)$q['number'];
+    $q['scale_min'] = (int)$q['scale_min'];
+    $q['scale_max'] = (int)$q['scale_max'];
+    $q['options']   = !empty($q['options']) ? (is_array($q['options']) ? $q['options'] : json_decode($q['options'], true)) : null;
+    $q['labels']    = !empty($q['labels']) ? (is_array($q['labels']) ? $q['labels'] : json_decode($q['labels'], true)) : null;
+    $q['prev']      = $initPrev[$q['id']] ?? null;
+}
+unset($q);
+
 render_header('درحال انجام: ' . $at['title']);
 ?>
 <div class="fr-app" style="max-width:900px;margin:0 auto;display:block;padding:70px 16px 40px">
@@ -44,7 +113,7 @@ render_header('درحال انجام: ' . $at['title']);
       <b style="font-size:15px"><?= e($at['title']) ?></b>
       <div style="display:flex;gap:8px;align-items:center">
         <a class="fr-btn ghost sm" href="#" id="btnReview" title="نمایش سؤال‌هایی که هنوز بی‌پاسخ‌اند">📋 مرور بی‌پاسخ‌ها</a>
-        <a class="fr-btn ghost sm" href="index.php" onclick="return confirm('پیشرفت ذخیره می‌شود و می‌توانید بعداً ادامه دهید. خروج؟')">خروج موقت</a>
+        <a class="fr-btn ghost sm" href="<?= e(fr_panel_url()) ?>" onclick="return confirm('پیشرفت ذخیره می‌شود و می‌توانید بعداً ادامه دهید. خروج؟')">خروج موقت</a>
       </div>
     </div>
 
@@ -56,7 +125,7 @@ render_header('درحال انجام: ' . $at['title']);
     </div>
 
     <div class="fr-qcard">
-      <div class="fr-qnum">سؤال <span id="qNum">۱</span> از <span id="qTotal"><?= fa_num($at['question_count']) ?></span></div>
+      <div class="fr-qnum">سؤال <span id="qNum">۱</span> از <span id="qTotal"><?= fa_num($totalQuestions > 0 ? $totalQuestions : $at['question_count']) ?></span></div>
       <div class="fr-qtext" id="qText">درحال بارگذاری...</div>
       <div id="qBody"></div>
 
@@ -69,251 +138,403 @@ render_header('درحال انجام: ' . $at['title']);
       </div>
 
       <div class="fr-test-nav">
-        <button class="fr-btn ghost" id="btnPrev">→ سؤال قبل</button>
+        <button type="button" class="fr-btn ghost" id="btnPrev">→ سؤال قبل</button>
         <span id="autoSave" style="font-size:12px;color:var(--muted);align-self:center"></span>
-        <button class="fr-btn" id="btnNext">سؤال بعد ←</button>
-        <button class="fr-btn accent" id="btnFinish">پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯</button>
+        <button type="button" class="fr-btn" id="btnNext">سؤال بعد ←</button>
+        <button type="button" class="fr-btn accent" id="btnFinish">پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯</button>
       </div>
     </div>
   </div>
 </div>
+<script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
 <script>
-const ATTEMPT = <?= $attemptId ?>;
-const API     = '../api/attempt.php';
-const LABELS  = <?= json_encode($likertLabels, JSON_UNESCAPED_UNICODE) ?>;
-const START_TIME = Date.now();
+(function(){
+  'use strict';
 
-let TOTAL   = <?= max(1, (int)$at['question_count']) ?>;   // با state سرور سینک می‌شود
-let questions = [];        // کش سؤال‌ها (کلید: ایندکس = number-1)
-let idx = <?= max(0, (int)$at['progress'] - 1) ?>;
-let saving = false;
-let missing = [];          // شمارهٔ سؤال‌های بی‌پاسخ (از سرور یا محاسبهٔ محلی)
+  const ATTEMPT    = <?= $attemptId ?>;
+  const API        = '<?= SITE_URL ?>/api/attempt.php';
+  const LABELS     = <?= json_encode($likertLabels, JSON_UNESCAPED_UNICODE) ?>;
+  const START_TIME = Date.now();
 
-const $id = x => document.getElementById(x);
+  let TOTAL        = <?= max(1, $totalQuestions) ?>;
+  let questions    = [];        // کش سؤال‌ها (پشتیبانی توأم از ایندکس ترتیبی و q.number-1)
+  let idx          = <?= $startIdx ?>;
+  let saving       = false;
+  let missing      = [];        // شمارهٔ سؤال‌های بی‌پاسخ
 
-/* سؤال از منظر محلی «کامل» است؟ */
-function isComplete(q){
-  if (!q || !q.prev) return false;
-  if (q.format === 'mostleast')
-    return q.prev.most_idx !== null && q.prev.most_idx !== undefined &&
-           q.prev.least_idx !== null && q.prev.least_idx !== undefined;
-  return q.prev.value !== null && q.prev.value !== undefined;
-}
+  const INIT_DATA  = <?= json_encode($initBatch, JSON_UNESCAPED_UNICODE) ?>;
+  const INIT_OFFSET= <?= $initOffset ?>;
+  const INIT_PROG  = <?= $answeredCount ?>;
 
-/* فهرست بی‌پاسخ‌های محلی (وقتی همهٔ سؤال‌ها در کش هستند) */
-function localMissing(){
-  const out = [];
-  for (let i=0;i<TOTAL;i++) if (!isComplete(questions[i])) out.push(i+1);
-  return out;
-}
+  const $id = x => document.getElementById(x);
+  const toFa = n => (window.faNum ? window.faNum(n) : String(n));
 
-/* بارگذاری دسته‌ای سؤال‌ها از سرور */
-async function loadMore(offset){
-  const r = await api(API, {action:'questions', attempt:ATTEMPT, offset, limit:10});
-  if (!r.ok) { toast(r.message||'خطا در دریافت سؤال‌ها','err'); if(r.redirect) location.href=r.redirect; return false; }
-  r.questions.forEach(q => questions[q.number-1] = q);
-  return true;
-}
+  /* ذخیره‌سازی دستهٔ سوالات در کش محلی با هر دو نوع نگاشت */
+  function cacheQuestions(list, offset) {
+    if (!Array.isArray(list)) return;
+    offset = Math.max(0, parseInt(offset, 10) || 0);
+    list.forEach((q, i) => {
+      if (!q) return;
+      const seqIdx = offset + i;
+      questions[seqIdx] = q;
 
-/* اطمینان از موجودبودن سؤال در کش */
-async function ensure(i){
-  if (questions[i]) return true;
-  return loadMore(Math.floor(i/10)*10);
-}
-
-/* رندر سؤال جاری */
-function render(){
-  const q = questions[idx];
-  if (!q) return;
-  $id('qNum').textContent = faNum(q.number);
-  $id('qTotal').textContent = faNum(TOTAL);
-  $id('qText').textContent = q.text;
-
-  const body = $id('qBody'), disc = $id('discArea'), disc4 = $id('disc4');
-  body.innerHTML=''; disc.style.display='none'; disc4.innerHTML='';
-
-  if (q.format === 'mostleast') {
-    disc.style.display='block';
-    (q.options||[]).forEach((opt,i)=>{
-      const el=document.createElement('div');
-      el.className='opt';
-      el.dataset.i=i;
-      el.innerHTML = '◈ ' + opt + '<small></small>';
-      el.onclick=()=>pickDisc(q,i,el);
-      disc4.appendChild(el);
+      const num = parseInt(q.number, 10);
+      if (!isNaN(num) && num >= 1) {
+        if (!questions[num - 1]) {
+          questions[num - 1] = q;
+        }
+      }
     });
-    paintDisc(q);
-  } else {
-    const wrap=document.createElement('div'); wrap.className='fr-likert';
-    const labels = (q.labels && q.labels.length) ? q.labels : (LABELS[q.scale_max] || LABELS[5]);
-    for(let v=q.scale_min; v<=q.scale_max; v++){
-      const b=document.createElement('button');
-      b.textContent = (q.options && q.options[v] !== undefined) ? q.options[v] : (labels[v-1] || ('گزینه '+faNum(v)));
-      b.dataset.v=v;
-      if (q.prev && String(q.prev.value)===String(v)) b.classList.add('sel');
-      b.onclick=()=>pickLikert(q,v,b);
-      wrap.appendChild(b);
+  }
+
+  /* سؤال از منظر محلی «کامل» است؟ */
+  function isComplete(q){
+    if (!q || !q.prev) return false;
+    if (q.format === 'mostleast')
+      return q.prev.most_idx !== null && q.prev.most_idx !== undefined &&
+             q.prev.least_idx !== null && q.prev.least_idx !== undefined;
+    return q.prev.value !== null && q.prev.value !== undefined;
+  }
+
+  /* فهرست بی‌پاسخ‌های محلی */
+  function localMissing(){
+    const out = [];
+    for (let i = 0; i < TOTAL; i++) {
+      if (!questions[i] || !isComplete(questions[i])) {
+        const num = (questions[i] && questions[i].number) ? questions[i].number : (i + 1);
+        out.push(num);
+      }
     }
-    body.appendChild(wrap);
+    return out;
   }
-  updateNav();
-}
 
-/* بعد از پاسخ: در «حالت مرور» به سؤال بی‌پاسخ بعدی برو، وگرنه سؤال بعد */
-function advanceSmart(){
-  missing = localMissing().length && missing.length ? missing.filter(n => questions[n-1] && !isComplete(questions[n-1])) : missing;
-  const reviewActive = $id('reviewBox').style.display !== 'none';
-  if (reviewActive) {
-    paintReview();
-    const next = missing.find(n => questions[n-1] && !isComplete(questions[n-1]));
-    if (next !== undefined) { setTimeout(()=>go(next-1), 240); return; }
-    // همه پاسخ داده شد — مرور را ببند و دکمهٔ پایان را برجسته کن
-    $id('reviewBox').style.display = 'none';
-    const f = $id('btnFinish');
-    f.classList.add('pulse');
-    toast('همهٔ سؤال‌ها کامل شد؛ حالا «پایان تست روانشناسی» را بزنید 🎯','ok');
-    return;
+  /* بارگذاری دسته‌ای سؤال‌ها از سرور با گارد قفل و خطا */
+  let activeLoads = {};
+  async function loadMore(offset){
+    offset = Math.max(0, parseInt(offset, 10) || 0);
+    if (activeLoads[offset]) return await activeLoads[offset];
+
+    activeLoads[offset] = (async () => {
+      try {
+        const fnApi = window.api || (typeof api === 'function' ? api : null);
+        if (!fnApi) {
+          console.error('API client unavailable');
+          return false;
+        }
+        const r = await fnApi(API, {action:'questions', attempt:ATTEMPT, offset, limit:10});
+        if (!r || !r.ok) {
+          if (r && r.redirect) { location.href = r.redirect; return false; }
+          if (window.toast) toast((r && r.message) || 'خطا در دریافت سؤال‌ها', 'err');
+          return false;
+        }
+        if (Array.isArray(r.questions)) {
+          cacheQuestions(r.questions, offset);
+        }
+        return true;
+      } catch (err) {
+        console.error('loadMore error', err);
+        return false;
+      } finally {
+        delete activeLoads[offset];
+      }
+    })();
+
+    return await activeLoads[offset];
   }
-  setTimeout(()=>{ if(idx+1<TOTAL) go(idx+1); }, 220);
-}
 
-/* انتخاب لیکرت + ذخیرهٔ خودکار */
-async function pickLikert(q,v,btn){
-  if (saving) return;
-  [...btn.parentNode.children].forEach(x=>x.classList.remove('sel'));
-  btn.classList.add('sel');
-  q.prev = {value:v};
-  await save({question_id:q.id, value:v});
-  advanceSmart();
-}
-
-/* انتخاب بیشترین/کمترین در DISC */
-async function pickDisc(q,i,el){
-  if (saving) return;
-  q.prev = q.prev||{};
-  const opts=[...document.querySelectorAll('#disc4 .opt')];
-  if (q.prev.most_idx===null || q.prev.most_idx===undefined) {
-    if (q.prev.least_idx===i) { toast('نمی‌توانید همزمان کمترین و بیشترین باشد.','warn'); return; }
-    q.prev.most_idx=i; el.classList.add('most');
-  } else if (q.prev.most_idx===i) {
-    q.prev.most_idx=null; el.classList.remove('most');
-    await save({question_id:q.id, most_idx:null, least_idx:q.prev.least_idx??null}); paintDisc(q); return;
-  } else if (q.prev.least_idx===null || q.prev.least_idx===undefined) {
-    q.prev.least_idx=i; el.classList.add('least');
-  } else if (q.prev.least_idx===i) {
-    q.prev.least_idx=null; el.classList.remove('least');
-    await save({question_id:q.id, most_idx:q.prev.most_idx, least_idx:null}); paintDisc(q); return;
+  /* اطمینان صددرصدی از موجود بودن سؤال در کش */
+  async function ensure(i){
+    if (questions[i]) return true;
+    const batch = Math.floor(i / 10) * 10;
+    await loadMore(batch);
+    return !!questions[i];
   }
-  await save({question_id:q.id, most_idx:q.prev.most_idx??null, least_idx:q.prev.least_idx??null});
-  paintDisc(q);
-  if (isComplete(q)) advanceSmart();
-}
-function paintDisc(q){
-  document.querySelectorAll('#disc4 .opt').forEach(el=>{
-    const i=+el.dataset.i;
-    el.classList.toggle('most',  q.prev && q.prev.most_idx===i);
-    el.classList.toggle('least', q.prev && q.prev.least_idx===i);
-  });
-}
 
-/* ذخیرهٔ پاسخ در سرور */
-async function save(payload){
-  saving=true; $id('autoSave').textContent='درحال ذخیره...';
-  try{
-    const r=await api(API, Object.assign({action:'save', attempt:ATTEMPT}, payload));
-    if(!r.ok){ toast(r.message,'err'); }
-    else{ setProg(r.progress); $id('autoSave').textContent='✓ ذخیره شد'; }
-  } finally { saving=false; setTimeout(()=>$id('autoSave').textContent='',1500); }
-}
+  /* رندر سؤال جاری — با مدیریت وضعیت‌های لودینگ/خطا و بدون بازگشت ساکت */
+  async function render(){
+    let q = questions[idx];
+    if (!q) {
+      $id('qText').innerHTML = '<span class="spin"></span> درحال بارگذاری سؤال…';
+      $id('qBody').innerHTML = '';
+      const ok = await ensure(idx);
+      if (!ok || !questions[idx]) {
+        $id('qText').textContent = 'دریافت این سؤال با تأخیر مواجه شد.';
+        $id('qBody').innerHTML = '<div style="text-align:center;padding:20px"><button type="button" class="fr-btn sm" id="btnRetryQ">تلاش دوباره 🔄</button></div>';
+        const retryBtn = $id('btnRetryQ');
+        if (retryBtn) retryBtn.onclick = () => render();
+        updateNav();
+        return;
+      }
+      q = questions[idx];
+    }
 
-/* پیشرفت */
-function setProg(n){
-  const pct=TOTAL>0?Math.round(n/TOTAL*100):0;
-  $id('progBar').style.width=pct+'%';
-  $id('progPct').textContent=faNum(pct)+'٪';
-}
+    const dispNum = (q.number && !isNaN(q.number)) ? q.number : (idx + 1);
+    $id('qNum').textContent = toFa(dispNum);
+    $id('qTotal').textContent = toFa(TOTAL);
+    $id('qText').textContent = q.text || '';
 
-/* ناوبری */
-async function go(n){
-  if (n<0||n>=TOTAL) return;
-  idx=n;
-  if(!await ensure(idx)) return;
-  render();
-  window.scrollTo({top:0, behavior:'smooth'});
-}
-function updateNav(){
-  $id('btnPrev').disabled = idx===0;
-  $id('btnNext').disabled = idx===TOTAL-1;
-  $id('btnNext').style.display = idx===TOTAL-1 ? 'none' : 'inline-flex';
-  $id('btnFinish').style.display = 'inline-flex';      // پایان همیشه در دسترس — نسخهٔ ۱٫۶
-}
-$id('btnPrev').onclick=()=>go(idx-1);
-$id('btnNext').onclick=()=>go(idx+1);
+    const body = $id('qBody'), disc = $id('discArea'), disc4 = $id('disc4');
+    body.innerHTML = ''; disc.style.display = 'none'; disc4.innerHTML = '';
 
-/* کارت مرور بی‌پاسخ‌ها — رندر چیپ‌ها */
-function paintReview(){
-  const box=$id('reviewChips'); box.innerHTML='';
-  missing.forEach(n=>{
-    const done = questions[n-1] && isComplete(questions[n-1]);
-    if (done) return;
-    const b=document.createElement('button');
-    b.className='fr-btn sm ghost';
-    b.style.cssText='border-color:#f0b26b;color:#9a5b12;border-radius:12px';
-    b.textContent='سؤال '+faNum(n);
-    b.onclick=()=>go(n-1);
-    box.appendChild(b);
-  });
-  if (!box.children.length) $id('reviewBox').style.display='none';
-}
-
-/* دکمهٔ مرور دستی بی‌پاسخ‌ها */
-$id('btnReview').onclick = async (e)=>{
-  e.preventDefault();
-  for (let i=0;i<TOTAL;i++) await ensure(i);       // کش کامل برای دقت فهرست
-  missing = localMissing();
-  if (!missing.length) { toast('همهٔ سؤال‌ها پاسخ داده شده‌اند ✅','ok'); return; }
-  $id('reviewBox').style.display='block';
-  paintReview();
-  go(missing[0]-1);
-};
-
-/* پایان */
-$id('btnFinish').onclick=async()=>{
-  const btn=$id('btnFinish'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> درحال بررسی پاسخ‌ها...';
-  const durationSec = Math.max(1, Math.round((Date.now() - START_TIME) / 1000));
-  const r=await api(API,{action:'finish',attempt:ATTEMPT,duration:durationSec});
-  if(!r.ok){
-    btn.disabled=false; btn.innerHTML='پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯';
-    if (r.redirect){ location.href=r.redirect; return; }
-    /* سؤال‌های بی‌پاسخ — به‌ترتیب به کاربر نشان بده (نسخهٔ ۱٫۶) */
-    if (Array.isArray(r.missing) && r.missing.length){
-      toast(r.message,'warn');
-      missing = r.missing.map(Number);
-      for (const n of missing) await ensure(n-1);
-      $id('reviewBox').style.display='block';
-      paintReview();
-      go(missing[0]-1);
+    if (q.format === 'mostleast') {
+      disc.style.display = 'block';
+      (q.options || []).forEach((opt, i) => {
+        const el = document.createElement('div');
+        el.className = 'opt';
+        el.dataset.i = i;
+        el.innerHTML = '◈ ' + opt + '<small></small>';
+        el.onclick = () => pickDisc(q, i, el);
+        disc4.appendChild(el);
+      });
+      paintDisc(q);
     } else {
-      toast(r.message||'خطا در پایان تست روانشناسی','err');
+      const wrap = document.createElement('div');
+      wrap.className = 'fr-likert';
+      const labels = (q.labels && q.labels.length) ? q.labels : (LABELS[q.scale_max] || LABELS[5]);
+      for (let v = q.scale_min; v <= q.scale_max; v++) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = (q.options && q.options[v] !== undefined) ? q.options[v] : (labels[v - 1] || ('گزینه ' + toFa(v)));
+        b.dataset.v = v;
+        if (q.prev && String(q.prev.value) === String(v)) b.classList.add('sel');
+        b.onclick = () => pickLikert(q, v, b);
+        wrap.appendChild(b);
+      }
+      body.appendChild(wrap);
     }
-  } else {
-    btn.innerHTML='<span class="spin"></span> درحال تحلیل پاسخ‌ها...';
-    location.href=r.redirect;
+    updateNav();
   }
-};
 
-/* شروع */
-(async()=>{
-  try{
-    const s=await api(API,{action:'state',attempt:ATTEMPT});
-    if(s.ok && s.total>0){ TOTAL=s.total; }
-    if(s.ok) setProg(s.progress);
-    if (idx >= TOTAL) idx = 0;
-    await loadMore(Math.floor(idx/10)*10);
-    render();
-  }catch(e){
-    $id('qText').textContent='در بارگذاری سؤال‌ها مشکلی پیش آمد؛ صفحه را تازه کنید.';
+  /* پیشرفت هوشمند پس از پاسخ */
+  function advanceSmart(){
+    const reviewActive = $id('reviewBox').style.display !== 'none';
+    if (reviewActive) {
+      paintReview();
+      const nextNum = missing.find(n => {
+        const candidate = questions.find(q => q && q.number === n);
+        return !isComplete(candidate);
+      });
+      if (nextNum !== undefined) {
+        const nextIdx = questions.findIndex(q => q && q.number === nextNum);
+        if (nextIdx >= 0) {
+          setTimeout(() => go(nextIdx), 240);
+          return;
+        }
+      }
+      $id('reviewBox').style.display = 'none';
+      const f = $id('btnFinish');
+      f.classList.add('pulse');
+      if (window.toast) toast('همهٔ سؤال‌ها کامل شد؛ حالا «پایان تست روانشناسی» را بزنید 🎯', 'ok');
+      return;
+    }
+    setTimeout(() => { if (idx + 1 < TOTAL) go(idx + 1); }, 220);
   }
+
+  /* انتخاب لیکرت + ذخیره خودکار */
+  async function pickLikert(q, v, btn){
+    if (saving) return;
+    [...btn.parentNode.children].forEach(x => x.classList.remove('sel'));
+    btn.classList.add('sel');
+    q.prev = {value: v};
+    await save({question_id: q.id, value: v});
+    advanceSmart();
+  }
+
+  /* انتخاب DISC */
+  async function pickDisc(q, i, el){
+    if (saving) return;
+    q.prev = q.prev || {};
+    if (q.prev.most_idx === null || q.prev.most_idx === undefined) {
+      if (q.prev.least_idx === i) {
+        if (window.toast) toast('نمی‌توانید همزمان کمترین و بیشترین باشد.', 'warn');
+        return;
+      }
+      q.prev.most_idx = i;
+      el.classList.add('most');
+    } else if (q.prev.most_idx === i) {
+      q.prev.most_idx = null;
+      el.classList.remove('most');
+      await save({question_id: q.id, most_idx: null, least_idx: q.prev.least_idx ?? null});
+      paintDisc(q);
+      return;
+    } else if (q.prev.least_idx === null || q.prev.least_idx === undefined) {
+      q.prev.least_idx = i;
+      el.classList.add('least');
+    } else if (q.prev.least_idx === i) {
+      q.prev.least_idx = null;
+      el.classList.remove('least');
+      await save({question_id: q.id, most_idx: q.prev.most_idx, least_idx: null});
+      paintDisc(q);
+      return;
+    }
+    await save({question_id: q.id, most_idx: q.prev.most_idx ?? null, least_idx: q.prev.least_idx ?? null});
+    paintDisc(q);
+    if (isComplete(q)) advanceSmart();
+  }
+
+  function paintDisc(q){
+    document.querySelectorAll('#disc4 .opt').forEach(el => {
+      const i = +el.dataset.i;
+      el.classList.toggle('most',  q.prev && q.prev.most_idx === i);
+      el.classList.toggle('least', q.prev && q.prev.least_idx === i);
+    });
+  }
+
+  /* ذخیره در سرور */
+  async function save(payload){
+    saving = true;
+    const as = $id('autoSave');
+    if (as) as.textContent = 'درحال ذخیره...';
+    try {
+      const fnApi = window.api || (typeof api === 'function' ? api : null);
+      if (!fnApi) return;
+      const r = await fnApi(API, Object.assign({action:'save', attempt:ATTEMPT}, payload));
+      if (!r || !r.ok) {
+        if (window.toast) toast((r && r.message) || 'خطا در ذخیرهٔ پاسخ', 'err');
+      } else {
+        if (typeof r.progress === 'number') setProg(r.progress);
+        if (as) as.textContent = '✓ ذخیره شد';
+      }
+    } finally {
+      saving = false;
+      setTimeout(() => { if (as) as.textContent = ''; }, 1500);
+    }
+  }
+
+  /* نوار پیشرفت */
+  function setProg(n){
+    const pct = TOTAL > 0 ? Math.round(n / TOTAL * 100) : 0;
+    const pb = $id('progBar'), pp = $id('progPct');
+    if (pb) pb.style.width = pct + '%';
+    if (pp) pp.textContent = toFa(pct) + '٪';
+  }
+
+  /* ناوبری به سؤال شماره n */
+  async function go(n){
+    if (n < 0 || n >= TOTAL) return;
+    idx = n;
+    await ensure(idx);
+    render();
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function updateNav(){
+    const bp = $id('btnPrev'), bn = $id('btnNext'), bf = $id('btnFinish');
+    if (bp) bp.disabled = (idx === 0);
+    if (bn) {
+      bn.disabled = (idx >= TOTAL - 1);
+      bn.style.display = (idx >= TOTAL - 1) ? 'none' : 'inline-flex';
+    }
+    if (bf) bf.style.display = 'inline-flex';
+  }
+
+  $id('btnPrev').onclick = () => go(idx - 1);
+  $id('btnNext').onclick = () => go(idx + 1);
+
+  /* کارت مرور بی‌پاسخ‌ها */
+  function paintReview(){
+    const box = $id('reviewChips');
+    if (!box) return;
+    box.innerHTML = '';
+    missing.forEach(n => {
+      const q = questions.find(item => item && item.number === n);
+      if (q && isComplete(q)) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'fr-btn sm ghost';
+      b.style.cssText = 'border-color:#f0b26b;color:#9a5b12;border-radius:12px';
+      b.textContent = 'سؤال ' + toFa(n);
+      b.onclick = () => {
+        const targetIdx = questions.findIndex(item => item && item.number === n);
+        if (targetIdx >= 0) go(targetIdx);
+        else go(n - 1);
+      };
+      box.appendChild(b);
+    });
+    if (!box.children.length) $id('reviewBox').style.display = 'none';
+  }
+
+  $id('btnReview').onclick = async (e) => {
+    e.preventDefault();
+    for (let i = 0; i < TOTAL; i += 10) await loadMore(i);
+    missing = localMissing();
+    if (!missing.length) {
+      if (window.toast) toast('همهٔ سؤال‌ها پاسخ داده شده‌اند ✅', 'ok');
+      return;
+    }
+    $id('reviewBox').style.display = 'block';
+    paintReview();
+    const firstMiss = missing[0];
+    const firstIdx = questions.findIndex(item => item && item.number === firstMiss);
+    go(firstIdx >= 0 ? firstIdx : firstMiss - 1);
+  };
+
+  /* پایان آزمون */
+  $id('btnFinish').onclick = async () => {
+    const btn = $id('btnFinish');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> درحال بررسی پاسخ‌ها...';
+    const durationSec = Math.max(1, Math.round((Date.now() - START_TIME) / 1000));
+    const fnApi = window.api || (typeof api === 'function' ? api : null);
+    const r = fnApi ? await fnApi(API, {action:'finish', attempt:ATTEMPT, duration:durationSec}) : null;
+    if (!r || !r.ok) {
+      btn.disabled = false;
+      btn.innerHTML = 'پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯';
+      if (r && r.redirect) { location.href = r.redirect; return; }
+      if (r && Array.isArray(r.missing) && r.missing.length) {
+        if (window.toast) toast(r.message, 'warn');
+        missing = r.missing.map(Number);
+        for (const n of missing) {
+          const qIdx = questions.findIndex(q => q && q.number === n);
+          await ensure(qIdx >= 0 ? qIdx : n - 1);
+        }
+        $id('reviewBox').style.display = 'block';
+        paintReview();
+        const fMiss = missing[0];
+        const fIdx = questions.findIndex(q => q && q.number === fMiss);
+        go(fIdx >= 0 ? fIdx : fMiss - 1);
+      } else {
+        if (window.toast) toast((r && r.message) || 'خطا در پایان تست روانشناسی', 'err');
+      }
+    } else {
+      btn.innerHTML = '<span class="spin"></span> درحال تحلیل پاسخ‌ها...';
+      location.href = r.redirect;
+    }
+  };
+
+  /* =========================================================================
+   | شروع سریع و مقاوم (Immediate Zero-Latency Startup)
+   | ۱) کش با داده‌های اولیهٔ تعبیه‌شده در سرور بدون هیچ معطلی پر می‌شود
+   | ۲) سؤال ۱ (یا سؤال ازسرگیری) بلافاصله در لحظهٔ لود رندر می‌شود
+   | ۳) همگام‌سازی ناهمگام با سرور در پس‌زمینه صورت می‌گیرد
+   * =======================================================================*/
+  if (Array.isArray(INIT_DATA) && INIT_DATA.length > 0) {
+    cacheQuestions(INIT_DATA, INIT_OFFSET);
+  }
+  setProg(INIT_PROG);
+  render();
+
+  // همگام‌سازی پس‌زمینه برای شمارش دقیق سرور و پیشرفت
+  (async () => {
+    try {
+      const fnApi = window.api || (typeof api === 'function' ? api : null);
+      if (!fnApi) return;
+      const s = await fnApi(API, {action:'state', attempt:ATTEMPT});
+      if (s && s.ok) {
+        if (s.total > 0 && s.total !== TOTAL) {
+          TOTAL = s.total;
+          $id('qTotal').textContent = toFa(TOTAL);
+        }
+        if (typeof s.progress === 'number') {
+          setProg(s.progress);
+        }
+      }
+    } catch (e) {
+      // عدم تأثیر خطای پس‌زمینه بر نمایش سؤال جاری
+      console.warn('Background state sync error', e);
+    }
+  })();
+
 })();
 </script>
 <style>

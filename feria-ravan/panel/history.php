@@ -63,15 +63,15 @@ panel_layout($u, 'history');
       <td><?= fa_num(jdate('j F Y', strtotime($r['started_at']))) ?></td>
       <td class="actions" style="white-space:nowrap">
         <?php if ($r['status']==='in_progress'): ?>
-          <a class="fr-btn sm" href="take.php?attempt=<?= (int)$r['id'] ?>">ادامه</a>
+          <a class="fr-btn sm" href="<?= e(fr_panel_url('take.php?attempt=' . (int)$r['id'])) ?>">ادامه</a>
         <?php else: ?>
-          <a class="fr-btn sm" href="report.php?attempt=<?= (int)$r['id'] ?>">گزارش</a>
-          <a class="fr-btn sm ghost" href="dyad.php?action=new&attempt=<?= (int)$r['id'] ?>" title="سنجش تطابق دونفره">👥 تطابق</a>
+          <a class="fr-btn sm" href="<?= e(fr_panel_url('report.php?attempt=' . (int)$r['id'])) ?>">گزارش</a>
+          <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('dyad.php?action=new&attempt=' . (int)$r['id'])) ?>" title="سنجش تطابق دونفره">👥 تطابق</a>
           <?php if ($r['mode'] === 'free'): ?>
-          <a class="fr-btn sm accent" href="test-start.php?id=<?= (int)$r['test_id'] ?>&upgrade_attempt=<?= (int)$r['id'] ?>" title="ارتقا به ویژه">⭐ نسخه ویژه</a>
+          <a class="fr-btn sm accent" href="<?= e(fr_panel_url('test-start.php?id=' . (int)$r['test_id'] . '&upgrade_attempt=' . (int)$r['id'])) ?>" title="ارتقا به ویژه">⭐ نسخه ویژه</a>
           <?php endif; ?>
-          <a class="fr-btn sm ghost" href="report-pdf.php?attempt=<?= (int)$r['id'] ?>" title="دریافت PDF">PDF 📄</a>
-          <a class="fr-btn sm ghost" href="barcode.php?attempt=<?= (int)$r['id'] ?>" title="بارکد گزارش">▮▮▮</a>
+          <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . (int)$r['id'])) ?>" title="دریافت PDF">PDF 📄</a>
+          <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('barcode.php?attempt=' . (int)$r['id'])) ?>" title="بارکد گزارش">▮▮▮</a>
         <?php endif; ?>
         <?php if ($r['order_id'] && $r['order_status']==='paid'): ?>
           <a class="fr-btn sm ghost" href="invoice.php?order=<?= (int)$r['order_id'] ?>">فاکتور</a>

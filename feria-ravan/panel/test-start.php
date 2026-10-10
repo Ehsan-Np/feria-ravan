@@ -176,11 +176,11 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
 <div class="fr-alert warn">
   شما یک جلسهٔ ناتمام از این تست روانشناسی دارید.
   <?php if ($open['mode']==='full' && $open['os']!=='paid'): ?>
-    — <a href="test-start.php?id=<?= (int)$test['id'] ?>&resume=1"><b>💳 پرداخت سفارش معلق ←</b></a>
-    | <a href="abandon.php?attempt=<?= (int)$open['id'] ?>&back=<?= urlencode($_SERVER['REQUEST_URI']) ?>">انصراف و لغو</a>
+    — <a href="<?= e(fr_panel_url('test-start.php?id=' . (int)$test['id'] . '&resume=1')) ?>"><b>💳 پرداخت سفارش معلق ←</b></a>
+    | <a href="<?= e(fr_panel_url('abandon.php?attempt=' . (int)$open['id'] . '&back=' . urlencode($_SERVER['REQUEST_URI'] ?? ''))) ?>">انصراف و لغو</a>
   <?php else: ?>
-    <a href="take.php?attempt=<?= (int)$open['id'] ?>"><b>ادامه از سؤال <?= fa_num($open['progress'] + 1) ?> ←</b></a>
-  | <a href="abandon.php?attempt=<?= (int)$open['id'] ?>&back=<?= urlencode($_SERVER['REQUEST_URI']) ?>">انصراف و شروع مجدد</a>
+    <a href="<?= e(fr_panel_url('take.php?attempt=' . (int)$open['id'])) ?>"><b>ادامه از سؤال <?= fa_num($open['progress'] + 1) ?> ←</b></a>
+  | <a href="<?= e(fr_panel_url('abandon.php?attempt=' . (int)$open['id'] . '&back=' . urlencode($_SERVER['REQUEST_URI'] ?? ''))) ?>">انصراف و شروع مجدد</a>
   <?php endif; ?>
 </div>
 <?php endif; ?>

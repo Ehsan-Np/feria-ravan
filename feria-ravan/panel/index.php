@@ -155,9 +155,9 @@ $memberSt = !empty($u['created_at']) ? strtotime((string)$u['created_at']) : tim
         <td><?= fa_num(jdate('j F Y - H:i', strtotime($r['started_at']))) ?></td>
         <td style="text-align:left">
           <?php if ($r['status']==='in_progress'): ?>
-            <a class="fr-btn sm ghost" href="take.php?attempt=<?= (int)$r['id'] ?>">ادامه تست روانشناسی</a>
+            <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('take.php?attempt=' . (int)$r['id'])) ?>">ادامه تست روانشناسی</a>
           <?php else: ?>
-            <a class="fr-btn sm" href="report.php?attempt=<?= (int)$r['id'] ?>">مشاهده گزارش</a>
+            <a class="fr-btn sm" href="<?= e(fr_panel_url('report.php?attempt=' . (int)$r['id'])) ?>">مشاهده گزارش</a>
           <?php endif; ?>
         </td>
       </tr>

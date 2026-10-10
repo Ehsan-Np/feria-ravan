@@ -68,6 +68,7 @@ function render_header(string $title, array $opts = []): void
 <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/<?= e($extraCss) ?>?v=<?= FR_VERSION ?>">
 <?php endforeach; ?>
 <?= fr_brand_css() ?>
+<script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
 </head>
 <body>
 <script>window.CSRF='<?= csrf_token() ?>';</script>

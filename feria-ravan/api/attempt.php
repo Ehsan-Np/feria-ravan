@@ -44,8 +44,17 @@ switch ($action) {
     case 'state': {
         $total    = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('questions') . ' WHERE test_id=? AND active=1', [$at['test_id']]);
         $answered = fr_attempt_answered($attemptId);
+        $firstUnanswered = (int)DB::val(
+            'SELECT q.number FROM ' . DB::t('questions') . ' q
+             LEFT JOIN ' . DB::t('answers') . ' a ON a.question_id=q.id AND a.attempt_id=?
+             WHERE q.test_id=? AND q.active=1
+               AND NOT (a.value IS NOT NULL OR (a.most_idx IS NOT NULL AND a.least_idx IS NOT NULL))
+             ORDER BY q.number LIMIT 1',
+            [$attemptId, $at['test_id']]
+        );
         json_out(['ok'=>true,'status'=>$at['status'],'progress'=>$answered,
-                  'total'=>$total,'engine'=>$at['engine'],'title'=>$at['title']]);
+                  'total'=>$total,'engine'=>$at['engine'],'title'=>$at['title'],
+                  'first_unanswered'=>$firstUnanswered]);
     }
 
     /* ---------- گرفتن دسته‌ای از سؤال‌ها ---------- */
@@ -68,10 +77,15 @@ switch ($action) {
             }
         }
         foreach ($qs as &$q) {
-            $q['options'] = $q['options'] ? json_decode($q['options'], true) : null;
-            $q['labels']  = !empty($q['labels']) ? json_decode($q['labels'], true) : null; // برچسب اختصاصی هر درجهٔ لیکرت
-            $q['prev']    = $prev[$q['id']] ?? null;
+            $q['id']        = (int)$q['id'];
+            $q['number']    = (int)$q['number'];
+            $q['scale_min'] = (int)$q['scale_min'];
+            $q['scale_max'] = (int)$q['scale_max'];
+            $q['options']   = !empty($q['options']) ? (is_array($q['options']) ? $q['options'] : json_decode($q['options'], true)) : null;
+            $q['labels']    = !empty($q['labels']) ? (is_array($q['labels']) ? $q['labels'] : json_decode($q['labels'], true)) : null; // برچسب اختصاصی هر درجهٔ لیکرت
+            $q['prev']      = $prev[$q['id']] ?? null;
         }
+        unset($q);
         json_out(['ok'=>true,'questions'=>$qs,'offset'=>$offset]);
     }
 
