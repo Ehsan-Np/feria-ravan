@@ -22,7 +22,7 @@ if (!defined('DB_PREFIX')) define('DB_PREFIX', '{{DB_PREFIX}}');
 if (!defined('SITE_URL'))  define('SITE_URL',  '{{SITE_URL}}');
 
 /* کلید رمزنگاری داده‌های حساس — در صورت عدم مقداردهی، به‌صورت خودکار و ایمن تولید می‌شود */
-$rawCryptKey = '2028ca40a2f629a7b79a3720ef5b406d201d63ca3c4c187c81923666fecb5dab';
+$rawCryptKey = '{{ENCRYPT_KEY}}';
 if ($rawCryptKey === '{{' . 'ENCRYPT_KEY' . '}}' || trim($rawCryptKey) === '') {
     $keyFile = __DIR__ . '/storage/.crypt_key';
     $savedKey = '';
