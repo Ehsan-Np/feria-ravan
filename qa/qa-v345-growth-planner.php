@@ -67,7 +67,7 @@ it("attempts table has 'growth_injected' column", in_array('growth_injected', $a
 
 // --- 3. End-to-End DISC Growth Plan Injection ---
 echo "\n--- 3. DISC Growth Plan Injection ---\n";
-$at = DB::one("SELECT * FROM " . DB::t('attempts') . " WHERE status='completed' ORDER BY id DESC LIMIT 1");
+$at = DB::one("SELECT * FROM " . DB::t('attempts') . " WHERE test_id=1 AND status='completed' ORDER BY id DESC LIMIT 1");
 if (!$at) {
     echo "Creating dummy completed DISC attempt...\n";
     $atId = DB::insert('attempts', [
@@ -202,6 +202,22 @@ it("Generic test injects to planner successfully", !empty($gen['inj']['ok']));
 
 // --- 5. Retest & Delta Tracking (GrowthEngine::getDeltaComparison) ---
 echo "\n--- 5. Retest & Delta Tracking ---\n";
+// Ensure baseline attempt 1 exists for user 1, test 1
+$createdAid1 = false;
+$aid1 = (int)DB::val("SELECT id FROM " . DB::t('attempts') . " WHERE user_id=1 AND test_id=1 AND status='completed' ORDER BY id ASC LIMIT 1");
+if (!$aid1) {
+    $aid1 = DB::insert('attempts', [
+        'user_id' => 1, 'test_id' => 1, 'status' => 'completed',
+        'started_at' => date('Y-m-d H:i:s', time() - 3600),
+        'completed_at' => date('Y-m-d H:i:s', time() - 3500), 'progress' => 100,
+    ]);
+    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'D', 'percent' => 30, 'raw_score' => 30]);
+    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'I', 'percent' => 50, 'raw_score' => 50]);
+    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'S', 'percent' => 40, 'raw_score' => 40]);
+    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'C', 'percent' => 35, 'raw_score' => 35]);
+    $createdAid1 = true;
+}
+
 // Create second attempt for test 1 to test Delta comparison
 $aid2 = DB::insert('attempts', [
     'user_id' => 1, 'test_id' => 1, 'status' => 'completed',
@@ -220,9 +236,13 @@ it("getDeltaComparison contains D scale delta", isset($delta['scales']['D']));
 it("Scale D shows positive improvement (+15)", ($delta['scales']['D']['delta'] ?? 0) === 15.0, (string)($delta['scales']['D']['delta'] ?? 0));
 it("Scale D has Persian title", !empty($delta['scales']['D']['title']) && $delta['scales']['D']['title'] !== 'D', $delta['scales']['D']['title'] ?? '');
 
-// Cleanup dummy attempt 2
+// Cleanup dummy attempts
 DB::run("DELETE FROM " . DB::t('results') . " WHERE attempt_id=?", [$aid2]);
 DB::run("DELETE FROM " . DB::t('attempts') . " WHERE id=?", [$aid2]);
+if ($createdAid1) {
+    DB::run("DELETE FROM " . DB::t('results') . " WHERE attempt_id=?", [$aid1]);
+    DB::run("DELETE FROM " . DB::t('attempts') . " WHERE id=?", [$aid1]);
+}
 
 // Clean up temporary qa tests
 DB::run("DELETE FROM " . DB::t('tests') . " WHERE slug LIKE '%-qa'");

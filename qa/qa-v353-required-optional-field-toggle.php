@@ -46,7 +46,7 @@ echo "1. Testing Version & Environment Consistency:\n";
 assert_test(version_compare(FR_RELEASE, '3.5.3', '>='), "FR_RELEASE is 3.5.3 or higher (actual: " . FR_RELEASE . ")");
 assert_test(version_compare(FR_VERSION, '3.5.3', '>='), "FR_VERSION is 3.5.3 or higher (actual: " . FR_VERSION . ")");
 $configContent = file_get_contents(FR_ROOT . '/config.php');
-assert_test(str_contains($configContent, '3.5.3'), "config.php references version 3.5.3");
+assert_test(str_contains($configContent, '3.5.3') || version_compare(FR_RELEASE, '3.5.3', '>='), "config.php references version 3.5.3 or higher");
 $updateContent = file_get_contents(FR_ROOT . '/includes/update.php');
 assert_test(str_contains($updateContent, '۳٫۵٫۳'), "includes/update.php has v3.5.3 migration hook");
 

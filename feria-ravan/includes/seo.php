@@ -171,6 +171,9 @@ function fr_permalinks_flush(): array
         foreach (DB::all('SELECT id,slug FROM ' . DB::t('tests') . " WHERE status='active' AND slug<>''") as $t) {
             $rules[] = ['t', (string)$t['slug'], 'test-page.php?s='];
         }
+        foreach (DB::all("SELECT id,slug FROM " . DB::t('site_pages') . " WHERE active=1 AND slug<>''") as $p) {
+            $rules[] = ['p', (string)$p['slug'], 'page.php?slug='];
+        }
     } catch (Throwable $j) { /* دیتابیس هنوز آماده نیست — قوانین کلی فقط */ }
 
     $b = $base; // کوتاه‌نویسی
@@ -189,10 +192,11 @@ function fr_permalinks_flush(): array
          $lines[] = "RewriteRule ^{$prefix}/{$q}/?$ {$target}{$slug} [L,QSA]";
     }
     /* قوانین کلی — برای لینک‌های تازهٔ بعد از بازتولید بعدی */
-    /* قوانین کلی — برای لینک‌های تازهٔ بعد از بازتولید بعدی */
     $lines[] = 'RewriteRule ^w/([^/]+)/?$ workshop.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^c/([^/]+)/?$ course.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^t/([^/]+)/?$ test-page.php?s=$1 [L,QSA]';
+    $lines[] = 'RewriteRule ^p/([^/]+)/?$ page.php?slug=$1 [L,QSA]';
+    $lines[] = 'RewriteRule ^page/([^/]+)/?$ page.php?slug=$1 [L,QSA]';
 
     /* قوانین هدایت پنل کاربری سفارشی (User Panel Slug) */
     $pSlug = function_exists('fr_panel_slug') ? fr_panel_slug() : 'panel';
@@ -243,5 +247,14 @@ function fr_sitemap_urls(): array
     foreach (DB::all("SELECT * FROM " . DB::t('tests') . " WHERE status='active'") as $t) {
         $urls[] = ['loc' => fr_test_url($t), 'prio' => '0.7'];
     }
+    try {
+        foreach (DB::all("SELECT slug, updated_at, is_home FROM " . DB::t('site_pages') . " WHERE active=1 AND noindex=0 AND is_home=0") as $pg) {
+            $urls[] = [
+                'loc'     => SITE_URL . '/p/' . rawurlencode((string)$pg['slug']),
+                'prio'    => '0.8',
+                'lastmod' => !empty($pg['updated_at']) ? substr((string)$pg['updated_at'], 0, 10) : null,
+            ];
+        }
+    } catch (Throwable $e) {}
     return $urls;
 }

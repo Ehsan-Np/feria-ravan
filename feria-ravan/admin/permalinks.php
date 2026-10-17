@@ -31,6 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         $old = (string)DB::val('SELECT slug FROM ' . DB::t('tests') . ' WHERE id=?', [$id]);
         if ($new !== $old) { DB::update('tests', ['slug'=>$new], 'id=?', [$id]); $changed++; }
     }
+    foreach ((array)($_POST['pg'] ?? []) as $id => $slug) {
+        $id = (int)$id;
+        $new = fr_unique_slug('site_pages', fr_slugify((string)$slug), 'slug', $id);
+        $old = (string)DB::val('SELECT slug FROM ' . DB::t('site_pages') . ' WHERE id=?', [$id]);
+        if ($new !== $old) { DB::update('site_pages', ['slug'=>$new], 'id=?', [$id]); $changed++; }
+    }
     $fl = fr_permalinks_flush();
     log_activity('admin_permalinks', null, null, ['changed'=>$changed,'rules'=>$fl['count']]);
     flash($changed > 0
@@ -41,6 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
 
 $events = DB::all('SELECT id,kind,title,slug,status FROM ' . DB::t('events') . ' ORDER BY kind, id DESC');
 $tests  = DB::all('SELECT id,title,slug,status FROM ' . DB::t('tests') . ' ORDER BY sort_order');
+$pages  = [];
+try {
+    $pages = DB::all('SELECT id,title,slug,active,is_home FROM ' . DB::t('site_pages') . ' ORDER BY is_home DESC, id DESC');
+} catch (Throwable $e) {}
 
 admin_layout($adm, 'permalinks', 'پیوندهای یکتا');
 echo flash();
@@ -100,6 +110,42 @@ echo flash();
       <td style="font-size:11.5px"><a href="<?= e($url) ?>" target="_blank" rel="noopener">🔗 مشاهده</a></td>
     </tr>
     <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="fr-card">
+  <h3>📄 برگه‌های سفارشی (صفحه‌ساز)</h3>
+  <div style="overflow-x:auto">
+  <table class="fr-table">
+    <thead><tr><th>عنوان برگه</th><th>اسلاگ پیوند یکتا</th><th>نشانی نهایی</th></tr></thead>
+    <tbody>
+    <?php if (empty($pages)): ?>
+      <tr><td colspan="3" style="text-align:center;color:var(--muted)">هنوز برگه‌ای تعریف نشده است.</td></tr>
+    <?php else: ?>
+      <?php foreach ($pages as $p):
+          $isHome = !empty($p['is_home']);
+          $url = $isHome ? SITE_URL . '/' : (SITE_URL . '/page.php?slug=' . urlencode((string)$p['slug']));
+      ?>
+      <tr style="<?= !empty($p['active']) ? '' : 'opacity:.5' ?>">
+        <td style="font-size:12.5px;min-width:200px">
+          <?= e($p['title']) ?>
+          <?php if ($isHome): ?>
+            <span class="fr-chip sm warn" style="font-size:10px">⭐️ صفحه اصلی</span>
+          <?php endif; ?>
+        </td>
+        <td style="min-width:230px">
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:12px;color:var(--muted);white-space:nowrap;direction:ltr"><?= SITE_URL ?>/p/</span>
+            <input class="fr-input sm" name="pg[<?= (int)$p['id'] ?>]" value="<?= e($p['slug']) ?>"
+                   style="direction:ltr;text-align:left;font-size:12px;padding:7px 10px">
+          </div>
+        </td>
+        <td style="font-size:11.5px"><a href="<?= e($url) ?>" target="_blank" rel="noopener">🔗 مشاهده</a></td>
+      </tr>
+      <?php endforeach; ?>
+    <?php endif; ?>
     </tbody>
   </table>
   </div>

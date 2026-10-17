@@ -21,7 +21,20 @@ require_once __DIR__ . '/includes/consult.php';
 require_once __DIR__ . '/core/Kavenegar.php';
 require_once __DIR__ . '/core/Zarinpal.php';
 require_once __DIR__ . '/core/Analyzer.php';
+require_once __DIR__ . '/core/PageBuilder.php';
 fr_bootstrap();
+
+/* ---------------------------------------------------------------------------
+ | برگه صفحه اصلی سفارشی طراحی‌شده با صفحه‌ساز دیداری فریا روان (نگارش ۳٫۶٫۰)
+ * -------------------------------------------------------------------------*/
+if (empty($_GET['classic']) && empty($_GET['default_home'])) {
+    PageBuilder::ensureSchema();
+    $customHome = PageBuilder::getHomepage();
+    if ($customHome && !empty($customHome['active'])) {
+        PageBuilder::renderPage($customHome, true);
+        exit;
+    }
+}
 
 /* ---------------------------------------------------------------------------
  | مسیریابی هوشمند پنل کاربری در صورت تنظیم اسلاگ اختصاصی (جلوگیری قطعی از ۴۰۴)
