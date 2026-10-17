@@ -227,7 +227,7 @@ if ($infoMsg) echo '<div class="fr-alert info">' . e($infoMsg) . '</div>';
       <?php if ($avatarUrl): ?><img class="pf-ava" src="<?= e($avatarUrl) ?>" alt="آواتار">
       <?php else: ?><div class="pf-ava-ph">👤</div><?php endif; ?>
       <div>
-        <b style="font-size:16px"><?= e(user_fullname($u) ?: 'کاربر فریا') ?></b><br>
+        <b style="font-size:16px"><?= e(user_fullname($u) ?: ('کاربر ' . fr_brand_short())) ?></b><br>
         <small style="color:var(--muted)" dir="ltr"><?= fa_num($u['mobile']) ?></small>
         <?= (int)$u['mobile_verified'] ? ' <span class="fr-chip ok" style="font-size:10px">تأییدشده ✓</span>' : '' ?>
       </div>

@@ -2,6 +2,9 @@
 feria-ravan/storage/logs/*
 feria-ravan/storage/cache/*
 feria-ravan/storage/sessions/*
+feria-ravan/storage/.crypt_key
+feria-ravan/storage/installed.lock
+feria-ravan/install/installed.lock
 !feria-ravan/storage/logs/.gitkeep
 !feria-ravan/storage/cache/.gitkeep
 !feria-ravan/storage/sessions/.gitkeep

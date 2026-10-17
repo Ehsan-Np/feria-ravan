@@ -17,6 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
     }
     $keys = [
         'site_title','site_slogan','logo','logo_alt','footer_text','report_footer','currency_label',  // نسخهٔ ۱٫۷: logo_alt
+        'site_title_en','brand_short_name','logo_dark','favicon','copyright_text',                   // نسخهٔ ۴٫۰: White-Label
+        'hide_system_credits','support_phone','support_email','support_telegram','support_bale',
         'font_main','font_headings','color_primary','color_secondary','color_accent',
         'zarinpal_merchant','zarinpal_sandbox',
         'kavenegar_apikey','kavenegar_sender','kavenegar_enabled','kavenegar_otp_pattern',
@@ -55,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
                 $v = preg_match('/^#[0-9a-fA-F]{3,8}$/', $v) ? $v : '#1e3a6e';
             }
             if ($k === 'register_enabled') { $v = $v === '1' ? '1' : '0'; }
+            if ($k === 'hide_system_credits') { $v = $v === '1' ? '1' : '0'; }
             if (in_array($k, ['reviews_auto_approve','report_qr_show'], true)) { $v = $v === '1' ? '1' : '0'; }
             if ($k === 'report_qr_link') {                       // فقط لینک http(s) سالم پذیرفته می‌شود
                 $v = trim($v);
@@ -79,6 +82,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
             $fn = 'logo.' . $map[$mime];
             if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $genDir . '/' . $fn)) {
                 DB::setSetting('logo', SITE_URL . '/feria-uploads/general/' . $fn);
+            }
+        }
+    }
+    /* آپلود لوگوی تیره (Dark Mode) در feria-uploads/general/ */
+    if (!empty($_FILES['logo_dark_file']['tmp_name'])) {
+        $mime = mime_content_type($_FILES['logo_dark_file']['tmp_name']);
+        $map = ['image/jpeg'=>'jpg','image/png'=>'png','image/svg+xml'=>'svg','image/webp'=>'webp'];
+        if (isset($map[$mime]) && $_FILES['logo_dark_file']['size'] < 2_000_000) {
+            $genDir = FR_ROOT . '/feria-uploads/general';
+            if (!is_dir($genDir)) @mkdir($genDir, 0755, true);
+            $fn = 'logo-dark.' . $map[$mime];
+            if (move_uploaded_file($_FILES['logo_dark_file']['tmp_name'], $genDir . '/' . $fn)) {
+                DB::setSetting('logo_dark', SITE_URL . '/feria-uploads/general/' . $fn);
+            }
+        }
+    }
+    /* آپلود فاوآیکون در feria-uploads/general/ */
+    if (!empty($_FILES['favicon_file']['tmp_name'])) {
+        $mime = mime_content_type($_FILES['favicon_file']['tmp_name']);
+        $map = ['image/x-icon'=>'ico','image/vnd.microsoft.icon'=>'ico','image/png'=>'png','image/svg+xml'=>'svg'];
+        if (isset($map[$mime]) && $_FILES['favicon_file']['size'] < 1_000_000) {
+            $genDir = FR_ROOT . '/feria-uploads/general';
+            if (!is_dir($genDir)) @mkdir($genDir, 0755, true);
+            $fn = 'favicon.' . $map[$mime];
+            if (move_uploaded_file($_FILES['favicon_file']['tmp_name'], $genDir . '/' . $fn)) {
+                DB::setSetting('favicon', SITE_URL . '/feria-uploads/general/' . $fn);
             }
         }
     }
@@ -143,7 +172,7 @@ $s = fn(string $k, string $d='') => (string)DB::setting($k, $d);
 
 admin_layout($adm, 'settings', 'تنظیمات سیستم');
 echo flash();
-$tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نمادها'],['fonts','🔤 فونت‌ها'],['texts','📝 متن‌های صفحات'],['panel','🧩 پنل کاربری'],['payment','💳 زرین‌پال'],['sms','📩 کاوه‌نگار'],['report','📄 گزارش'],['reviews','⭐ دیدگاه‌ها'],['consult','🛋 مشاوره'],['planner','🗓 برنامه‌ریز روزانه'],['contact','📞 تماس']];
+$tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوتر و نمادها'],['fonts','🔤 فونت‌ها'],['texts','📝 متن‌های صفحات'],['panel','🧩 پنل کاربری'],['payment','💳 زرین‌پال'],['sms','📩 کاوه‌نگار'],['report','📄 گزارش'],['reviews','⭐ دیدگاه‌ها'],['consult','🛋 مشاوره'],['planner','🗓 برنامه‌ریز روزانه'],['contact','📞 تماس']];
 ?>
 <div class="fr-card">
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -159,35 +188,102 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
 
 <?php if ($tab === 'brand'): ?>
 <div class="fr-card">
-  <h3>هویت سایت</h3>
-  <div class="fr-grid cols-2">
-    <div class="fr-field"><label>عنوان سایت</label>
-      <input class="fr-input" name="site_title" value="<?= e($s('site_title','فریا روان')) ?>"></div>
-    <div class="fr-field"><label>شعار</label>
-      <input class="fr-input" name="site_slogan" value="<?= e($s('site_slogan')) ?>"></div>
-    <div class="fr-field"><label>لوگو (آدرس یا آپلود)</label>
-      <input class="fr-input" name="logo" value="<?= e($s('logo')) ?>" style="direction:ltr">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <h3 style="margin:0">🏷️ هویت برند و نام‌گذاری سامانه (White-Label)</h3>
+    <span class="fr-chip info">امکان شخصی‌سازی ۱۰۰٪ نام، لوگو و نشان تجاری</span>
+  </div>
+  <p style="font-size:13px;color:var(--muted);line-height:1.9;margin-top:0">
+    تمامی بخش‌های سامانه (سربرگ، پاورقی، صفحات ارزیابی، کارنامه‌ها، پیامک‌ها و پنل‌ها) به‌صورت خودکار از اطلاعات زیر تبعیت می‌کنند.
+  </p>
+
+  <div class="fr-grid cols-3" style="margin-bottom:14px">
+    <div class="fr-field">
+      <label>نام رسمی سامانه / کلینیک (فارسی):</label>
+      <input class="fr-input" name="site_title" value="<?= e($s('site_title','فریا روان')) ?>" placeholder="مثلاً: کلینیک روان‌شناسی مهر">
+      <small class="hint">در عنوان صفحات، سربرگ و گزارش‌ها نمایش داده می‌شود.</small>
+    </div>
+    <div class="fr-field">
+      <label>نام کوتاه برند (مونوگرام / ۱ کلمه):</label>
+      <input class="fr-input" name="brand_short_name" value="<?= e($s('brand_short_name','فریا')) ?>" placeholder="مثلاً: مهر">
+      <small class="hint">در متن‌های پیامک، نشان‌های کوچک و منوها کاربرد دارد.</small>
+    </div>
+    <div class="fr-field">
+      <label>نام انگلیسی برند (Brand Name EN):</label>
+      <input class="fr-input" name="site_title_en" value="<?= e($s('site_title_en','Feria Ravan')) ?>" dir="ltr" placeholder="Mehr Clinic">
+      <small class="hint">در متاتگ‌های انگلیسی و رسیدها کاربرد دارد.</small>
+    </div>
+  </div>
+
+  <div class="fr-field" style="margin-bottom:16px">
+    <label>شعار سازمانی و معرفی کوتاه:</label>
+    <input class="fr-input" name="site_slogan" value="<?= e($s('site_slogan','مرکز تخصصی آزمون‌های روان‌شناختی، کارگاه‌ها و مشاوره')) ?>" placeholder="توضیح کوتاه یا شعار تبلیغاتی کلینیک">
+  </div>
+
+  <div class="fr-grid cols-3" style="margin-bottom:16px">
+    <!-- لوگوی روشن -->
+    <div class="fr-field">
+      <label>لوگوی اصلی (زمینه روشن):</label>
+      <input class="fr-input" name="logo" value="<?= e($s('logo')) ?>" style="direction:ltr" placeholder="https://… یا خالی">
       <input type="file" name="logo_file" accept="image/*" style="margin-top:6px;font-size:12px">
       <?php if (fr_logo_url() !== ''): ?>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-        <img src="<?= e(fr_logo_url()) ?>" alt="<?= e(fr_logo_alt()) ?>" style="height:40px;max-width:160px;border-radius:10px;border:1px solid var(--line);object-fit:contain;background:#fff;padding:4px">
-        <small style="color:var(--muted)">لوگو در ناوبری، فوتر، سایدبار پنل و پیشخوان مدیریت نمایش داده می‌شود.</small>
-      </div>
-      <?php endif; ?></div>
-    <div class="fr-field"><label>متن alt لوگو (برای سئو و دسترس‌پذیری)</label>
-      <input class="fr-input" name="logo_alt" value="<?= e($s('logo_alt')) ?>" maxlength="190"
-             placeholder="مثلاً لوگوی فریا روان — سامانه تست روانشناسی و مشاوره"><small class="hint">اگر خالی بماند، همان عنوان سایت استفاده می‌شود.</small></div>
-    <div class="fr-field"><label>واحد پول</label>
-      <input class="fr-input" name="currency_label" value="<?= e($s('currency_label','تومان')) ?>"></div>
-    <div class="fr-field"><label>👥 عضویت کاربران جدید</label>
-      <select class="fr-select" name="register_enabled">
-        <option value="1" <?= $s('register_enabled','1')==='1'?'selected':'' ?>>فعال — ثبت‌نام فقط با نام و موبایل</option>
-        <option value="0" <?= $s('register_enabled','1')==='0'?'selected':'' ?>>غیرفعال — فقط کاربران موجود وارد شوند</option>
-      </select>
-      <small class="hint">در حالت فعال، هر موبایل جدید فقط با واردکردن «نام و نام خانوادگی» ثبت‌نام می‌کند و بقیهٔ اطلاعات را بعداً در پنل تکمیل می‌کند.</small></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+          <img src="<?= e(fr_logo_url()) ?>" alt="<?= e(fr_logo_alt()) ?>" style="height:38px;max-width:130px;border-radius:8px;border:1px solid var(--line);object-fit:contain;background:#fff;padding:3px">
+          <small style="color:var(--muted)">پیش‌نمایش لوگو</small>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- لوگوی تیره -->
+    <div class="fr-field">
+      <label>لوگوی نسخه تیره (Dark Mode / فوتر):</label>
+      <input class="fr-input" name="logo_dark" value="<?= e($s('logo_dark')) ?>" style="direction:ltr" placeholder="https://… یا خالی">
+      <input type="file" name="logo_dark_file" accept="image/*" style="margin-top:6px;font-size:12px">
+      <?php if (!empty($s('logo_dark'))): ?>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+          <img src="<?= e(fr_brand_logo(true)) ?>" alt="Dark Logo" style="height:38px;max-width:130px;border-radius:8px;border:1px solid #334155;object-fit:contain;background:#0f172a;padding:3px">
+          <small style="color:var(--muted)">پیش‌نمایش لوگوی تیره</small>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- فاوآیکون -->
+    <div class="fr-field">
+      <label>فاوآیکون سایت (Favicon):</label>
+      <input class="fr-input" name="favicon" value="<?= e($s('favicon')) ?>" style="direction:ltr" placeholder="https://… یا خالی">
+      <input type="file" name="favicon_file" accept="image/*" style="margin-top:6px;font-size:12px">
+      <?php if (!empty($s('favicon'))): ?>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+          <img src="<?= e(fr_brand_favicon()) ?>" alt="Favicon" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--line);padding:2px">
+          <small style="color:var(--muted)">پیش‌نمایش فاوآیکون</small>
+        </div>
+      <?php endif; ?>
+    </div>
   </div>
-  <div class="fr-grid cols-3">
-    <?php foreach ([['color_primary','رنگ اصلی'],['color_secondary','رنگ دوم'],['color_accent','رنگ تاکید']] as [$k,$lbl]): ?>
+
+  <div class="fr-grid cols-2" style="margin-bottom:14px">
+    <div class="fr-field">
+      <label>متن alt لوگو (برای سئو و موتورهای جستجو):</label>
+      <input class="fr-input" name="logo_alt" value="<?= e($s('logo_alt')) ?>" maxlength="190" placeholder="مثلاً: لوگوی رسمی کلینیک روانشناسی مهر">
+    </div>
+    <div class="fr-field">
+      <label>متن کپی‌رایت فوتر سایت:</label>
+      <input class="fr-input" name="copyright_text" value="<?= e($s('copyright_text','تمامی حقوق مادی و معنوی متعلق به {site} می‌باشد.')) ?>" placeholder="راهنما: از {site} و {year} برای نام و سال خودکار استفاده کنید">
+    </div>
+  </div>
+
+  <div class="fr-grid cols-2" style="margin-bottom:14px">
+    <div class="fr-field"><label>واحد پول سامانه:</label>
+      <input class="fr-input" name="currency_label" value="<?= e($s('currency_label','تومان')) ?>"></div>
+    <div class="fr-field"><label>👥 وضعیت عضویت کاربران جدید:</label>
+      <select class="fr-select" name="register_enabled">
+        <option value="1" <?= $s('register_enabled','1')==='1'?'selected':'' ?>>فعال — ثبت‌نام با نام و شماره موبایل</option>
+        <option value="0" <?= $s('register_enabled','1')==='0'?'selected':'' ?>>غیرفعال — فقط کاربران از پیش تعریف‌شده</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="fr-grid cols-3" style="margin-bottom:14px">
+    <?php foreach ([['color_primary','رنگ اصلی سازمانی'],['color_secondary','رنگ دوم / ناوبری'],['color_accent','رنگ دکمه‌ها و تأکید']] as [$k,$lbl]): ?>
     <div class="fr-field"><label><?= $lbl ?></label>
       <div style="display:flex;gap:8px;align-items:center">
         <input type="color" name="<?= $k ?>" value="<?= e($s($k,'#1e3a6e')) ?>" style="width:46px;height:40px;border:none;border-radius:10px;cursor:pointer">
@@ -195,25 +291,59 @@ $tabs = [['brand','🎨 برند و ظاهر'],['footer','🦶 فوتر و نم�
       </div></div>
     <?php endforeach; ?>
   </div>
-  <div class="fr-field"><label>متن فوتر سایت (قابل شخصی‌سازی)</label>
+
+  <div class="fr-field"><label>متن فوتر سایت (درباره ما / معرفی کلینیک):</label>
     <div class="rte-toolbar" data-rte="foot"></div>
     <div class="rte-area" id="rte-foot" contenteditable="true" style="min-height:90px"><?= e($s('footer_text')) ?></div>
     <input type="hidden" name="footer_text" id="hd-foot"></div>
 </div>
 
-<div class="fr-card" style="border:1.5px dashed #d4dcec;background:#fafbfd">
-  <h3>✒️ خط اعتباری توسعه‌دهنده (پانوشت سایت و انتهای گزارش‌ها)</h3>
-  <p style="font-size:12.5px;color:var(--muted);margin-top:0">
-    این خط در پایین صفحات سایت و انتهای همهٔ گزارش‌های تست روانشناسی نمایش داده می‌شود؛ متن و لینکش را می‌توانید دلخواه بنویسید.
-    اگر لینک را خالی بگذارید، خط فقط به‌صورت متن ساده نمایش داده می‌شود.
+<!-- کارت تنظیمات اختصاصی White-Label و خط اعتباری -->
+<div class="fr-card" style="border:1.5px solid #d4dcec;background:#fafbfd;margin-bottom:20px">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+    <h3 style="margin:0;color:#1e3a8a">🛡️ خط اعتباری توسعه‌دهنده و ری‌برندینگ ۱۰۰٪ کامل (White-Label)</h3>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer;background:#fff;padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1">
+      <input type="checkbox" name="hide_system_credits" value="1" <?= $s('hide_system_credits','0')==='1'?'checked':'' ?>>
+      <span>فعال‌سازی حالت White-Label کامل (مخفی‌سازی خط اعتباری در فوتر و گزارش‌ها)</span>
+    </label>
+  </div>
+  <p style="font-size:12.5px;color:var(--muted);line-height:1.9;margin-top:0">
+    در صورت فعال بودن خط اعتباری، این متن در انتهای صفحات و کارنامه‌های بالینی نمایش می‌یابد. مدیر سامانه می‌تواند متن و لینک آن را کاملاً به نام سازمان خود بازنویسی کند.
   </p>
   <div class="fr-grid cols-2">
-    <div class="fr-field"><label>متن خط اعتبار</label>
+    <div class="fr-field"><label>متن خط اعتبار:</label>
       <input class="fr-input" name="footer_credit_text" value="<?= e($s('footer_credit_text','طراحی و کد نویسی : احسان نادری پناه – 09024561001 | فریا')) ?>" maxlength="300"></div>
-    <div class="fr-field"><label>لینک خط اعتبار (اختیاری)</label>
+    <div class="fr-field"><label>لینک خط اعتبار (اختیاری):</label>
       <input class="fr-input" name="footer_credit_url" value="<?= e($s('footer_credit_url','https://feria.ir')) ?>" style="direction:ltr" placeholder="https://…" maxlength="255"></div>
   </div>
-  <small class="hint">پیش‌نمایش: <span style="border-bottom:1px dashed #999"><?= e(fr_credit_text()) ?></span></small>
+  <div style="font-size:12px;color:var(--muted)">
+    پیش‌نمایش وضعیت فعلی: <span style="font-weight:700;color:#0f172a"><?= $s('hide_system_credits','0')==='1' ? '<span class="fr-chip danger">مخفی (White-Label کامل)</span>' : e(fr_credit_text()) ?></span>
+  </div>
+</div>
+
+<!-- کارت اطلاعات تماس و پشتیبانی برند -->
+<div class="fr-card" style="border:1px solid #e2e8f0;background:#fff">
+  <h3 style="margin:0 0 12px;font-size:16px">📞 اطلاعات تماس و پشتیبانی رسمی برند</h3>
+  <div class="fr-grid cols-2">
+    <div class="fr-field">
+      <label>تلفن پشتیبانی و تماس:</label>
+      <input class="fr-input" name="support_phone" value="<?= e($s('support_phone','021-88888888')) ?>" dir="ltr" placeholder="021-88888888">
+    </div>
+    <div class="fr-field">
+      <label>ایمیل پشتیبانی:</label>
+      <input class="fr-input" name="support_email" value="<?= e($s('support_email','support@example.com')) ?>" dir="ltr" placeholder="support@domain.com">
+    </div>
+  </div>
+  <div class="fr-grid cols-2">
+    <div class="fr-field">
+      <label>شناسه یا کانال تلگرام پشتیبانی:</label>
+      <input class="fr-input" name="support_telegram" value="<?= e($s('support_telegram')) ?>" dir="ltr" placeholder="@YourChannel">
+    </div>
+    <div class="fr-field">
+      <label>شناسه یا کانال پیام‌رسان بله:</label>
+      <input class="fr-input" name="support_bale" value="<?= e($s('support_bale')) ?>" dir="ltr" placeholder="@YourBaleChannel">
+    </div>
+  </div>
 </div>
 
 <?php elseif ($tab === 'footer'): ?>

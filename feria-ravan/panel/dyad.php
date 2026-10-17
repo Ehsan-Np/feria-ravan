@@ -61,12 +61,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'resend_sms' || ($
             $inviteUrl = fr_panel_url('dyad.php?token=' . urlencode($dy['token']));
 
             $sms = new Kavenegar();
+            $bTitle = fr_brand_title();
             if ($dy['pay_mode'] === 'self_paid') {
                 $smsText = "{$pName} عزیز، یادآوری آزمون سنجش تطابق دونفره ({$test['title']}). هزینه نسخه تخصصی توسط {$u1Name} برای شما هدیه و پرداخت شده است.\nشروع آزمون هدیه:\n{$inviteUrl}";
             } elseif ($dy['pay_mode'] === 'partner_paid') {
-                $smsText = "{$pName} عزیز، یادآوری دعوت {$u1Name} به آزمون سنجش تطابق دونفره ({$test['title']} - نسخهٔ تخصصی) در فریا روان.\nمشاهده و شروع:\n{$inviteUrl}";
+                $smsText = "{$pName} عزیز، یادآوری دعوت {$u1Name} به آزمون سنجش تطابق دونفره ({$test['title']} - نسخهٔ تخصصی) در {$bTitle}.\nمشاهده و شروع:\n{$inviteUrl}";
             } else {
-                $smsText = "{$pName} عزیز، یادآوری دعوت {$u1Name} برای سنجش تطابق دونفره ({$test['title']}) در فریا روان.\nمشاهده و شروع:\n{$inviteUrl}";
+                $smsText = "{$pName} عزیز، یادآوری دعوت {$u1Name} برای سنجش تطابق دونفره ({$test['title']}) در {$bTitle}.\nمشاهده و شروع:\n{$inviteUrl}";
             }
             $sms->sendDirect($dy['partner_mobile'], $smsText, 'dyad_invite');
             flash('پیامک یادآوری دعوت مجدداً ارسال شد ✅', 'ok');
@@ -314,9 +315,8 @@ panel_layout($u, 'history');
       <button class="fr-btn" type="button" onclick="copyDyadLink(document.getElementById('dyadLinkInput').value)">کپی لینک</button>
     </div>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <a class="fr-btn sm ghost" target="_blank" href="https://api.whatsapp.com/send?text=<?= urlencode("سلام " . ($createdDyad['partner_name'] ?: '') . "! من آزمون روانشناسی را در فریا روان انجام دادم. با این لینک بیا تا سازگاری و تطابق شخصیتمان را بسنجیم:
-" . $createdDyad['invite_url']) ?>">ارسال در واتس‌اپ 💬</a>
-      <a class="fr-btn sm ghost" target="_blank" href="https://t.me/share/url?url=<?= urlencode($createdDyad['invite_url']) ?>&text=<?= urlencode("سلام! بیا با این لینک سازگاری و تطابق رفتاری‌مان را در فریا روان بسنجیم 🦢") ?>">ارسال در تلگرام ✈️</a>
+      <a class="fr-btn sm ghost" target="_blank" href="https://api.whatsapp.com/send?text=<?= urlencode("سلام " . ($createdDyad['partner_name'] ?: '') . "! من آزمون روانشناسی را در " . fr_brand_title() . " انجام دادم. با این لینک بیا تا سازگاری و تطابق شخصیتمان را بسنجیم:\n" . $createdDyad['invite_url']) ?>">ارسال در واتس‌اپ 💬</a>
+      <a class="fr-btn sm ghost" target="_blank" href="https://t.me/share/url?url=<?= urlencode($createdDyad['invite_url']) ?>&text=<?= urlencode("سلام! بیا با این لینک سازگاری و تطابق رفتاری‌مان را در " . fr_brand_title() . " بسنجیم") ?>">ارسال در تلگرام ✈️</a>
     </div>
   </div>
   <?php endif; ?>

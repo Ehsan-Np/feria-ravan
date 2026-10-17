@@ -67,6 +67,41 @@ function fr_db_run_safe_ddl(string $sql): void
     }
 }
 
+/**
+ * پاک‌سازی خودکار و ایمن فایل‌های پوشه install پس از نصب یا آپدیت دستی
+ * به درخواست صریح کاربر: با اعمال به‌روزرسانی یا نصب، فایل‌های نصب‌کننده خودکار حذف می‌شوند
+ */
+function fr_cleanup_install_folder(): array
+{
+    $installDir = defined('FR_ROOT') ? (FR_ROOT . '/install') : (dirname(__DIR__) . '/install');
+    if (!is_dir($installDir)) {
+        return ['ok' => true, 'cleaned' => 0, 'message' => 'پوشه install قبلاً پاک‌سازی شده است.'];
+    }
+
+    if (defined('DB_NAME') && DB_NAME === '{{' . 'DB_NAME' . '}}') {
+        return ['ok' => false, 'cleaned' => 0, 'message' => 'سایت هنوز نصب نشده است؛ حذف پوشه install مجاز نیست.'];
+    }
+
+    $deleted = 0;
+    $files = @scandir($installDir);
+    if (is_array($files)) {
+        foreach ($files as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $full = $installDir . '/' . $item;
+            if (is_file($full)) {
+                if (@unlink($full)) $deleted++;
+            }
+        }
+        @rmdir($installDir);
+    }
+
+    return [
+        'ok'      => true,
+        'cleaned' => $deleted,
+        'message' => "تعداد {$deleted} فایل از پوشه install با موفقیت پاک‌سازی شد.",
+    ];
+}
+
 /** اجرای خودکار به‌روزرسانی‌ها در اولین ریکوئست پس از آپلود نسخهٔ جدید */
 function fr_update_pipeline(bool $force = false): void
 {
@@ -1140,6 +1175,56 @@ function fr_update_pipeline(bool $force = false): void
                 fr_permalinks_flush();
             }
         } catch (Throwable $e) { error_log('feria: 3.9.0 short links and gravity fields migration: ' . $e->getMessage()); }
+
+        /* ---- ۴٫۰٫۰: ری‌برندینگ کامل (White-Label)، تاریخ تمام‌شمسی، رفع باگ لود صفحه‌ساز هدر/فوتر و پاکسازی پوشه نصب ---- */
+        try {
+            // ۱. قفل‌سازی هوشمند پوشه install
+            @file_put_contents(FR_ROOT . '/install/installed.lock', date('Y-m-d H:i:s'));
+            @file_put_contents(FR_ROOT . '/storage/installed.lock', date('Y-m-d H:i:s'));
+
+            // ۲. بررسی و تضمین خودکار کلید رمزنگاری FR_CRYPT_KEY
+            if (is_writable(FR_ROOT . '/config.php')) {
+                $cfg = @file_get_contents(FR_ROOT . '/config.php');
+                if ($cfg && (str_contains($cfg, "'{{ENCRYPT_KEY}}'") || str_contains($cfg, "define('FR_CRYPT_KEY', '')"))) {
+                    $newKey = bin2hex(random_bytes(32));
+                    $cfg = str_replace(["'{{ENCRYPT_KEY}}'", "define('FR_CRYPT_KEY', '')"], [var_export($newKey, true), "define('FR_CRYPT_KEY', " . var_export($newKey, true) . ")"], $cfg);
+                    @file_put_contents(FR_ROOT . '/config.php', $cfg, LOCK_EX);
+                }
+            }
+
+            // ۳. تنظیمات پیش‌فرض White-Label در دیتابیس
+            $wlDefaults = [
+                'site_title_en'        => 'Feria Ravan',
+                'brand_short_name'     => 'فریا',
+                'site_slogan'          => 'مرکز تخصصی آزمون‌های روان‌شناختی، کارگاه‌ها و مشاوره',
+                'logo_dark'            => '',
+                'favicon'              => '',
+                'copyright_text'       => 'تمامی حقوق مادی و معنوی متعلق به {site} می‌باشد.',
+                'hide_system_credits'  => '0',
+                'footer_credit_text'   => 'طراحی و توسعه اختصاصی',
+                'footer_credit_url'    => '',
+                'support_phone'        => '021-88888888',
+                'support_email'        => 'support@example.com',
+                'support_telegram'     => '',
+                'support_bale'         => '',
+            ];
+            foreach ($wlDefaults as $wk => $wv) {
+                if (DB::setting($wk, null) === null) {
+                    DB::setSetting($wk, $wv);
+                }
+            }
+
+            // ۴. خودترمیمی و پایداری صفحه‌ساز و فهرست‌ساز
+            if (class_exists('PageBuilder')) {
+                PageBuilder::ensureSchema();
+            }
+            if (class_exists('MenuBuilder')) {
+                MenuBuilder::ensureSchema();
+            }
+            if (function_exists('fr_permalinks_flush')) {
+                fr_permalinks_flush();
+            }
+        } catch (Throwable $e) { error_log('feria: 4.0.0 migration: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);

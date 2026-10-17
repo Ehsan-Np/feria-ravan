@@ -11,6 +11,8 @@ require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/view.php';
 require_once __DIR__ . '/../includes/admin-auth.php';
+require_once __DIR__ . '/../includes/seo.php';
+require_once __DIR__ . '/../includes/consult.php';
 require_once __DIR__ . '/../core/Kavenegar.php';
 require_once __DIR__ . '/../core/Zarinpal.php';
 require_once __DIR__ . '/../core/Analyzer.php';

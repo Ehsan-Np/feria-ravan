@@ -80,6 +80,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             $errorMsg = 'خطا در اجرای پایپ‌لاین: ' . $e->getMessage();
         }
+    } elseif ($action === 'cleanup_install') {
+        try {
+            require_once FR_ROOT . '/includes/update.php';
+            $cRes = fr_cleanup_install_folder();
+            if ($cRes['ok']) {
+                flash($cRes['message'], 'ok');
+            } else {
+                $errorMsg = $cRes['message'];
+            }
+        } catch (Throwable $e) {
+            $errorMsg = 'خطا در پاک‌سازی پوشه نصب: ' . $e->getMessage();
+        }
+    } elseif ($action === 'run_reseed') {
+        try {
+            require_once FR_ROOT . '/includes/update.php';
+            fr_update_pipeline(true);
+            require_once FR_ROOT . '/core/seed-content.php';
+            fr_seed_content();
+            if (function_exists('fr_seed_mseq_tests')) fr_seed_mseq_tests();
+            if (file_exists(FR_ROOT . '/core/seed-comprehensive-tests.php')) {
+                require_once FR_ROOT . '/core/seed-comprehensive-tests.php';
+                if (function_exists('fr_seed_comprehensive_tests')) fr_seed_comprehensive_tests(true);
+            }
+            if (file_exists(FR_ROOT . '/core/seed-analyses29.php')) {
+                require_once FR_ROOT . '/core/seed-analyses29.php';
+                if (function_exists('fr_seed_deep_analyses')) fr_seed_deep_analyses();
+            }
+            if (class_exists('PageBuilder')) {
+                PageBuilder::ensureSchema();
+                PageBuilder::seedDefaultPages();
+            }
+            if (class_exists('MenuBuilder')) {
+                MenuBuilder::ensureSchema();
+            }
+            if (function_exists('fr_texts_seed')) fr_texts_seed();
+            if (function_exists('fr_roles_seed')) fr_roles_seed();
+            if (function_exists('fr_permalinks_flush')) fr_permalinks_flush();
+            flash('بذر مجدد تمامی آزمون‌ها، قالب‌های تحلیل، برگه‌ها و تنظیمات با موفقیت انجام شد ✅', 'ok');
+        } catch (Throwable $e) {
+            $errorMsg = 'خطا در اجرای بذر محتوا: ' . $e->getMessage();
+        }
     }
     } catch (Throwable $e) {
         $errorMsg = 'خطا در پردازش به‌روزرسانی: ' . $e->getMessage();
@@ -195,19 +236,65 @@ admin_layout($admin, 'updater', '🚀 به‌روزرسانی و ارتقای س
     </form>
   </div>
 
-  <!-- بخش ۳: ابزارهای نگهداری دیتابیس -->
-  <div class="fr-card">
-    <h3 style="margin:0 0 12px;font-size:16px">⚙️ ابزارهای نگهداری دیتابیس</h3>
+  <!-- بخش ۳: ابزارهای نگهداری دیتابیس و پاک‌سازی -->
+  <?php
+    $hasInstallDir = is_dir(FR_ROOT . '/install');
+    $installFilesCnt = 0;
+    if ($hasInstallDir) {
+        $files = @scandir(FR_ROOT . '/install');
+        if (is_array($files)) {
+            $installFilesCnt = count(array_filter($files, fn($f) => $f !== '.' && $f !== '..'));
+        }
+    }
+  ?>
+  <div class="fr-card" style="margin-bottom:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <h3 style="margin:0;font-size:16px">🧹 وضعیت پوشه نصب (install)</h3>
+      <?php if ($hasInstallDir && $installFilesCnt > 0): ?>
+        <span class="fr-chip danger">⚠️ حاوی <?= fa_num($installFilesCnt) ?> فایل — نیاز به پاکسازی</span>
+      <?php else: ?>
+        <span class="fr-chip success">✅ کاملاً پاک‌سازی شده و امن</span>
+      <?php endif; ?>
+    </div>
     <p style="font-size:13px;color:var(--muted);line-height:1.9;margin-top:0">
-      اگر پس از آپلود دستی فایل‌ها متوجه شدید تغییری در ساختار جداول یا افزوده‌شدن تست‌ها ایجاد نشده است، می‌توانید پایپ‌لاین مهاجرت را مجدداً به‌صورت دستی اجرا کنید:
+      پس از نصب اولیه یا آپدیت دستی بستهٔ سامانه، جهت حفظ امنیت حداکثری و جلوگیری از دسترسی غیرمجاز، فایل‌های داخل پوشهٔ <code>install/</code> باید پاک‌سازی شوند.
     </p>
-    <form method="post">
-      <?= csrf_field() ?>
-      <input type="hidden" name="action" value="rerun_pipeline">
-      <button class="fr-btn ghost sm" type="submit">
-        🔄 اجرای مجدد پایپ‌لاین مهاجرت دیتابیس (fr_update_pipeline)
-      </button>
-    </form>
+    <?php if ($hasInstallDir && $installFilesCnt > 0): ?>
+      <form method="post" style="display:inline">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="cleanup_install">
+        <button class="fr-btn sm" style="background:#dc2626" type="submit" onclick="return confirm('آیا از حذف کامل فایل‌های پوشه نصب اطمینان دارید؟')">
+          🗑️ پاک‌سازی فوری پوشه و فایل‌های install
+        </button>
+      </form>
+    <?php else: ?>
+      <div style="font-size:12.5px;color:#16a34a;font-weight:700">
+        هیچ فایل حساسی در پوشه نصب وجود ندارد و امنیت سامانه برقرار است.
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <div class="fr-card">
+    <h3 style="margin:0 0 12px;font-size:16px">⚙️ ابزارهای نگهداری و بذر مجدد دیتابیس (Reseed)</h3>
+    <p style="font-size:13px;color:var(--muted);line-height:1.9;margin-top:0">
+      اگر پس از آپلود دستی فایل‌ها متوجه شدید تغییری در ساختار جداول ایجاد نشده یا می‌خواهید تمامی تست‌های روان‌سنجی، قالب‌های بالینی، برگه‌ها و منوها به حالت کامل و استاندارد به‌روزرسانی شوند:
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="rerun_pipeline">
+        <button class="fr-btn ghost sm" type="submit">
+          🔄 اجرای پایپ‌لاین مهاجرت دیتابیس (fr_update_pipeline)
+        </button>
+      </form>
+      <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="run_reseed">
+        <button class="fr-btn sm primary" type="submit" onclick="return confirm('آیا از بذر مجدد و همگام‌سازی کامل پایگاه داده اطمینان دارید؟')">
+          🌱 اجرای کامل بذر محتوا و تست‌ها (Reseed All)
+        </button>
+      </form>
+    </div>
   </div>
 </div>
 <?php admin_layout_end(); ?>

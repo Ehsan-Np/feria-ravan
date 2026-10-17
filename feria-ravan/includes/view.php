@@ -48,7 +48,7 @@ function fr_brand_css(): string
 /** سربرگ HTML */
 function render_header(string $title, array $opts = []): void
 {
-    $siteTitle = (string)DB::setting('site_title', 'فریا روان');
+    $siteTitle = fr_brand_title();
     $full = $title ? ($title . ' | ' . $siteTitle) : $siteTitle;
     ?>
 <!DOCTYPE html>
@@ -56,7 +56,7 @@ function render_header(string $title, array $opts = []): void
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" type="image/svg+xml" href="<?= SITE_URL ?>/assets/img/favicon.svg">
+<link rel="icon" href="<?= e(fr_brand_favicon()) ?>">
 <meta name="csrf" content="<?= csrf_token() ?>">
 <meta name="app-url" content="<?= e(SITE_URL) ?>">
 <?php if (str_contains($_SERVER['SCRIPT_NAME'] ?? '', '/panel/') || (function_exists('fr_panel_slug') && str_contains($_SERVER['REQUEST_URI'] ?? '', '/' . fr_panel_slug()))): ?>
@@ -140,8 +140,8 @@ function panel_layout(array $user, string $active): void
   <aside class="fr-sidebar" id="frSidebar">
     <div class="fr-brand">
       <?= fr_logo_html('mark') ?>
-      <div><b><?= e(DB::setting('site_title','فریا روان')) ?></b>
-      <small><?= e(DB::setting('site_slogan','')) ?></small></div>
+      <div><b><?= e(fr_brand_title()) ?></b>
+      <small><?= e(fr_brand_slogan()) ?></small></div>
     </div>
     <nav class="fr-nav">
       <?php foreach ($items as [$label,$key,$icon,$url]): ?>

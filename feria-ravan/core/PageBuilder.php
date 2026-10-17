@@ -1456,7 +1456,7 @@ class PageBuilder
     public static function renderWidgetNewsletter(array $params, bool $isEditor): void
     {
         $title = (string)($params['title'] ?? '📩 دریافت تحلیل‌های روان‌شناسی و کدهای تخفیف اختصاصی');
-        $subtitle = (string)($params['subtitle'] ?? 'با عضویت در خبرنامه فریا روان، از جدیدترین مقالات بالینی، تست‌های منتشرشده و تخفیف‌های مناسبتی مطلع شوید.');
+        $subtitle = (string)($params['subtitle'] ?? ('با عضویت در خبرنامه ' . fr_brand_title() . '، از جدیدترین مقالات بالینی، تست‌های منتشرشده و تخفیف‌های مناسبتی مطلع شوید.'));
         ?>
         <div class="fr-widget-newsletter-wrapper" style="background:linear-gradient(135deg, #1e1b4b, #312e81);color:#fff;padding:40px 24px;border-radius:20px;max-width:1100px;margin:30px auto;text-align:center;box-shadow:0 10px 25px -5px rgba(49,46,129,0.25)">
           <div style="font-size:36px;margin-bottom:10px">✉️</div>
@@ -1723,11 +1723,11 @@ class PageBuilder
      */
     public static function renderWidgetContactBox(array $params, bool $isEditor): void
     {
-        $tel = (string)DB::setting('contact_phone', '۰۲۱-۸۸۸۸۸۸۸۸');
+        $tel = fr_brand_support_phone() ?: (string)DB::setting('contact_phone', '۰۲۱-۸۸۸۸۸۸۸۸');
         $addr = (string)DB::setting('contact_address', 'تهران، میدان ونک، خیابان ملاصدرا');
         ?>
         <div class="fr-widget-contact-box" style="padding:30px 16px;max-width:900px;margin:20px auto;background:#fff;border-radius:16px;border:1px solid #e2e8f0;text-align:center">
-          <h3 style="font-size:18px;font-weight:800;color:#1e293b;margin:0 0 8px">📞 ارتباط با مرکز روان‌شناسی فریا روان</h3>
+          <h3 style="font-size:18px;font-weight:800;color:#1e293b;margin:0 0 8px">📞 ارتباط با <?= e(fr_brand_title()) ?></h3>
           <p style="font-size:13px;color:#64748b;margin:0 0 16px">همکاران ما در روزهای کاری پاسخگوی سوالات شما هستند</p>
           <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;font-size:13px;color:#334155;margin-bottom:16px">
             <div>📍 <b>نشانی:</b> <?= e($addr) ?></div>
@@ -1742,8 +1742,8 @@ class PageBuilder
      */
     public static function renderWidgetSiteLogo(array $params, bool $isEditor): void
     {
-        $site   = (string)DB::setting('site_title', 'فریا روان');
-        $slogan = (string)DB::setting('site_slogan', 'مرکز تخصصی روان‌شناسی و ارزیابی');
+        $site   = fr_brand_title();
+        $slogan = fr_brand_slogan();
         ?>
         <div class="fr-widget-logo" style="display:inline-flex;align-items:center;gap:10px">
           <a href="<?= SITE_URL ?>/" style="display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:inherit">

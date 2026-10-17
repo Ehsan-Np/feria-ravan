@@ -20,7 +20,7 @@ require_once __DIR__ . '/../core/PageBuilder.php';
  */
 function public_header(array $opts = [], string $title = ''): void
 {
-    $site   = (string)DB::setting('site_title', 'فریا روان');
+    $site   = fr_brand_title();
     $active = (string)($opts['active'] ?? '');
     $tone   = (string)($opts['tone'] ?? '');              // tone-course / tone-consult برای هویت رنگی بخش
     $nav = [
@@ -37,7 +37,7 @@ function public_header(array $opts = [], string $title = ''): void
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="icon" type="image/svg+xml" href="<?= SITE_URL ?>/assets/img/favicon.svg">
+<link rel="icon" href="<?= e(fr_brand_favicon()) ?>">
 <link rel="apple-touch-icon" href="<?= SITE_URL ?>/assets/img/apple-touch-icon.png">
 <meta name="csrf" content="<?= csrf_token() ?>">
 <meta name="app-url" content="<?= e(SITE_URL) ?>">
@@ -221,7 +221,7 @@ function fr_footer_badges(): array
 
 function public_footer(): void
 {
-    $site     = (string)DB::setting('site_title', 'فریا روان');
+    $site     = fr_brand_title();
     $logoDesc = trim((string)DB::setting('logo_desc', ''));
     if ($logoDesc === '') {
         $logoDesc = (string)DB::setting('footer_text', 'مرجع تست‌های روانشناسی، کارگاه‌ها و دوره‌های تخصصی و مشاورهٔ آنلاین و حضوری.');
@@ -335,9 +335,11 @@ function public_footer(): void
     </div>
   </div>
   <div class="pb-foot-base">
-    <span>© <?= fa_num(jdate('Y')) ?> <?= e($site) ?> — <?= e(T('footer.copy')) ?></span>
-    <!-- خط اعتباری توسعه‌دهنده — متن و لینکش از تنظیمات (تب برند) قابل ویرایش است -->
-    <span class="pb-credit"><?= fr_credit_html() ?></span>
+    <span><?= fr_brand_copyright() ?></span>
+    <!-- خط اعتباری توسعه‌دهنده — متن و لینکش از تنظیمات (تب برند) قابل ویرایش یا در حالت White-Label مخفی است -->
+    <?php $cHtml = fr_credit_html(); if ($cHtml !== ''): ?>
+    <span class="pb-credit"><?= $cHtml ?></span>
+    <?php endif; ?>
   </div>
 </footer>
 <script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>

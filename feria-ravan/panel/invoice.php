@@ -20,7 +20,7 @@ $o = DB::one('SELECT o.*, COALESCE(t.title, ev.title,
               WHERE o.id=? AND o.user_id=?', [(int)($_GET['order'] ?? 0), $u['id']]);
 if (!$o) redirect(fr_panel_url('payments.php'));
 $pay = DB::one("SELECT ref_id FROM " . DB::t('payments') . " WHERE order_id=? AND status='ok' ORDER BY id DESC", [$o['id']]);
-$site = (string)DB::setting('site_title', 'فریا روان');
+$site = fr_brand_title();
 
 render_header('فاکتور #' . $o['id']);
 ?>

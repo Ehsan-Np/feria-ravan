@@ -71,11 +71,11 @@ function fr_abs_url(string $path): string
  * -------------------------------------------------------------------------*/
 function fr_meta_tags(array $m): string
 {
-    $site  = (string)DB::setting('site_title', 'فریا روان');
+    $site  = fr_brand_title();
     $title = trim((string)($m['title'] ?? ''));
     $full  = $title !== '' ? ($title . ' | ' . $site) : $site;
     $desc  = trim((string)($m['desc'] ?? DB::setting('seo_home_desc', '')));
-    if ($desc === '') $desc = (string)DB::setting('site_slogan', 'پلتفرم جامع تست‌های روانشناسی، کارگاه‌ها، دوره‌ها و مشاوره');
+    if ($desc === '') $desc = fr_brand_slogan();
     $descX = mb_substr(preg_replace('/\\s+/', ' ', strip_tags($desc)), 0, 160);
     $descT = mb_substr(preg_replace('/\\s+/', ' ', strip_tags($desc)), 0, 200);
     $img   = fr_abs_url((string)($m['image'] ?? ''));
@@ -119,7 +119,7 @@ function fr_meta_tags(array $m): string
  * -------------------------------------------------------------------------*/
 function fr_event_jsonld(array $ev, string $url): array
 {
-    $site = (string)DB::setting('site_title', 'فریا روان');
+    $site = fr_brand_title();
     $ld = [
         '@context' => 'https://schema.org',
         '@type'    => $ev['kind'] === 'course' ? 'Course' : 'Event',
@@ -149,7 +149,7 @@ function fr_event_jsonld(array $ev, string $url): array
 /** JSON-LD تست روانشناسی — Quiz که در گوگل ریچ‌ریزالت می‌گیرد */
 function fr_test_jsonld(array $t, string $url): array
 {
-    $site = (string)DB::setting('site_title', 'فریا روان');
+    $site = fr_brand_title();
     $ld = [
         '@context' => 'https://schema.org',
         '@type'    => 'Quiz',

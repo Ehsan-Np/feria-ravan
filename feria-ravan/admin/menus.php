@@ -11,10 +11,12 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/boot.php';
+require_once FR_ROOT . '/includes/seo.php';
+require_once FR_ROOT . '/includes/consult.php';
 require_once FR_ROOT . '/core/MenuBuilder.php';
 require_once FR_ROOT . '/core/PageBuilder.php';
 
-$adm = require_admin(['superadmin', 'manager']);
+$adm = require_admin(['superadmin', 'manager', 'admin']);
 MenuBuilder::ensureSchema();
 PageBuilder::ensureSchema();
 
@@ -215,7 +217,7 @@ $menuItems = $activeMenu ? MenuBuilder::getMenuItems((int)$activeMenu['id'], fal
 $availPages = PageBuilder::getPages();
 $availTests = DB::all("SELECT id, title FROM " . DB::t('tests') . " WHERE status='active' ORDER BY sort_order ASC");
 $availEvents = DB::all("SELECT id, title, kind FROM " . DB::t('events') . " WHERE status='active' ORDER BY id DESC LIMIT 20");
-$availServices = consult_services_catalog();
+$availServices = function_exists('consult_services_catalog') ? consult_services_catalog() : [];
 
 admin_layout($adm, 'menus', 'مدیریت فهرست‌ها و منوها');
 echo flash();

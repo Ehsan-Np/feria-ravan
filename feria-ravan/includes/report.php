@@ -164,7 +164,7 @@ final class ReportBuilder
         if (!$results) return '<div class="fr-alert err">نتایج یافت نشد.</div>';
 
         $test  = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$attempt['test_id']]);
-        $site  = (string)DB::setting('site_title', 'فریا روان');
+        $site  = fr_brand_title();
         $isFull = $level === 'full';
         $engine = (string)($test['engine'] ?? '');
         $slug   = (string)($test['slug'] ?? '');

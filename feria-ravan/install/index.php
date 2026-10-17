@@ -12,8 +12,19 @@ session_start();
 define('FR_ROOT', dirname(__DIR__));
 define('FR_INSTALL_LOCK', FR_ROOT . '/storage/installed.lock');
 
+if (isset($_GET['action']) && $_GET['action'] === 'cleanup') {
+    if (file_exists(FR_ROOT . '/includes/update.php')) {
+        require_once FR_ROOT . '/includes/update.php';
+        if (function_exists('fr_cleanup_install_folder')) {
+            fr_cleanup_install_folder();
+        }
+    }
+    header('Location: ../admin/');
+    exit;
+}
+
 /* اگر قبلاً نصب شده، ورود به نصب‌کننده مسدود است */
-$installed = file_exists(FR_INSTALL_LOCK) && file_exists(FR_ROOT . '/config.php');
+$installed = (file_exists(FR_INSTALL_LOCK) || file_exists(__DIR__ . '/installed.lock')) && file_exists(FR_ROOT . '/config.php');
 
 $step = (int)($_GET['step'] ?? 0);
 if ($installed && $step !== 6) { $step = 6; } // فقط صفحه «نصب‌شده»
@@ -157,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$installed) {
                     $errors[] = 'امکان نوشتن config.php نیست؛ دسترسی پوشه را بررسی کنید.';
                 } else {
                     file_put_contents(FR_INSTALL_LOCK, date('c') . '|' . $d['site_url'], LOCK_EX);
+                    @file_put_contents(__DIR__ . '/installed.lock', date('c') . '|' . $d['site_url'], LOCK_EX);
                     // بذر بانک سؤالات و قالب‌های تحلیل (یک‌بار)
                     try {
                         require_once FR_ROOT . '/config.php';
@@ -311,7 +323,10 @@ input:focus{outline:none;border-color:#1e3a6e}
       <div class="big">🎉</div>
       <h2>نصب با موفقیت انجام شد!</h2>
       <p class="lead">فایل <code>config.php</code> ساخته شد و نصب قفل گردید.<br>
-      برای امنیت، پوشه‌ی <code>/install</code> را از سرور حذف کنید.</p>
+      پوشه نصاب قفل شده است. برای امنیت حداکثری می‌توانید با دکمه زیر فایل‌های نصاب را پاک کنید.</p>
+      <form method="post" action="?action=cleanup" style="margin:16px 0">
+        <button class="btn" style="background:#dc2626">🗑️ پاکسازی و حذف فایل‌های نصب</button>
+      </form>
       <a class="btn" href="../">ورود به سایت ←</a>
       <a class="btn ghost" href="../admin/">ورود به پیشخوان مدیریت</a>
     </div>

@@ -102,7 +102,7 @@ echo flash();
       </td>
       <td><?= !empty($a['role_id']) ? '<span class="chip" style="background:#eef2ff">' . e($roleMap[(int)$a['role_id']] ?? 'نقش سفارشی') . '</span>' : '<span style="color:var(--muted);font-size:12px">—</span>' ?></td>
       <td><?= $a['status'] === 'active' ? '<span style="color:var(--c-ok)">فعال</span>' : '<span style="color:var(--c-danger)">غیرفعال</span>' ?></td>
-      <td style="font-size:12px"><?= !empty($a['last_login_at']) ? e(jdate($a['last_login_at'])) : '—' ?></td>
+      <td style="font-size:12px"><?= !empty($a['last_login_at']) ? fa_num(jdate('Y/m/d - H:i', $a['last_login_at'])) : '—' ?></td>
       <td style="white-space:nowrap">
         <form method="post" style="display:inline-flex;gap:6px;align-items:center">
           <?= csrf_field() ?><input type="hidden" name="act" value="resetpass"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>">

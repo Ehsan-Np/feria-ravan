@@ -25,9 +25,9 @@ $attemptId = (int)($_GET['attempt'] ?? 0);
 $at = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=? AND user_id=?', [$attemptId, $u['id']]);
 if (!$at || $at['status'] === 'in_progress') redirect(fr_panel_url());
 
-$site   = (string)DB::setting('site_title', 'فریا روان');
-$slogan = (string)DB::setting('site_slogan', '');
-$logo   = trim((string)DB::setting('logo', ''));
+$site   = fr_brand_title();
+$slogan = fr_brand_slogan();
+$logo   = fr_brand_logo();
 $rep    = (string)($at['rep_code'] ?? ('FR-' . $at['id']));
 $issued = strtotime((string)($at['completed_at'] ?: $at['started_at']));
 
@@ -139,7 +139,7 @@ $docTitle = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rep);
       <img id="frQrImg" src="<?= e($qrSrc) ?>" alt="QR" loading="eager" decoding="async"
            data-fallback="1">
       <span id="frQrFallback" style="display:none"><?= barcode39_svg($rep, 52) ?></span>
-      <div class="pr-cap">Feria.ir</div>
+      <div class="pr-cap"><?= e(fr_brand_name_en() ?: 'Feria.ir') ?></div>
     </div>
   </div>
   <?php endif; ?>

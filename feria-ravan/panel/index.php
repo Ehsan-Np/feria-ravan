@@ -114,7 +114,7 @@ $memberSt = !empty($u['created_at']) ? strtotime((string)$u['created_at']) : tim
     <div style="font-size:12.5px;color:var(--muted);margin-top:6px;line-height:2">
       📱 <?= fa_num($u['mobile']) ?>
       <?php if (!empty($u['email'])): ?> · ✉️ <?= e($u['email']) ?><?php endif; ?>
-      <br>🗓 عضو فریا از <?= fa_num(jdate('j F Y', $memberSt)) ?>
+      <br>🗓 عضو <?= e(fr_brand_short()) ?> از <?= fa_num(jdate('j F Y', $memberSt)) ?>
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
       <div class="fr-progress" style="flex:1;min-width:150px;max-width:280px"><i style="width:<?= $pc['percent'] ?>%"></i></div>

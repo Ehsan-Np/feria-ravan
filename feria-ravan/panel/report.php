@@ -109,7 +109,7 @@ if (!empty($at['custom_fields_json'])) {
               <span style="font-size:24px">🎉</span>
               <div>
                 <b style="color:#065f46;font-size:14px">درخواست جلسه مشاوره رایگان تخصصی شما با موفقیت ثبت شد!</b>
-                <div style="font-size:12.5px;color:#047857;margin-top:3px">کارشناسان روان‌شناسی فریا روان بر اساس نتایج این آزمون و ترجیح زمانی ثبت‌شده، به‌زودی جهت هماهنگی جلسه با شما تماس خواهند گرفت.</div>
+                <div style="font-size:12.5px;color:#047857;margin-top:3px">کارشناسان روان‌شناسی <?= e(fr_brand_title()) ?> بر اساس نتایج این آزمون و ترجیح زمانی ثبت‌شده، به‌زودی جهت هماهنگی جلسه با شما تماس خواهند گرفت.</div>
               </div>
             </div>
           </div>

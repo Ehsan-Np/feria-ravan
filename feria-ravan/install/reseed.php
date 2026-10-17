@@ -19,8 +19,8 @@ require_once FR_ROOT . '/core/seed-content.php';
 
 fr_bootstrap();
 
-// نسخهٔ ۱٫۶: این اسکریپت اسکیما را تغییر می‌دهد — اجرا با نشست مدیر فعال یا کلید سیستمی ممکن است
-if (!current_admin()) {
+// اجرای اسکریپت با نشست مدیر فعال، محیط خط فرمان (CLI) یا کلید امنیتی ممکن است
+if (PHP_SAPI !== 'cli' && !current_admin()) {
     $adminCount = 0;
     try { $adminCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('admins')); } catch (Throwable $e) {}
     $cronSecret = '';
@@ -29,7 +29,7 @@ if (!current_admin()) {
     $keyMatches = ($cronSecret !== '' && $providedKey !== '' && hash_equals($cronSecret, $providedKey));
 
     if ($adminCount > 0 && !$keyMatches) {
-        if (PHP_SAPI !== 'cli' && !headers_sent()) {
+        if (!headers_sent()) {
             redirect(SITE_URL . '/admin/login.php?back=' . urlencode($_SERVER['REQUEST_URI'] ?? '/install/reseed.php?force=1'));
         }
         http_response_code(403);

@@ -401,7 +401,7 @@ echo flash();
               </td>
 
               <td style="text-align:center;font-size:12px;color:#64748b">
-                <?= fa_num(substr((string)($p['updated_at'] ?: $p['created_at']), 0, 10)) ?>
+                <?= fa_num(jdate('Y/m/d', $p['updated_at'] ?: $p['created_at'])) ?>
               </td>
 
               <td style="text-align:left">

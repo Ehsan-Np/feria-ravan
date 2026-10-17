@@ -10,9 +10,11 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/boot.php';
+require_once FR_ROOT . '/includes/seo.php';
+require_once FR_ROOT . '/includes/consult.php';
 require_once FR_ROOT . '/core/PageBuilder.php';
 
-$adm = require_admin(['superadmin', 'manager']);
+$adm = require_admin(['superadmin', 'manager', 'admin']);
 PageBuilder::ensureSchema();
 
 $pageId  = (int)($_GET['id'] ?? 0);
@@ -472,6 +474,7 @@ $isHome  = !empty($page['is_home']);
   let editor;
 
   document.addEventListener('DOMContentLoaded', function() {
+    try {
       // داده‌های اولیه برگه همراه با رندر دیداری ویجت‌ها جهت جلوگیری از صفحه سفید در بوم
       <?php
         $rawHtml = (string)($page['content_html'] ?? '');
@@ -623,7 +626,6 @@ $isHome  = !empty($page['is_home']);
           const ldr = document.getElementById('pb-loader');
           if (ldr && ldr.style.display !== 'none') ldr.style.display = 'none';
       }, 2500);
-      });
 
       // ۳. ثبت ویجت‌های اختصاصی فریا روان در BlockManager
       const bm = editor.BlockManager;

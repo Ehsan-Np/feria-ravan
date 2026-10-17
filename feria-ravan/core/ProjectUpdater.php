@@ -326,6 +326,11 @@ final class ProjectUpdater
                 continue;
             }
 
+            // ۴. عدم استخراج فایل‌های پوشه install هنگام آپدیت روی سایت نصب‌شده
+            if (str_starts_with($relPath, 'install/')) {
+                continue;
+            }
+
             $dest = FR_ROOT . '/' . $relPath;
 
             // اگر دایرکتوری است
@@ -369,6 +374,9 @@ final class ProjectUpdater
             if (function_exists('fr_update_pipeline')) {
                 fr_update_pipeline(true);
                 $pipelineOutput = 'مهاجرت‌های ساختار دیتابیس با موفقیت اعمال شد.';
+            }
+            if (function_exists('fr_cleanup_install_folder')) {
+                fr_cleanup_install_folder();
             }
         } catch (Throwable $e) {
             $pipelineOutput = 'هشدار در اجرای مهاجرت پایگاه داده: ' . $e->getMessage();

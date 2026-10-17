@@ -125,18 +125,71 @@ function j2g(int $jy, int $jm, int $jd): array
 
 const FR_JMONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 
-/** خروجی تاریخ شمسی آمادهٔ نمایش: «پنجشنبه ۱۶ مرداد ۱۴۰۵» */
+/**
+ * خروجی تاریخ شمسی مقاوم و همه‌کاره با پشتیبانی از رشته تاریخ، تایم‌استمپ عددی و فرمت‌های مختلف
+ * نمونه‌ها: jdate() | jdate('Y/m/d') | jdate('Y/m/d H:i', $row['created_at']) | jdate($row['created_at'])
+ */
 function jdate(string $format = 'j F Y', $ts = null): string
 {
-    $ts     = $ts ?? time();
+    // اگر فقط یک آرگومان رشته‌ای حاوی تاریخ میلادی ارسال شده باشد (مثلاً jdate($row['created_at']))
+    if ($ts === null && preg_match('/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/', trim($format))) {
+        $dateStr = trim($format);
+        $ts = strtotime($dateStr) ?: time();
+        $format = str_contains($dateStr, ':') ? 'Y/m/d - H:i' : 'Y/m/d';
+    } elseif (is_string($ts)) {
+        $ts = strtotime($ts) ?: time();
+    } elseif ($ts === null) {
+        $ts = time();
+    } else {
+        $ts = (int)$ts;
+    }
+
     [$jy,$jm,$jd] = g2j((int)date('Y',$ts),(int)date('m',$ts),(int)date('d',$ts));
     $week   = ['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه'][(int)date('w',$ts)];
-    $weekD  = ['ی','د','س','چ','پ','ج','ش'][(int)date('w',$ts)]; // نام کوتاه روز هفته (۲٫۲)
+    $weekD  = ['ی','د','س','چ','پ','ج','ش'][(int)date('w',$ts)]; // نام کوتاه روز هفته
+
     $out = strtr($format, [
-        'Y'=>$jy,'m'=>str_pad((string)$jm,2,'0',STR_PAD_LEFT),'d'=>str_pad((string)$jd,2,'0',STR_PAD_LEFT),
-        'j'=>$jd,'n'=>$jm,'F'=>FR_JMONTHS[$jm-1],'l'=>$week,'D'=>$weekD,'H'=>date('H',$ts),'i'=>date('i',$ts),
+        'Y' => $jy,
+        'y' => substr((string)$jy, -2),
+        'm' => str_pad((string)$jm, 2, '0', STR_PAD_LEFT),
+        'd' => str_pad((string)$jd, 2, '0', STR_PAD_LEFT),
+        'j' => $jd,
+        'n' => $jm,
+        'F' => FR_JMONTHS[$jm - 1] ?? '',
+        'M' => FR_JMONTHS[$jm - 1] ?? '',
+        'l' => $week,
+        'D' => $weekD,
+        'H' => date('H', $ts),
+        'h' => date('h', $ts),
+        'G' => date('G', $ts),
+        'g' => date('g', $ts),
+        'i' => date('i', $ts),
+        's' => date('s', $ts),
+        'a' => date('a', $ts) === 'am' ? 'ق.ظ' : 'ب.ظ',
+        'A' => date('A', $ts) === 'AM' ? 'صبح' : 'عصر',
     ]);
     return fa_num($out);
+}
+
+/**
+ * تبدیل هر مقدار تاریخ/زمان به تاریخ استاندارد شمسی
+ */
+function fr_shamsi_date($val, string $format = 'Y/m/d H:i'): string
+{
+    if (empty($val)) return '—';
+    if (is_numeric($val)) {
+        $ts = (int)$val;
+    } else {
+        $ts = strtotime((string)$val);
+        if (!$ts) return (string)$val;
+    }
+    return jdate($format, $ts);
+}
+
+/** سال شمسی جاری با ارقام فارسی (مثلاً ۱۴۰۵) */
+function fr_shamsi_year(): string
+{
+    return fa_num(jdate('Y'));
 }
 
 /** ورودی شمسی «۱۳۷۰/۰۵/۱۶» → تاریخ میلادی برای ذخیره در DB */
@@ -455,10 +508,118 @@ function fr_credit_url(): string
     return $u;
 }
 
-/** رندر امن خط اعتباری (متن کاملاً خروجی‌گرفته می‌شود؛ لینک اختیاری به کل متن ضمیمه است) */
+/* ---------------------------------------------------------------------------
+ | معماری یکپارچه ری‌برندینگ و White-Label سامانه (نسخه ۴٫۰٫۰)
+ | امکان شخصی‌سازی ۱۰۰٪ نام برند، لوگو، فاوآیکون، شعار، کپی‌رایت و پشتیبانی
+ * -------------------------------------------------------------------------*/
+
+/** نام کامل برند / عنوان رسمی سایت (فارسی) */
+function fr_brand_title(): string
+{
+    $title = trim((string)DB::setting('site_title', ''));
+    return $title !== '' ? $title : 'فریا روان';
+}
+
+/** نام کوتاه یا مونوگرام برند (فارسی) */
+function fr_brand_short(): string
+{
+    $short = trim((string)DB::setting('brand_short_name', ''));
+    if ($short !== '') return $short;
+    $title = fr_brand_title();
+    $parts = explode(' ', $title);
+    return $parts[0] ?? 'فریا';
+}
+
+/** نام انگلیسی برند */
+function fr_brand_name_en(): string
+{
+    $en = trim((string)DB::setting('site_title_en', ''));
+    return $en !== '' ? $en : 'Feria Ravan';
+}
+
+/** شعار یا توضیح کوتاه سازمانی */
+function fr_brand_slogan(): string
+{
+    $slogan = trim((string)DB::setting('site_slogan', ''));
+    return $slogan !== '' ? $slogan : 'مرکز تخصصی آزمون‌های روان‌شناختی، کارگاه‌ها و مشاوره تخصصی';
+}
+
+/** نشانی کامل لوگو (با پشتیبانی از حالت تیره Dark Logo) */
+function fr_brand_logo(bool $dark = false): string
+{
+    if ($dark) {
+        $darkUrl = trim((string)DB::setting('logo_dark', ''));
+        if ($darkUrl !== '') {
+            return str_starts_with($darkUrl, 'http') ? $darkUrl : (SITE_URL . '/' . ltrim($darkUrl, '/'));
+        }
+    }
+    return fr_logo_url();
+}
+
+/** نشانی فاوآیکون اختصاصی سایت */
+function fr_brand_favicon(): string
+{
+    $fav = trim((string)DB::setting('favicon', ''));
+    if ($fav !== '') {
+        return str_starts_with($fav, 'http') ? $fav : (SITE_URL . '/' . ltrim($fav, '/'));
+    }
+    return SITE_URL . '/assets/img/favicon.svg';
+}
+
+/** متن رسمی کپی‌رایت با جایگذاری هوشمند سال شمسی و نام سایت */
+function fr_brand_copyright(): string
+{
+    $tpl = trim((string)DB::setting('copyright_text', ''));
+    if ($tpl === '') {
+        $tpl = 'تمامی حقوق مادی و معنوی متعلق به {site} می‌باشد.';
+    }
+    return strtr($tpl, [
+        '{site}' => fr_brand_title(),
+        '{year}' => fa_num(jdate('Y')),
+        '{short}' => fr_brand_short(),
+    ]);
+}
+
+/** شماره تماس و پشتیبانی */
+function fr_brand_support_phone(): string
+{
+    $p = trim((string)DB::setting('support_phone', ''));
+    return $p !== '' ? $p : '021-88888888';
+}
+
+/** ایمیل پشتیبانی */
+function fr_brand_support_email(): string
+{
+    $em = trim((string)DB::setting('support_email', ''));
+    return $em !== '' ? $em : 'support@example.com';
+}
+
+/** شناسه تلگرام پشتیبانی */
+function fr_brand_support_telegram(): string
+{
+    return trim((string)DB::setting('support_telegram', ''));
+}
+
+/** شناسه بله پشتیبانی */
+function fr_brand_support_bale(): string
+{
+    return trim((string)DB::setting('support_bale', ''));
+}
+
+/** آیا کردیت طراح در فوتر پنهان شود؟ */
+function fr_is_system_credit_hidden(): bool
+{
+    return DB::setting('hide_system_credits', '0') === '1';
+}
+
+/** رندر امن خط اعتباری (با پشتیبانی از حالت White-Label و مخفی‌سازی کامل) */
 function fr_credit_html(bool $linked = true): string
 {
+    if (fr_is_system_credit_hidden()) {
+        return '';
+    }
     $txt = fr_credit_text();
+    if (trim($txt) === '') return '';
     $url = $linked ? fr_credit_url() : '';
     if ($url !== '') {
         return '<a href="' . e($url) . '" target="_blank" rel="noopener" style="color:inherit;font-weight:700;text-decoration:none;border-bottom:1px dashed currentColor">'
