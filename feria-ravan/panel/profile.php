@@ -405,19 +405,19 @@ if ($infoMsg) echo '<div class="fr-alert info">' . e($infoMsg) . '</div>';
       </form>
     </div>
 
-    <!-- ── اتصال شبکه‌های اجتماعی + اطلاع‌رسانی هوشمند (۲٫۳) ── -->
+    <!-- ── اتصال پیام‌رسان‌ها (تلگرام / بله / روبیکا) + اطلاع‌رسانی هوشمند ۱۴۰۵ ── -->
     <?php
       require_once __DIR__ . '/../includes/snotify.php';
       $SOC = fr_snotify_status((int)$u['id']);
       $SLOTS = fr_snotify_slots();
       $myNotifs = DB::all("SELECT channel,msg_kind,status,created_at FROM " . DB::t('notify_log') . " WHERE user_id=? ORDER BY id DESC LIMIT 6", [(int)$u['id']]);
-      $kindFa = ['slot' => 'اطلاع‌رسانی روزانه', 'test' => 'پیام تست', 'connected' => 'اتصال', 'bulk' => 'اطلاع‌رسانی مجموعه', 'planner' => 'یادآور برنامه', 'campaign' => 'اطلاعیه و پیشنهاد ویژه', 'event' => 'یادآوری رویداد'];
+      $kindFa = ['slot' => 'اطلاع‌رسانی روزانه', 'test' => 'پیام تست', 'connected' => 'اتصال', 'bulk' => 'اطلاع‌رسانی مجموعه', 'planner' => 'یادآور برنامه ۱۴۰۵', 'campaign' => 'اطلاعیه و پیشنهاد ویژه', 'event' => 'یادآوری رویداد'];
       $chFa   = fr_snotify_channels();
     ?>
-    <div class="fr-card" style="margin:0">
-      <h3>📣 اطلاع‌رسانی در تلگرام و بله</h3>
+    <div class="fr-card" id="social" style="margin:0">
+      <h3>📣 اطلاع‌رسانی در پیام‌رسان‌ها (تلگرام، بله و روبیکا)</h3>
       <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:2">
-        فقط <b>نام کاربری اکانت</b> خود را بنویسید؛ ما به‌صورت خودکار آن را به شناسهٔ عددی تبدیل می‌کنیم.
+        فقط <b>نام کاربری اکانت</b> خود در تلگرام، بله یا روبیکا را بنویسید؛ ما به‌صورت خودکار آن را به شناسهٔ چت متصل می‌کنیم.
         پس از ثبت نام کاربری، به ربات پیام <b dir="ltr">/start</b> (یا کد نمایشی) را بفرستید تا اتصال کامل شود — همین! 🦢
       </p>
       <?php if (isset($errors['social'])) echo '<div class="fr-alert err">' . e($errors['social']) . '</div>'; ?>

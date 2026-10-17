@@ -1,9 +1,10 @@
 <?php
 /**
- * مرکز اطلاع‌رسانی اجتماعی (تلگرام / بله) — نسخهٔ ۲٫۵
- * ─ تنظیم ربات‌ها • زمان‌بندی روزانهٔ ۲۴ساعته (تعداد دلخواه) • قالب پیام تست اتصال
- * ─ ارسال تست برای کاربر مشخص • ارسال گروهی به کاربران متصل • لاگ ارسال‌ها • راهنمای کرون cPanel
- * ─ ۲٫۵: تنظیمات یادآوری‌های اجتماعی رویدادها (جلسهٔ مشاوره، کارگاه/دوره، تست ناتمام)
+ * مرکز اطلاع‌رسانی اجتماعی و پیام‌رسان‌ها (تلگرام / بله / روبیکا) — نسخهٔ ۴٫۹٫۰ (۱۴۰۵)
+ * ─ تنظیم ربات‌ها و درگاه‌های ۳ پیام‌رسان: تلگرام (با پروکسی/آدرس سفارشی)، بله، روبیکا
+ * ─ زمان‌بندی روزانهٔ ۲۴ساعته و اجرای هوشمند و خودکار سر وقت مشخص
+ * ─ ارسال فوری و تست دستی (Dispatch Now)، ارسال تست برای کاربر، ارسال گروهی
+ * ─ یادآوری رویدادها، تصفیه حساب، تست‌های ناتمام و لاگ یکپارچه
  */
 declare(strict_types=1);
 require_once __DIR__ . '/boot.php';
@@ -15,31 +16,56 @@ csrf_guard();
 $act = (string)($_POST['act'] ?? '');
 $canSettings = fr_admin_can($adm, 'settings');
 
-/* ── ذخیرهٔ تنظیمات ربات‌ها + زمان‌بندی + قالب پیام تست ── */
+/* ── ذخیرهٔ تنظیمات پیام‌رسان‌ها + زمان‌بندی + قالب پیام تست ── */
 if ($act === 'save') {
     if (!$canSettings) { flash('شما مجوز ویرایش تنظیمات را ندارید.', 'err'); redirect(SITE_URL . '/admin/notifications.php'); }
+
+    // تلگرام
     DB::setSetting('telegram_bot_token', trim((string)($_POST['telegram_bot_token'] ?? '')));
     DB::setSetting('telegram_bot_username', ltrim(trim((string)($_POST['telegram_bot_username'] ?? '')), '@'));
+    DB::setSetting('telegram_proxy', trim((string)($_POST['telegram_proxy'] ?? '')));
+    DB::setSetting('telegram_api_url', trim((string)($_POST['telegram_api_url'] ?? '')));
+
+    // بله
     DB::setSetting('bale_bot_token', trim((string)($_POST['bale_bot_token'] ?? '')));
     DB::setSetting('bale_bot_username', ltrim(trim((string)($_POST['bale_bot_username'] ?? '')), '@'));
+    DB::setSetting('bale_api_url', trim((string)($_POST['bale_api_url'] ?? '')));
+
+    // روبیکا
+    DB::setSetting('rubika_bot_token', trim((string)($_POST['rubika_bot_token'] ?? '')));
+    DB::setSetting('rubika_bot_username', ltrim(trim((string)($_POST['rubika_bot_username'] ?? '')), '@'));
+    DB::setSetting('rubika_api_url', trim((string)($_POST['rubika_api_url'] ?? '')));
+
+    // زمان‌بندی روزانه
     $count = max(1, min(6, (int)($_POST['notif_daily_count'] ?? 3)));
     DB::setSetting('notif_daily_count', (string)$count);
     $times = [];
     foreach ((array)($_POST['notif_times'] ?? []) as $t) {
         $t = fr_valid_time((string)$t, '');
-        if ($t !== '') $times[] = $t;   // فرمت ۲۴ ساعته HH:MM
+        if ($t !== '') $times[] = $t;
     }
     sort($times);
     if (!$times) $times = ['08:30'];
     DB::setSetting('notif_times', json_encode(array_values(array_slice($times, 0, $count)), JSON_UNESCAPED_UNICODE));
+
+    // قالب پیام تست
     $msg = trim((string)($_POST['notif_test_msg'] ?? ''));
     if ($msg !== '') DB::setSetting('notif_test_msg', mb_substr($msg, 0, 600));
+
     log_activity('notif_settings_save', 'admin', (int)$adm['id'], ['count' => $count, 'times' => $times]);
-    flash('تنظیمات اطلاع‌رسانی ذخیره شد ✅');
+    flash('تنظیمات پیام‌رسان‌ها و زمان‌بندی با موفقیت ذخیره شد ✅');
     redirect(SITE_URL . '/admin/notifications.php');
 }
 
-/* ── ۲٫۵: ذخیرهٔ تنظیمات یادآوری‌های اجتماعی رویدادها ── */
+/* ── اجرای فوری نوبت‌های زمان‌بندی‌شده (Dispatch Now) ── */
+if ($act === 'dispatch_now') {
+    $res = fr_scheduled_dispatch_all(true);
+    $slotsCount = count($res['slots'] ?? []);
+    flash("🚀 بررسی و ارسال آنی انجام شد: " . fa_num($slotsCount) . " نوبت پردازش گردید (یادآور پلنر: " . fa_num($res['planner'] ?? 0) . " | کمپین‌ها: " . fa_num($res['campaigns'] ?? 0) . ") ✅");
+    redirect(SITE_URL . '/admin/notifications.php');
+}
+
+/* ── ذخیرهٔ تنظیمات یادآوری‌های اجتماعی رویدادها ── */
 if ($act === 'save_events') {
     if (!$canSettings) { flash('شما مجوز ویرایش تنظیمات را ندارید.', 'err'); redirect(SITE_URL . '/admin/notifications.php'); }
     DB::setSetting('social_event_remind', !empty($_POST['social_event_remind']) ? '1' : '0');
@@ -51,7 +77,7 @@ if ($act === 'save_events') {
     redirect(SITE_URL . '/admin/notifications.php#evr');
 }
 
-/* ── ۲٫۷: ذخیرهٔ تنظیمات درگاه سازمانی پیام‌رسان (بله) ── */
+/* ── ذخیرهٔ درگاه سازمانی ── */
 if ($act === 'save_gateway') {
     if (!$canSettings) { flash('شما مجوز ویرایش تنظیمات را ندارید.', 'err'); redirect(SITE_URL . '/admin/notifications.php#gw'); }
     DB::setSetting('bale_gateway_enabled', !empty($_POST['bale_gateway_enabled']) ? '1' : '0');
@@ -66,7 +92,7 @@ if ($act === 'save_gateway') {
 if ($act === 'regen_cron') {
     if (!$canSettings) { flash('شما مجوز این کار را ندارید.', 'err'); redirect(SITE_URL . '/admin/notifications.php'); }
     DB::setSetting('cron_secret', bin2hex(random_bytes(16)));
-    flash('کلید مخفی کرون تازه شد 🔑 لینک‌های کرون قبلی از کار افتادند — نشانی جدید را در cPanel به‌روزرسانی کنید.');
+    flash('کلید مخفی کرون تازه شد 🔑 نشانی جدید را در cPanel هاست به‌روزرسانی کنید.');
     redirect(SITE_URL . '/admin/notifications.php#cron');
 }
 
@@ -76,20 +102,20 @@ if ($act === 'test_send') {
     $ch  = (string)($_POST['channel'] ?? 'telegram');
     $uid = (int)DB::val("SELECT id FROM " . DB::t('users') . " WHERE mobile=? LIMIT 1", [$mob]);
     if ($uid <= 0) {
-        flash('کاربری با این موبایل یافت نشد.', 'err');
+        flash('کاربری با این شماره موبایل در سیستم یافت نشد.', 'err');
     } else {
         $r = fr_snotify_send_test($uid, $ch);
-        flash(!empty($r['ok']) ? '✅ پیام تست ارسال شد.' : ('❌ ' . (string)($r['message'] ?? 'خطا')), !empty($r['ok']) ? 'ok' : 'err');
+        flash(!empty($r['ok']) ? '✅ پیام تست با موفقیت ارسال شد.' : ('❌ ' . (string)($r['message'] ?? 'خطا در ارسال')), !empty($r['ok']) ? 'ok' : 'err');
     }
     redirect(SITE_URL . '/admin/notifications.php');
 }
 
-/* ── ارسال گروهی ── */
+/* ── ارسال گروهی به پیام‌رسان‌ها ── */
 if ($act === 'bulk_send') {
     $text = trim((string)($_POST['message'] ?? ''));
-    $ch   = in_array(($_POST['channel'] ?? 'both'), ['both','telegram','bale'], true) ? (string)$_POST['channel'] : 'both';
+    $ch   = in_array(($_POST['channel'] ?? 'all'), ['all','both','telegram','bale','rubika'], true) ? (string)$_POST['channel'] : 'all';
     if ($text === '') {
-        flash('متن پیام گروهی خالی است.', 'err');
+        flash('متن پیام گروهی نمی‌تواند خالی باشد.', 'err');
     } else {
         $text = mb_substr($text, 0, 900);
         [$sent, $fail] = fr_snotify_bulk($ch, $text);
@@ -99,240 +125,300 @@ if ($act === 'bulk_send') {
     redirect(SITE_URL . '/admin/notifications.php#bulk');
 }
 
-/* ── داده‌ها ── */
+/* ── واکشی داده‌ها ── */
 $s = fn(string $k, string $d = '') => (string)DB::setting($k, $d);
-$slots  = fr_snotify_slots();
-$count  = count($slots);
-$stats  = [
+$slots = fr_snotify_slots();
+$count = count($slots);
+
+// تضمین ساختار جدول
+fr_snotify_ensure_schema();
+
+$stats = [
     'tg'        => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('users') . " WHERE COALESCE(telegram_chat_id,'')<>''"),
     'bale'      => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('users') . " WHERE COALESCE(bale_chat_id,'')<>''"),
-    'pending'   => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('social_links') . " WHERE status='pending'"),
+    'rubika'    => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('users') . " WHERE COALESCE(rubika_chat_id,'')<>''"),
     'sentToday' => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('notify_log') . " WHERE DATE(created_at)=CURDATE() AND status='sent'"),
     'failToday' => (int)DB::val("SELECT COUNT(*) FROM " . DB::t('notify_log') . " WHERE DATE(created_at)=CURDATE() AND status='failed'"),
 ];
+
 $recent = DB::all("SELECT n.*, u.first_name, u.last_name, u.mobile FROM " . DB::t('notify_log') . " n LEFT JOIN " . DB::t('users') . " u ON u.id=n.user_id ORDER BY n.id DESC LIMIT 40");
 $cronKey = $s('cron_secret');
+if ($cronKey === '') {
+    $cronKey = bin2hex(random_bytes(16));
+    DB::setSetting('cron_secret', $cronKey);
+}
 $cronUrl = SITE_URL . '/cron/notify.php?key=' . $cronKey;
 $docRoot = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
 $cliPath = $docRoot !== '' ? $docRoot . '/cron/notify.php' : '/home/USER/public_html/cron/notify.php';
 $chFa = fr_snotify_channels();
-$kindFa = ['slot' => 'نوبت روزانه', 'test' => 'تست اتصال', 'connected' => 'اتصال موفق', 'bulk' => 'گروهی', 'planner' => 'یادآور پلنر', 'campaign' => 'کمپین تبلیغاتی', 'event' => 'یادآور رویداد'];
-$evOn   = $s('social_event_remind', '1') === '1';
+$kindFa = [
+    'slot'      => 'نوبت روزانه',
+    'test'      => 'تست اتصال',
+    'connected' => 'اتصال موفق',
+    'bulk'      => 'ارسال گروهی',
+    'planner'   => 'یادآور پلنر ۱۴۰۵',
+    'campaign'  => 'کمپین تبلیغاتی',
+    'event'     => 'یادآور رویداد',
+];
+$evOn = $s('social_event_remind', '1') === '1';
 $remUrl = SITE_URL . '/cron/reminders.php?key=' . $cronKey;
 $remCli = $docRoot !== '' ? $docRoot . '/cron/reminders.php' : '/home/USER/public_html/cron/reminders.php';
 
-admin_layout($adm, 'notifications', '📣 اطلاع‌رسانی اجتماعی');
+admin_layout($adm, 'notifications', '📣 مرکز اطلاع‌رسانی پیام‌رسان‌ها (تلگرام / بله / روبیکا)');
 echo flash();
 ?>
 
-<div class="fr-grid cols-4" style="margin-bottom:6px">
-  <?php stat_card('🟦', 'متصل‌شدهٔ تلگرام', fa_num($stats['tg']), '#eaf4ff'); ?>
-  <?php stat_card('🟩', 'متصل‌شدهٔ بله', fa_num($stats['bale']), '#ecfbf4'); ?>
-  <?php stat_card('🕓', 'اتصال در انتظار', fa_num($stats['pending']), '#fff6e6'); ?>
-  <?php stat_card('📤', 'ارسال امروز / ناموفق', fa_num($stats['sentToday']) . ' / ' . fa_num($stats['failToday']), '#f6f1ff'); ?>
+<!-- کارت‌های آمار ۴ گانه پیام‌رسان‌ها -->
+<div class="fr-grid cols-4" style="margin-bottom:14px">
+  <?php stat_card('🟦', 'متصل تلگرام', fa_num($stats['tg']), '#eaf4ff'); ?>
+  <?php stat_card('🟩', 'متصل بله', fa_num($stats['bale']), '#ecfbf4'); ?>
+  <?php stat_card('🟪', 'متصل روبیکا', fa_num($stats['rubika']), '#f5f3ff'); ?>
+  <?php stat_card('📤', 'ارسال امروز / خطا', fa_num($stats['sentToday']) . ' / ' . fa_num($stats['failToday']), '#fff1f2'); ?>
 </div>
 
-<div class="fr-card">
-  <h3>📣 اطلاع‌رسانی شبکه‌های اجتماعی <small style="color:var(--muted);font-weight:400">(تلگرام + بله — اتصال با نام کاربری، تست اتصال، زمان‌بندی ۲۴ساعته و ارسال گروهی — نسخهٔ ۲٫۳)</small></h3>
-  <div class="fr-alert info" style="font-size:12.5px;line-height:2">
-    <b>روش اتصال کاربران:</b> هر کاربر در پروفایلش <b>نام کاربری</b> اکانتش را می‌نویسد؛ بعد به ربات پیام /start (یا کد نمایشی‌اش) را می‌فرستد.
-    کرونِ اطلاع‌رسانی هر ۵ دقیقه پیام‌های ورودی ربات را می‌خواند و <b>نام کاربری را به‌صورت خودکار به شناسهٔ عددی (Chat ID) تبدیل می‌کند</b> و اتصال را با پیام خوش‌آمد (همان قالب «پیام تست») تأیید می‌کند.
+<!-- کادر معرفی و اکشن اجرای آنی -->
+<div class="fr-card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+  <div>
+    <h3 style="margin:0 0 6px 0">📣 اطلاع‌رسانی خودکار و زمان‌بندی‌شده پیام‌رسان‌ها <small style="color:var(--muted);font-weight:normal">(نگارش ۴٫۹٫۰ — سال ۱۴۰۵)</small></h3>
+    <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.9">
+      پشتیبانی از ۳ پیام‌رسان اصلی: <b>تلگرام</b> (با امکان تنظیم پروکسی ضد فیلتر)، <b>بله</b> و <b>روبیکا</b>.
+      ارسال نوبت‌ها در زمان‌های مشخص به صورت خودکار و دوگانه (کرون هاست + اعزام در درخواست‌ها) انجام می‌شود.
+    </p>
   </div>
+  <form method="post" style="margin:0" onsubmit="return confirm('تمامی نوبت‌های روزانه، یادآورهای پلنر و کمپین‌های موعددار همین الان بررسی و ارسال شوند؟')">
+    <?= csrf_field() ?>
+    <input type="hidden" name="act" value="dispatch_now">
+    <button class="fr-btn" style="background:#059669;color:#fff">
+      🚀 بررسی و ارسال آنی نوبت‌ها (Dispatch Now)
+    </button>
+  </form>
 </div>
 
 <?php if ($canSettings): ?>
-<!-- ═══ تنظیمات ربات‌ها + زمان‌بندی + قالب پیام تست ═══ -->
-<div class="fr-card">
-  <h3>⚙️ تنظیمات ربات‌ها، زمان‌بندی و پیام تست</h3>
+<!-- ═══ تنظیمات پیام‌رسان‌ها: تلگرام، بله، روبیکا + زمان‌بندی ۲۴ ساعته ═══ -->
+<div class="fr-card" style="margin-bottom:16px">
+  <h3>⚙️ تنظیمات ربات‌ها و درگاه‌های پیام‌رسان</h3>
   <form method="post">
-    <?= csrf_field() ?><input type="hidden" name="act" value="save">
-    <div class="fr-grid cols-2">
-      <div>
-        <h4 style="margin:4px 0 8px;font-size:13.5px">🟦 ربات تلگرام</h4>
-        <div class="fr-field"><label>توکن ربات (از BotFather@)</label><input class="fr-input" name="telegram_bot_token" dir="ltr" value="<?= e($s('telegram_bot_token')) ?>" placeholder="123456:ABC-DEF…"></div>
-        <div class="fr-field"><label>نام کاربری ربات</label><input class="fr-input" name="telegram_bot_username" dir="ltr" value="<?= e($s('telegram_bot_username')) ?>" placeholder="FeriaRavanBot"></div>
+    <?= csrf_field() ?>
+    <input type="hidden" name="act" value="save">
+
+    <div class="fr-grid cols-3" style="gap:14px">
+      <!-- ستون ۱: تلگرام -->
+      <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0">
+        <h4 style="margin:0 0 10px 0;font-size:13.5px;color:#0284c7">🟦 ربات تلگرام (Telegram)</h4>
+        <div class="fr-field">
+          <label>توکن ربات (BotFather@)</label>
+          <input class="fr-input" name="telegram_bot_token" dir="ltr" value="<?= e($s('telegram_bot_token')) ?>" placeholder="123456:ABC-DEF…">
+        </div>
+        <div class="fr-field">
+          <label>نام کاربری ربات</label>
+          <input class="fr-input" name="telegram_bot_username" dir="ltr" value="<?= e($s('telegram_bot_username')) ?>" placeholder="FeriaBot">
+        </div>
+        <div class="fr-field">
+          <label>پروکسی (ضد فیلتر سرور ایران)</label>
+          <input class="fr-input" name="telegram_proxy" dir="ltr" value="<?= e($s('telegram_proxy')) ?>" placeholder="socks5h://127.0.0.1:1080 یا http://...">
+          <small class="hint">در سرورهای داخل کشور برای عبور از فیلترینگ تلگرام</small>
+        </div>
+        <div class="fr-field">
+          <label>آدرس سفارشی API (Mirror / Proxy)</label>
+          <input class="fr-input" name="telegram_api_url" dir="ltr" value="<?= e($s('telegram_api_url')) ?>" placeholder="https://api.telegram.org">
+        </div>
       </div>
-      <div>
-        <h4 style="margin:4px 0 8px;font-size:13.5px">🟩 ربات بله</h4>
-        <div class="fr-field"><label>توکن ربات (از bale.ai@)</label><input class="fr-input" name="bale_bot_token" dir="ltr" value="<?= e($s('bale_bot_token')) ?>" placeholder="123456:ABC-DEF…"></div>
-        <div class="fr-field"><label>نام کاربری ربات بله</label><input class="fr-input" name="bale_bot_username" dir="ltr" value="<?= e($s('bale_bot_username')) ?>" placeholder="FeriaRavanBot"></div>
+
+      <!-- ستون ۲: بله -->
+      <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0">
+        <h4 style="margin:0 0 10px 0;font-size:13.5px;color:#059669">🟩 ربات بله (Bale)</h4>
+        <div class="fr-field">
+          <label>توکن ربات (از BotFather در بله)</label>
+          <input class="fr-input" name="bale_bot_token" dir="ltr" value="<?= e($s('bale_bot_token')) ?>" placeholder="123456:ABC-DEF…">
+        </div>
+        <div class="fr-field">
+          <label>نام کاربری ربات بله</label>
+          <input class="fr-input" name="bale_bot_username" dir="ltr" value="<?= e($s('bale_bot_username')) ?>" placeholder="FeriaBot">
+        </div>
+        <div class="fr-field">
+          <label>نشانی سرور API بله</label>
+          <input class="fr-input" name="bale_api_url" dir="ltr" value="<?= e($s('bale_api_url', 'https://tapi.bale.ai')) ?>" placeholder="https://tapi.bale.ai">
+        </div>
+      </div>
+
+      <!-- ستون ۳: روبیکا -->
+      <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0">
+        <h4 style="margin:0 0 10px 0;font-size:13.5px;color:#7c3aed">🟪 ربات و درگاه روبیکا (Rubika)</h4>
+        <div class="fr-field">
+          <label>توکن / کلید دسترسی ربات روبیکا</label>
+          <input class="fr-input" name="rubika_bot_token" dir="ltr" value="<?= e($s('rubika_bot_token')) ?>" placeholder="کلید احراز / Token روبیکا…">
+        </div>
+        <div class="fr-field">
+          <label>شناسه یا نام کاربری ربات روبیکا</label>
+          <input class="fr-input" name="rubika_bot_username" dir="ltr" value="<?= e($s('rubika_bot_username')) ?>" placeholder="feria_rubika_bot">
+        </div>
+        <div class="fr-field">
+          <label>نشانی Endpoint وب‌سرویس روبیکا</label>
+          <input class="fr-input" name="rubika_api_url" dir="ltr" value="<?= e($s('rubika_api_url', 'https://botapi.rubika.ir/v1')) ?>" placeholder="https://botapi.rubika.ir/v1">
+          <small class="hint">پشتیبانی از Bot API، وب‌هوک و وب‌سرویس‌های سازمانی پیام‌رسان</small>
+        </div>
       </div>
     </div>
-    <div style="border-top:1px dashed var(--line);margin:12px 0"></div>
-    <div class="fr-grid cols-2">
+
+    <!-- تنظیمات زمان‌بندی روزانه ۲۴ ساعته -->
+    <div style="border-top:1px dashed var(--line);margin:16px 0"></div>
+    <div class="fr-grid cols-2" style="gap:16px">
       <div>
-        <h4 style="margin:4px 0 8px;font-size:13.5px">🕑 زمان‌بندی روزانه <small style="color:var(--muted)">(قالب ساعت ۲۴ ساعته)</small></h4>
-        <div class="fr-field"><label>تعداد اطلاع‌رسانی در روز</label>
+        <h4 style="margin:0 0 8px 0;font-size:13.5px">🕑 زمان‌بندی نوبت‌های اطلاع‌رسانی خودکار روزانه (۲۴ ساعته)</h4>
+        <div class="fr-field">
+          <label>تعداد نوبت‌های ارسال در طول روز:</label>
           <select class="fr-select" name="notif_daily_count" id="ntCount">
-            <?php for ($i = 1; $i <= 6; $i++): ?><option value="<?= $i ?>" <?= $count === $i ? 'selected' : '' ?>><?= fa_num($i) ?> نوبت در روز</option><?php endfor; ?>
+            <?php for ($i = 1; $i <= 6; $i++): ?>
+            <option value="<?= $i ?>" <?= $count === $i ? 'selected' : '' ?>><?= fa_num($i) ?> نوبت در روز</option>
+            <?php endfor; ?>
           </select>
         </div>
-        <div class="fr-grid cols-3" id="ntTimes" data-t24-wrap data-t24-count="#ntCount">
+
+        <div class="fr-grid cols-3" id="ntTimes">
           <?php for ($i = 0; $i < 6; $i++): ?>
-          <div class="fr-field nt-t" data-t24-item data-i="<?= $i ?>" style="margin:0<?= $i >= $count ? ';display:none' : '' ?>">
-            <label>نوبت <?= fa_num($i + 1) ?> <small>(۲۴ ساعته)</small></label>
-            <input class="fr-input" name="notif_times[]" dir="ltr" type="text" data-t24 inputmode="numeric" maxlength="5"
-                   pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="08:30" style="text-align:center" value="<?= e($slots[$i] ?? '') ?>">
+          <div class="fr-field" style="margin:0<?= $i >= $count ? ';display:none' : '' ?>">
+            <label>نوبت <?= fa_num($i + 1) ?> <small>(ساعت)</small></label>
+            <input class="fr-input" name="notif_times[]" dir="ltr" type="text" maxlength="5"
+                   pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="08:30" style="text-align:center"
+                   value="<?= e($slots[$i] ?? '') ?>">
           </div>
           <?php endfor; ?>
         </div>
-        <small class="hint">هر نوبت دقیقاً یک‌بار در روز و سر ساعتِ تعیین‌شده (با تلرانس ۳۰ دقیقهٔ کرون) برای همهٔ کاربران متصل ارسال می‌شود. محتوای نوبت‌ها خودکار است: خلاصهٔ برنامهٔ امروز، نکتهٔ انگیزشی و معرفی تازه‌ترین محتوا.</small>
+        <small class="hint" style="display:block;margin-top:8px">
+          پیام‌های هر نوبت شامل تقویم شمسی ۱۴۰۵، یادآوری تمرین‌های باقیماندهٔ پلنر و جملات انگیزشی خودکار است و دقیقاً سر ساعت مقرر برای تمام کاربران متصل فرستاده می‌شود.
+        </small>
       </div>
+
       <div>
-        <h4 style="margin:4px 0 8px;font-size:13.5px">📩 قالب «پیام تست اتصال» <small style="color:var(--muted)">(همان پیام خوش‌آمد اتصال)</small></h4>
+        <h4 style="margin:0 0 8px 0;font-size:13.5px">📩 قالب پیام تست اتصال و خوش‌آمد</h4>
         <div class="fr-field">
           <textarea class="fr-input" name="notif_test_msg" rows="5" style="line-height:2"><?= e($s('notif_test_msg')) ?></textarea>
-          <small class="hint">متغیرها: <code>{site}</code> نام سایت، <code>{name}</code> نام کاربر، <code>{bot}</code> نام کاربری ربات، <code>{channel}</code> نام پیام‌رسان. این پیام هنگام «تست اتصال» (از پنل کاربر یا همین‌جا) و لحظهٔ اتصال موفق ارسال می‌شود.</small>
+          <small class="hint">متغیرهای مجاز: <code>{site}</code> نام سایت، <code>{name}</code> نام مراجع، <code>{bot}</code> شناسه ربات، <code>{channel}</code> نام پیام‌رسان.</small>
         </div>
       </div>
     </div>
-    <button class="fr-btn">ذخیرهٔ تنظیمات</button>
-  </form>
-</div>
 
-<!-- ═══ ۲٫۵: یادآوری‌های اجتماعی رویدادها ═══ -->
-<div class="fr-card" id="evr" style="border:1.5px dashed var(--c-primary)">
-  <h3>⏰ یادآوری‌های اجتماعی رویدادها <small style="color:var(--muted);font-weight:400">(نسخهٔ ۲٫۵ — جدا از پیامک، از تلگرام و بله)</small></h3>
-  <div class="fr-alert info" style="font-size:12.5px;line-height:2;margin-bottom:10px">
-    این یادآوری‌ها <b>خودکار و فقط از طریق تلگرام/بله</b> (بدون هزینهٔ پیامک) در لحظهٔ مناسب ارسال می‌شوند:
-    <b>جلسهٔ مشاورهٔ رزروشده</b> قبل از شروع، <b>کارگاه/دورهٔ ثبت‌نام‌شده</b> قبل از آغاز، و <b>تستِ ناتمام</b> پس از چند روز.
-    هر یادآوری فقط <b>یک‌بار</b> برای هر مورد فرستاده می‌شود و کاربرانی که در پروفایلشان یادآوری را خاموش کرده‌اند دریافت نمی‌کنند.
-    اجرای آن به کرون <code dir="ltr">reminders.php</code> (راهنمای کرون پایین صفحه) وابسته است. ساعت‌ها همه‌جا به‌صورت کامل <b>۲۴ ساعته</b> نمایش داده می‌شوند.
-  </div>
-  <form method="post">
-    <?= csrf_field() ?><input type="hidden" name="act" value="save_events">
-    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:12px;cursor:pointer">
-      <input type="checkbox" name="social_event_remind" value="1" <?= $evOn ? 'checked' : '' ?>>
-      <b>یادآوریٔ اجتماعی رویدادها فعال باشد</b>
-    </label>
-    <div class="fr-grid cols-3">
-      <div class="fr-field"><label>یادآوری جلسهٔ مشاوره <small>(چند ساعت قبل)</small></label>
-        <input class="fr-input" type="number" min="1" max="168" name="consult_social_hours" value="<?= e($s('consult_social_hours', '24')) ?>" dir="ltr" style="text-align:center"></div>
-      <div class="fr-field"><label>یادآوری کارگاه / دوره <small>(چند ساعت قبل)</small></label>
-        <input class="fr-input" type="number" min="1" max="240" name="event_social_hours" value="<?= e($s('event_social_hours', '24')) ?>" dir="ltr" style="text-align:center"></div>
-      <div class="fr-field"><label>یادآوری تست ناتمام <small>(پس از چند روز)</small></label>
-        <input class="fr-input" type="number" min="1" max="30" name="test_nudge_days" value="<?= e($s('test_nudge_days', '2')) ?>" dir="ltr" style="text-align:center"></div>
-    </div>
-    <button class="fr-btn">ذخیرهٔ تنظیمات یادآوری رویدادها</button>
+    <button class="fr-btn" style="margin-top:12px">💾 ذخیرهٔ تنظیمات پیام‌رسان‌ها</button>
   </form>
 </div>
 <?php endif; ?>
 
-<!-- ═══ ۲٫۷: درگاه سازمانی پیام‌رسان بله (سرویس حقوقی نوین/کاوه‌نگار…) ═══ -->
-<?php if ($canSettings): ?>
-<div class="fr-card" id="gw" style="border:1.5px solid #0f766e">
-  <h3>🌐 درگاه پیام‌رسان «بله» (ارسال سازمانی — نسخهٔ ۲٫۷)</h3>
-  <div class="fr-alert info" style="font-size:12.5px;line-height:2.1">
-    <b>نتیجهٔ بررسی فنی ما (شفاف):</b> در مستندات عمومی وب‌سرویس کاوه‌نگار (<span dir="ltr">github.com/kavenegar</span> و rest.html) تا این نگارش،
-    <b>Endpoint عمومی برای ارسال خودکار در پیام‌رسان بله وجود ندارد</b>؛ بله خودش از مسیر
-    <a href="https://bale.ai/org" target="_blank" rel="noopener">bale.ai/org</a> سرویس «ارسال پیام انبوه سازمانی» (ارزان‌تر از پیامک، بدون محدودیت کاراکتر)
-    و OTP رایگان ارائه می‌دهد که فعال‌سازی‌اش تجاری است (ارتباط با <span dir="ltr">@businessbale</span>).
-    <br><b>راه‌حل پیاده‌سازی‌شده:</b> همین‌جا یک «درگاه عمومی» آماده است — هرگاه هر ارائه‌دهنده‌ای (بله سازمانی، کاوه‌نگار یا…)
-    نشانی وب‌سرویس ارسال در بله به شما داد، نشانی و کلید را وارد کنید؛ سیستم تمام ارسال‌های بله (کمپین‌ها، یادآورها، تست‌ها) را
-    <b>به‌صورت خودکار از همان درگاه</b> عبور می‌دهد — بدون نیاز به تأیید کاربر در نیست. تا وقتی خاموش است، ربات رسمی tapi.bale.ai استفاده می‌شود.
-  </div>
-  <form method="post">
-    <?= csrf_field() ?><input type="hidden" name="act" value="save_gateway">
-    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:12px;cursor:pointer">
-      <input type="checkbox" name="bale_gateway_enabled" value="1" <?= $s('bale_gateway_enabled','0') === '1' ? 'checked' : '' ?>>
-      <b>ارسال‌های بله از «درگاه سازمانی» عبور کند (به‌جای ربات رسمی)</b>
-    </label>
-    <div class="fr-grid cols-2">
-      <div class="fr-field"><label>نشانی Endpoint وب‌سرویس <small>(جای‌نگهدار {token} پشتیبانی می‌شود)</small></label>
-        <input class="fr-input" name="bale_gateway_url" dir="ltr" value="<?= e($s('bale_gateway_url')) ?>" placeholder="https://api.example.com/v1/{token}/bale/sendMessage"></div>
-      <div class="fr-field"><label>کلید/API‌Key درگاه</label>
-        <input class="fr-input" name="bale_gateway_token" dir="ltr" value="<?= e($s('bale_gateway_token')) ?>" placeholder="API-KEY…"></div>
+<!-- ═══ تست اتصال به کاربر مشخص روی تلگرام، بله، روبیکا ═══ -->
+<div class="fr-card" style="margin-bottom:16px">
+  <h3>🧪 ارسال پیام تست اتصال به کاربر</h3>
+  <form method="post" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <?= csrf_field() ?>
+    <input type="hidden" name="act" value="test_send">
+    <div class="fr-field" style="min-width:220px;margin:0">
+      <label>شماره موبایل کاربر</label>
+      <input class="fr-input" name="mobile" dir="ltr" inputmode="numeric" maxlength="11" placeholder="09xxxxxxxxx" required>
     </div>
-    <button class="fr-btn">💾 ذخیرهٔ درگاه</button>
-    <small class="hint" style="display:block;margin-top:8px">قرارداد: <code dir="ltr">POST JSON {"chat_id","text","token"}</code> به نشانی بالا؛ پاسخ‌های Bot API (<code dir="ltr">{ok:true}</code>) و قالب کاوه‌نگاری (<code dir="ltr">{return:{status:200}}</code>) هر دو پذیرفته می‌شوند.</small>
-  </form>
-</div>
-<?php endif; ?>
-
-<!-- ═══ تست اتصال برای کاربر مشخص ═══ -->
-<div class="fr-card">
-  <h3>🧪 ارسال پیام تست برای کاربر</h3>
-  <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-    <?= csrf_field() ?><input type="hidden" name="act" value="test_send">
-    <div class="fr-field" style="min-width:200px;margin:0"><label>موبایل کاربر</label><input class="fr-input" name="mobile" dir="ltr" inputmode="numeric" maxlength="11" placeholder="09xxxxxxxxx" required></div>
-    <div class="fr-field" style="min-width:160px;margin:0"><label>کانال</label>
-      <select class="fr-select" name="channel"><?php foreach ($chFa as $k => $lbl): ?><option value="<?= $k ?>"><?= e($lbl) ?></option><?php endforeach; ?></select>
+    <div class="fr-field" style="min-width:180px;margin:0">
+      <label>پیام‌رسان هدف</label>
+      <select class="fr-select" name="channel">
+        <?php foreach ($chFa as $k => $lbl): ?>
+        <option value="<?= $k ?>"><?= e($lbl) ?></option>
+        <?php endforeach; ?>
+      </select>
     </div>
     <button class="fr-btn">ارسال پیام تست 📩</button>
   </form>
-  <small class="hint">متنِ ارسالی دقیقاً قالبِ «پیام تست اتصال» بالاست — با این مضمون که ارتباط کاربر با ربات با موفقیت انجام شده و از این لحظه اطلاع‌رسانی‌ها کامل برایش ارسال می‌شود.</small>
 </div>
 
-<!-- ═══ ارسال گروهی ═══ -->
-<div class="fr-card" id="bulk">
-  <h3>📢 ارسال گروهی به کاربران متصل</h3>
+<!-- ═══ ارسال گروهی به تلگرام، بله، روبیکا ═══ -->
+<div class="fr-card" id="bulk" style="margin-bottom:16px">
+  <h3>📢 ارسال گروهی پیام به کاربران متصل</h3>
   <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:2">
-    پیام مجموعه (اطلاعیه، جشنواره، رویداد تازه…) برای همهٔ کاربرانی که در تلگرام/بله متصل‌اند ارسال می‌شود.
-    تعداد گیرندهٔ فعلی: <b><?= fa_num($stats['tg'] + $stats['bale']) ?></b> اتصال.
+    مجموع مراجعین متصل در پیام‌رسان‌ها: <b><?= fa_num($stats['tg'] + $stats['bale'] + $stats['rubika']) ?></b> اتصال فعال.
   </p>
   <form method="post">
-    <?= csrf_field() ?><input type="hidden" name="act" value="bulk_send">
-    <div class="fr-field"><label>متن پیام</label><textarea class="fr-input" name="message" rows="4" maxlength="900" required placeholder="مثلاً: 📣 جشنوارهٔ تابستانهٔ تست‌های روانشناسی آغاز شد…" style="line-height:2"></textarea></div>
-    <div class="fr-field" style="max-width:220px"><label>کانال ارسال</label>
+    <?= csrf_field() ?>
+    <input type="hidden" name="act" value="bulk_send">
+    <div class="fr-field">
+      <label>متن پیام اطلاع‌رسانی</label>
+      <textarea class="fr-input" name="message" rows="4" maxlength="900" required placeholder="متن پیام عمومی یا اطلاعیه جشنواره…" style="line-height:2"></textarea>
+    </div>
+    <div class="fr-field" style="max-width:240px">
+      <label>کانال ارسال</label>
       <select class="fr-select" name="channel">
-        <option value="both">هر دو (تلگرام + بله)</option>
-        <option value="telegram">فقط تلگرام</option>
-        <option value="bale">فقط بله</option>
+        <option value="all">🌟 همهٔ پیام‌رسان‌ها (تلگرام + بله + روبیکا)</option>
+        <option value="telegram">🟦 فقط تلگرام</option>
+        <option value="bale">🟩 فقط بله</option>
+        <option value="rubika">🟪 فقط روبیکا</option>
       </select>
     </div>
-    <button class="fr-btn">ارسال گروهی 📢</button>
+    <button class="fr-btn">ارسال گروهی پیام 📢</button>
   </form>
 </div>
 
-<!-- ═══ راهنمای کرون cPanel ═══ -->
-<div class="fr-card" id="cron" style="border:2px solid var(--c-primary)">
-  <h3>⏰ راهنمای تنظیم کرون‌جاب در هاست cPanel</h3>
+<!-- ═══ راهنمای کرون سرور و هاست ═══ -->
+<div class="fr-card" id="cron" style="border:2px solid #1e3a6e;border-radius:14px;margin-bottom:16px">
+  <h3>⏰ راهنمای پیکربندی کرون‌جاب (Cron Jobs) در cPanel / سرور</h3>
   <div style="font-size:13px;line-height:2.2">
-    <b>برای اینکه اتصال کاربران خودکار شود و اطلاع‌رسانی‌های روزانه سرِ ساعت برسند، در هاست cPanel این کار را بکنید:</b>
-    <ol style="padding-inline-start:20px">
-      <li>در cPanel بخش <b>Cron Jobs</b> را باز کنید (گروه Advanced).</li>
-      <li>روی <b>Add New Cron Job</b> بزنید و زمان‌بندی <b>هر ۵ دقیقه</b> را انتخاب کنید:
-        <div dir="ltr" style="background:rgba(30,58,110,.06);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-family:monospace;margin:6px 0">*/5 * * * *</div>
-        (Minute=*/5 ، Hour=* ، Day=* ، Month=* ، Weekday=*)</li>
-      <li>یکی از دو روش زیر را در کادر <b>Command</b> قرار دهید (دو کرون‌جاب جدا — هر دو هر ۵ دقیقه):</li>
-    </ol>
-    <p style="margin:6px 0"><b>کرون ۱ — اتصال کاربران و اطلاع‌رسانی روزانه و کمپین‌ها <code dir="ltr">(notify.php)</code>؛ روش ۱ — اجرای فایل با PHP (پیشنهادی):</b></p>
-    <div dir="ltr" style="background:#101f3d;color:#d7e3ff;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:13px;word-break:break-all">/usr/bin/php -q <?= e($cliPath) ?> <?= e($cronKey) ?></div>
-    <p style="margin:8px 0 4px"><b>روش ۲ — فراخوانی نشانی (اگر PHP CLI در هاست نیست):</b></p>
-    <div dir="ltr" style="background:#101f3d;color:#d7e3ff;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:13px;word-break:break-all">curl -s "<?= e($cronUrl) ?>" > /dev/null 2>&1</div>
-    <p style="margin:10px 0 4px"><b>کرون ۲ — یادآوری پلنر و رویدادها (مشاوره/کارگاه/تست) <code dir="ltr">(reminders.php)</code>:</b></p>
-    <div dir="ltr" style="background:#101f3d;color:#d7e3ff;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:13px;word-break:break-all">/usr/bin/php -q <?= e($remCli) ?> <?= e($cronKey) ?></div>
-    <p style="margin:8px 0 4px"><b>یا با نشانی:</b></p>
-    <div dir="ltr" style="background:#101f3d;color:#d7e3ff;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:13px;word-break:break-all">curl -s "<?= e($remUrl) ?>" > /dev/null 2>&1</div>
-    <p style="margin:8px 0 0">
-      <b>نکته‌ها:</b> کلید مخفی کرون به‌صورت خودکار ساخته شده و در نشانی بالا آمده است؛ آن را محرمانه نگه دارید.
-      برای تست دستی می‌توانید <a href="<?= e($cronUrl) ?>&force=1" target="_blank" rel="noopener" style="word-break:break-all">همین نشانی را با force=1 در مرورگر باز کنید ↗</a> — خروجی متنی وضعیت هر نوبت را نشان می‌دهد (ولی فقط ارسال واقعیِ موعد‌دار انجام می‌دهد).
-      <form method="post" style="display:inline" onsubmit="return confirm('کلید کرون تازه شود؟ لینک‌های قبلی از کار می‌افتند.')">
-        <?= csrf_field() ?><input type="hidden" name="act" value="regen_cron">
-        <button class="fr-btn sm ghost">تولید مجدد کلید 🔑</button>
-      </form>
+    <p>
+      سامانه مجهز به <b>سیستم اعزام خودکار هوشمند (Opportunistic Auto-Dispatch)</b> است که پیام‌های زمان‌بندی‌شده را با بازدیدهای وب نیز اجرا می‌کند.
+      با این حال جهت ارسال ۱۰۰٪ دقیق در ثانیه‌ها حتی در زمان‌های بدون بازدید، دستور کرون زیر را در cPanel اضافه کنید:
+    </p>
+    <div dir="ltr" style="background:#101f3d;color:#d7e3ff;border-radius:10px;padding:12px 16px;font-family:monospace;font-size:13px;word-break:break-all;margin-bottom:8px">
+      /usr/bin/php -q <?= e($cliPath) ?> <?= e($cronKey) ?>
+    </div>
+    <p style="margin:0">
+      نشانی وب برای کرون خارجی: <code dir="ltr"><?= e($cronUrl) ?></code>
     </p>
   </div>
 </div>
 
-<!-- ═══ لاگ اخیر ═══ -->
+<!-- ═══ جدول لاگ آخرین ارسال‌ها ═══ -->
 <div class="fr-card">
-  <h3>🗒 آخرین ارسال‌ها</h3>
-  <?php if (!$recent): ?><p style="font-size:12.5px;color:var(--muted)">هنوز ارسالی ثبت نشده است.</p>
+  <h3>🗒 گزارش آخرین ارسال‌ها در پیام‌رسان‌ها</h3>
+  <?php if (!$recent): ?>
+  <p style="font-size:12.5px;color:var(--muted)">هنوز ارسالی در سیستم ثبت نشده است.</p>
   <?php else: ?>
-  <table class="fr-table" style="font-size:13px">
-    <tr><th>#</th><th>کاربر</th><th>کانال</th><th>نوع</th><th>وضعیت</th><th>زمان</th></tr>
-    <?php foreach ($recent as $n): ?>
-    <tr>
-      <td><?= fa_num($n['id']) ?></td>
-      <td><?= e(trim(($n['first_name'] ?? '') . ' ' . ($n['last_name'] ?? '')) ?: ($n['mobile'] ?? '—')) ?></td>
-      <td><?= e($chFa[$n['channel']] ?? $n['channel']) ?></td>
-      <td><?= e($kindFa[$n['msg_kind']] ?? $n['msg_kind']) ?><?= $n['slot_idx'] !== null ? ' — نوبت ' . fa_num((int)$n['slot_idx'] + 1) : '' ?></td>
-      <td><?= $n['status'] === 'sent' ? '<span style="color:var(--c-accent)">✓</span>' : ('<span style="color:var(--c-danger)" title="' . e((string)$n['error']) . '">✗</span>') ?></td>
-      <td style="white-space:nowrap"><?= fa_num(jdate('m/d H:i', strtotime($n['created_at']))) ?></td>
-    </tr>
-    <?php endforeach; ?>
-  </table>
+  <div class="tbl-wrap">
+    <table class="fr-table" style="font-size:12.5px">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>مراجع / شماره</th>
+          <th>پیام‌رسان</th>
+          <th>نوع پیام</th>
+          <th>وضعیت</th>
+          <th>زمان ارسال (۱۴۰۵)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($recent as $n): ?>
+        <tr>
+          <td><?= fa_num($n['id']) ?></td>
+          <td><?= e(trim(($n['first_name'] ?? '') . ' ' . ($n['last_name'] ?? '')) ?: ($n['mobile'] ?? '—')) ?></td>
+          <td><?= e($chFa[$n['channel']] ?? $n['channel']) ?></td>
+          <td><?= e($kindFa[$n['msg_kind']] ?? $n['msg_kind']) ?><?= $n['slot_idx'] !== null ? ' (نوبت ' . fa_num((int)$n['slot_idx'] + 1) . ')' : '' ?></td>
+          <td><?= $n['status'] === 'sent' ? '<span style="color:#059669;font-weight:bold">✅ موفق</span>' : '<span style="color:#dc2626;font-weight:bold" title="' . e((string)$n['error']) . '">❌ ناموفق</span>' ?></td>
+          <td style="white-space:nowrap"><?= fa_num(jdate('j F ۱۴۰۵ — H:i', strtotime($n['created_at']))) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
   <?php endif; ?>
 </div>
 
+<script>
+// کنترل نمایش تعداد نوبت‌ها
+(function(){
+  var cSel = document.getElementById('ntCount');
+  if (cSel) {
+    cSel.addEventListener('change', function(){
+      var val = parseInt(cSel.value, 10);
+      var items = document.querySelectorAll('#ntTimes .fr-field');
+      items.forEach(function(item, idx){
+        item.style.display = idx < val ? 'block' : 'none';
+      });
+    });
+  }
+})();
+</script>
+
+<?php
+admin_layout_end();

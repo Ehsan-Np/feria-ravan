@@ -33,9 +33,9 @@ if ($act === 'save_settings') {
     } elseif (isset($_POST['planner_remind_time'])) {
         fr_planner_remind_save(1, [(string)$_POST['planner_remind_time']]);
     }
-    /* ۲٫۷ — کانال‌های یادآوری تک‌کارها (تلگرام/بله/پیامک — انتخاب چندتایی مدیر) */
-    $pnCh = array_values(array_intersect((array)($_POST['pn_ch'] ?? []), ['telegram', 'bale', 'sms']));
-    DB::setSetting('planner_notify_channels', $pnCh ? implode(',', $pnCh) : 'telegram,bale');
+    /* ۲٫۷ — کانال‌های یادآوری تک‌کارها (تلگرام/بله/روبیکا/پیامک — انتخاب چندتایی مدیر) */
+    $pnCh = array_values(array_intersect((array)($_POST['pn_ch'] ?? []), ['telegram', 'bale', 'rubika', 'sms']));
+    DB::setSetting('planner_notify_channels', $pnCh ? implode(',', $pnCh) : 'telegram,bale,rubika');
     DB::setSetting('planner_enabled', $enabled);
     DB::setSetting('planner_streak_target', (string)$target);
     DB::setSetting('planner_reward_type', $type);
@@ -188,6 +188,7 @@ admin_layout($adm, 'planner', 'برنامهٔ روزانهٔ کاربران');
           <?php $pnSel = fr_planner_notify_channels(); ?>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" name="pn_ch[]" value="telegram" <?= in_array('telegram', $pnSel, true) ? 'checked' : '' ?>> ✈️ تلگرام</label>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" name="pn_ch[]" value="bale" <?= in_array('bale', $pnSel, true) ? 'checked' : '' ?>> 🟣 بله</label>
+          <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" name="pn_ch[]" value="rubika" <?= in_array('rubika', $pnSel, true) ? 'checked' : '' ?>> 🟪 روبیکا</label>
           <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" name="pn_ch[]" value="sms" <?= in_array('sms', $pnSel, true) ? 'checked' : '' ?>> 📩 پیامک</label>
           <?php
             $dueN = 0;

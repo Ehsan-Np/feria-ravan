@@ -1,6 +1,6 @@
 -- ============================================================================
 -- فریا روان (Feria Ravan) — اسکریپت تجمیعی و یکپارچه مهاجرت پایگاه‌داده
--- نگارش: ۴٫۸٫۰ (v4.8.0 Unified Migration)
+-- نگارش: ۴٫۹٫۰ (v4.9.0 Unified Migration)
 -- تجمیع تمامی تغییرات، جداول جدید، ستون‌ها، ایندکس‌ها و تنظیمات نگارش‌های سامانه
 -- ============================================================================
 
@@ -123,11 +123,36 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}attempt_custom_field_values` (
   INDEX `idx_field_id` (`field_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ۱٫۵. جدول پایش حس و حال روانی روزانه در پلنر (Mood & Energy Check-in ۱۴۰۵)
+CREATE TABLE IF NOT EXISTS `{{prefix}}planner_moods` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `day` DATE NOT NULL,
+  `mood` ENUM('great','good','neutral','tired','stressed') NOT NULL DEFAULT 'good',
+  `energy` TINYINT UNSIGNED NOT NULL DEFAULT 3,
+  `reflection` VARCHAR(500) NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_user_day` (`user_id`, `day`),
+  KEY `ix_user_day` (`user_id`, `day`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ----------------------------------------------------------------------------
 -- ۲. سازگاری ستون‌ها و ارتقای ساختار جداول موجود (Safe DDL)
 -- ----------------------------------------------------------------------------
 
--- ۲٫۱. سازگاری ستون‌های کیف پول
+-- ۲٫۱. ستون‌های پیام‌رسان روبیکا در جدول کاربران
+ALTER TABLE `{{prefix}}users`
+  ADD COLUMN IF NOT EXISTS `rubika_chat_id` VARCHAR(100) DEFAULT NULL AFTER `bale_chat_id`,
+  ADD COLUMN IF NOT EXISTS `rubika_username` VARCHAR(60) DEFAULT NULL AFTER `bale_username`;
+
+-- ۲٫۲. ستون‌های پیام‌رسان روبیکا در جدول مخاطبین
+ALTER TABLE `{{prefix}}contacts`
+  ADD COLUMN IF NOT EXISTS `rubika_chat_id` VARCHAR(100) DEFAULT NULL AFTER `bale_chat_id`,
+  ADD COLUMN IF NOT EXISTS `rubika_username` VARCHAR(60) DEFAULT NULL AFTER `bale_username`,
+  ADD COLUMN IF NOT EXISTS `rubika_ok` TINYINT(1) NOT NULL DEFAULT 0 AFTER `bale_ok`;
+
+-- ۲٫۳. سازگاری ستون‌های کیف پول
 ALTER TABLE `{{prefix}}wallet_transactions`
   ADD COLUMN IF NOT EXISTS `kind` VARCHAR(32) NOT NULL DEFAULT 'deposit' AFTER `type`,
   ADD COLUMN IF NOT EXISTS `reference_type` VARCHAR(32) NULL AFTER `kind`,
@@ -135,12 +160,12 @@ ALTER TABLE `{{prefix}}wallet_transactions`
   ADD COLUMN IF NOT EXISTS `description` VARCHAR(255) NULL AFTER `reference_id`,
   ADD COLUMN IF NOT EXISTS `expires_at` DATETIME NULL AFTER `description`;
 
--- ۲٫۲. سازگاری ستون‌های همراهان ثبت‌نام رویدادها
+-- ۲٫۴. سازگاری ستون‌های همراهان ثبت‌نام رویدادها
 ALTER TABLE `{{prefix}}event_registrations`
   ADD COLUMN IF NOT EXISTS `companion_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `order_id`,
   ADD COLUMN IF NOT EXISTS `companions_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `companion_count`;
 
--- ۲٫۳. ارتقای ساختار ستون‌های صفحه‌ساز
+-- ۲٫۵. ارتقای ساختار ستون‌های صفحه‌ساز
 ALTER TABLE `{{prefix}}site_pages`
   ADD COLUMN IF NOT EXISTS `name` VARCHAR(190) NULL AFTER `id`,
   ADD COLUMN IF NOT EXISTS `layout` VARCHAR(50) NOT NULL DEFAULT 'default' AFTER `slug`,
@@ -151,11 +176,11 @@ ALTER TABLE `{{prefix}}site_pages`
   ADD COLUMN IF NOT EXISTS `builder_json` LONGTEXT NULL AFTER `content_css`,
   ADD COLUMN IF NOT EXISTS `view_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `builder_json`;
 
--- ۲٫۴. مرحله نمایش فیلدهای سفارشی آزمون (pre_test / post_test)
+-- ۲٫۶. مرحله نمایش فیلدهای سفارشی آزمون (pre_test / post_test)
 ALTER TABLE `{{prefix}}test_fields`
   ADD COLUMN IF NOT EXISTS `display_stage` VARCHAR(20) NOT NULL DEFAULT 'post_test' AFTER `show_in_full`;
 
--- ۲٫۵. ذخیره مقادیر فیلدهای سفارشی در تلاش آزمون
+-- ۲٫۷. ذخیره مقادیر فیلدهای سفارشی در تلاش آزمون
 ALTER TABLE `{{prefix}}attempts`
   ADD COLUMN IF NOT EXISTS `custom_fields_json` MEDIUMTEXT NULL AFTER `validity_json`;
 
@@ -201,11 +226,23 @@ VALUES
   ('report_qr_engine', 'local_svg', 1)
 ON DUPLICATE KEY UPDATE `key`=`key`;
 
--- ۳٫۴. ثبت و تثبیت نگارش ۴٫۸٫۰ در تنظیمات سامانه
+-- ۳٫۴. تنظیمات اطلاع‌رسانی، روبیکا و پیام‌رسان‌ها در نگارش ۴٫۹٫۰
 INSERT INTO `{{prefix}}settings` (`key`, `value`, `autoload`)
 VALUES 
-  ('fr_version', '4.8.0', 1),
-  ('system_version', '4.8.0', 1)
-ON DUPLICATE KEY UPDATE `value`='4.8.0';
+  ('rubika_bot_token', '', 1),
+  ('rubika_bot_username', '', 1),
+  ('rubika_api_url', 'https://botapi.rubika.ir/v1', 1),
+  ('telegram_proxy', '', 1),
+  ('telegram_api_url', 'https://api.telegram.org', 1),
+  ('bale_api_url', 'https://tapi.bale.ai', 1),
+  ('planner_notify_channels', 'telegram,bale,rubika', 1)
+ON DUPLICATE KEY UPDATE `key`=`key`;
+
+-- ۳٫۵. ثبت و تثبیت نگارش ۴٫۹٫۰ در تنظیمات سامانه
+INSERT INTO `{{prefix}}settings` (`key`, `value`, `autoload`)
+VALUES 
+  ('fr_version', '4.9.0', 1),
+  ('system_version', '4.9.0', 1)
+ON DUPLICATE KEY UPDATE `value`='4.9.0';
 
 SET FOREIGN_KEY_CHECKS=1;

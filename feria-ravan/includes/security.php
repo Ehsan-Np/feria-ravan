@@ -52,6 +52,10 @@ function csrf_token(): string
     }
     return $_SESSION['_csrf'];
 }
+function fr_csrf_token(): string
+{
+    return csrf_token();
+}
 function csrf_field(): string
 {
     return '<input type="hidden" name="_csrf" value="' . csrf_token() . '">';
@@ -193,6 +197,12 @@ function fr_bootstrap(): void
        اعمال می‌شود؛ در حالت عادی فقط یک خواند تنظیمات است */
     require_once __DIR__ . '/update.php';
     fr_update_pipeline();
+
+    // اجرای خودکار و هوشمند اعزام پیام‌های زمان‌بندی‌شده سر وقت (Auto-Dispatch)
+    if (!defined('FR_INSTALLING') && !defined('FR_TEST_MODE')) {
+        require_once __DIR__ . '/snotify.php';
+        fr_auto_cron_tick();
+    }
 }
 
 /* ---------------------------------------------------------------------------

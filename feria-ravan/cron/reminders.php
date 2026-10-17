@@ -48,11 +48,11 @@ if (!$plannerOn) { $lines[] = 'planner_disabled'; }
 if ($plannerOn) {
 /* کاربرانی که پیام‌رسان متصل دارند و امروز ≥۱ کارِ انجام‌نشده دارند */
 $users = DB::all(
-    "SELECT u.id, u.first_name, u.telegram_chat_id, u.bale_chat_id,
+    "SELECT u.id, u.first_name, u.telegram_chat_id, u.bale_chat_id, u.rubika_chat_id,
             (SELECT COUNT(*) FROM " . DB::t('planner_tasks') . " t WHERE t.user_id=u.id AND t.day=? AND t.done=0) AS pending
      FROM " . DB::t('users') . " u
      WHERE u.status='active'
-       AND (COALESCE(u.telegram_chat_id,'') <> '' OR COALESCE(u.bale_chat_id,'') <> '')
+       AND (COALESCE(u.telegram_chat_id,'') <> '' OR COALESCE(u.bale_chat_id,'') <> '' OR COALESCE(u.rubika_chat_id,'') <> '')
        AND EXISTS (SELECT 1 FROM " . DB::t('planner_tasks') . " t2 WHERE t2.user_id=u.id AND t2.day=? AND t2.done=0)",
     [$today, $today]
 );
@@ -63,7 +63,7 @@ foreach ($slots as $idx => $hhmm) {
     $slotMin = $sh * 60 + $sm;
     $lockKey = 'planner_reminded_' . date('Ymd') . '_' . $idx;
     if (!$force && DB::setting($lockKey, '0') === '1') { $lines[] = $hhmm . ':already'; continue; }
-    if (!$force && ($nowMin < $slotMin - 15 || $nowMin > $slotMin + 59)) { $lines[] = $hhmm . ':wait'; continue; }
+    if (!$force && $nowMin < $slotMin) { $lines[] = $hhmm . ':wait'; continue; }
     $sent = 0; $failed = 0;
     foreach ($users as $usr) {
         $text = fr_planner_remind_compose($usr, $idx, $hhmm, $today);
@@ -71,13 +71,18 @@ foreach ($slots as $idx => $hhmm) {
         if (trim((string)$usr['telegram_chat_id']) !== '') {
             [$ok] = Telegram::sendMessage((string)$usr['telegram_chat_id'], $text);
             $okAny = $okAny || $ok;
-            /* ثبت در لاگ اطلاع‌رسانی (نمایش در مرکز اطلاع‌رسانی و پروفایل کاربر) */
             if (function_exists('fr_snotify_log')) { try { fr_snotify_log((int)$usr['id'], 'telegram', 'planner', $text, (bool)$ok); } catch (Throwable $e) { /* بی‌صدا */ } }
         }
         if (trim((string)$usr['bale_chat_id']) !== '') {
             [$ok] = Bale::sendMessage((string)$usr['bale_chat_id'], $text);
             $okAny = $okAny || $ok;
             if (function_exists('fr_snotify_log')) { try { fr_snotify_log((int)$usr['id'], 'bale', 'planner', $text, (bool)$ok); } catch (Throwable $e) { /* بی‌صدا */ } }
+        }
+        if (trim((string)($usr['rubika_chat_id'] ?? '')) !== '') {
+            require_once FR_ROOT . '/core/Rubika.php';
+            [$ok] = Rubika::sendMessage((string)$usr['rubika_chat_id'], $text);
+            $okAny = $okAny || $ok;
+            if (function_exists('fr_snotify_log')) { try { fr_snotify_log((int)$usr['id'], 'rubika', 'planner', $text, (bool)$ok); } catch (Throwable $e) { /* بی‌صدا */ } }
         }
         $okAny ? $sent++ : $failed++;
     }
@@ -103,7 +108,7 @@ $evSent = 0; $evFailed = 0;
 if (DB::setting('social_event_remind', '1') === '1') {
     $sendEv = function (array $uRow, string $text, string $tag): bool {
         $any = false;
-        foreach (['telegram' => 'telegram_chat_id', 'bale' => 'bale_chat_id'] as $ch => $col) {
+        foreach (['telegram' => 'telegram_chat_id', 'bale' => 'bale_chat_id', 'rubika' => 'rubika_chat_id'] as $ch => $col) {
             $cid = trim((string)($uRow[$col] ?? ''));
             if ($cid === '') continue;
             $any = true;

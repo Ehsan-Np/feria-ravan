@@ -1,70 +1,132 @@
 <?php
 /**
- * فریا روان — کلاینت سبک ربات پیام‌رسان «بله»
- * مستندات مرجع: https://docs.bale.ai  (بله از همان API ربات تلگرام با دامنهٔ tapi.bale.ai پشتیبانی می‌کند)
- * معماری توسعه‌پذیر: متدهای جدید API را همین‌جا اضافه کنید؛ ورودی/خروجی با Telegram یکسان نگه داشته شده.
- * نسخهٔ ۲٫۱
+ * ============================================================================
+ *  درایور پیام‌رسان بله (Bale Bot API Client — نسخهٔ ۴٫۹٫۰)
+ *  ─ مستندات رسمی: docs.bale.ai (همان Bot API تلگرام روی دامنه tapi.bale.ai)
+ *  ─ پشتیبانی هم‌زمان از متدهای استاتیک و شیء‌گرا، getMe، ارسال پیام، و وب‌هوک
+ * ============================================================================
  */
+declare(strict_types=1);
+
 final class Bale
 {
-    private const API = 'https://tapi.bale.ai';
+    private ?string $instanceToken;
 
-    /** آیا بله آمادهٔ ارسال است؟ (ربات رسمی یا درگاه سازمانی — ۲٫۷) */
+    public function __construct(?string $token = null)
+    {
+        $this->instanceToken = $token !== null && trim($token) !== '' ? trim($token) : null;
+    }
+
+    /** آیا بات بله تنظیم شده و فعال است؟ */
     public static function enabled(): bool
     {
-        if (trim((string)DB::setting('bale_bot_token', '')) !== '') return true;
-        /* ۲٫۷ — حالت درگاه سازمانی: بدون توکن ربات هم ارسال از مسیر درگاه ممکن است */
-        return (string)DB::setting('bale_gateway_enabled', '0') === '1'
-            && trim((string)DB::setting('bale_gateway_url', '')) !== '';
+        $t = trim((string)DB::setting('bale_bot_token', ''));
+        return $t !== '';
     }
 
-    /** ارسال پیام متنی به یک چت در بله. برمی‌گرداند [ok, response] */
-    public static function sendMessage(string $chatId, string $text, array $opts = []): array
+    /** نشانی پایه وب‌سرویس بات بله */
+    public static function apiUrl(): string
     {
-        /* ۲٫۷ — درگاه سازمانی پیام‌رسان (اگر فعال باشد جایگزین ربات می‌شود) */
-        if ((string)DB::setting('bale_gateway_enabled', '0') === '1') {
-            require_once __DIR__ . '/MsgGateway.php';
-            if (MsgGateway::baleEnabled()) return MsgGateway::sendBale($chatId, $text);
-        }
-        $token = trim((string)DB::setting('bale_bot_token', ''));
-        if ($token === '' || $chatId === '') return [false, 'bot_not_configured'];
-        $payload = array_merge([
-            'chat_id' => $chatId,
-            'text'    => $text,
-            'disable_web_page_preview' => true,
-        ], $opts);
-        return self::call('sendMessage', $payload, $token);
+        $url = trim((string)DB::setting('bale_api_url', ''));
+        return $url !== '' ? rtrim($url, '/') : 'https://tapi.bale.ai';
     }
 
-    /** فراخوانی خام هر متد API بله */
-    public static function call(string $method, array $payload, ?string $tokenOverride = null): array
-    {
-        $token = $tokenOverride ?? trim((string)DB::setting('bale_bot_token', ''));
-        if ($token === '') return [false, 'no_token'];
-        $url = self::API . '/bot' . $token . '/' . $method;
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 12,
-            CURLOPT_CONNECTTIMEOUT => 6,
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
-        ]);
-        $raw = curl_exec($ch);
-        $errNo = curl_errno($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($errNo || $raw === false) return [false, 'curl_error'];
-        $res = json_decode((string)$raw, true);
-        $ok = is_array($res) && !empty($res['ok']);
-        if (!$ok) error_log('feria: bale ' . $method . ' failed http=' . $code . ' body=' . mb_substr((string)$raw, 0, 300));
-        return [$ok, $res ?: $raw];
-    }
-
-    /** نام کاربری ربات بله برای نمایش راهنما در پنل کاربر */
+    /** نام کاربری ربات بله */
     public static function botUsername(): string
     {
-        return trim((string)DB::setting('bale_bot_username', ''));
+        return ltrim(trim((string)DB::setting('bale_bot_username', '')), '@');
+    }
+
+    /** ارسال پیام متنی به چت بله */
+    public function sendMessage(string $chatId, string $text, array $opts = []): array
+    {
+        return self::sendMessageStatic($chatId, $text, $opts, $this->instanceToken);
+    }
+
+    public static function sendMessageStatic(string $chatId, string $text, array $opts = [], ?string $tokenOverride = null): array
+    {
+        $chatId = trim($chatId);
+        if ($chatId === '') return [false, 'chat_id_empty'];
+        $text = trim($text);
+        if ($text === '') return [false, 'text_empty'];
+
+        $payload = array_merge([
+            'chat_id'    => $chatId,
+            'text'       => $text,
+            'parse_mode' => 'HTML',
+        ], $opts);
+
+        return self::call('sendMessage', $payload, $tokenOverride);
+    }
+
+    /** دریافت اطلاعات بات بله */
+    public function getMe(): array
+    {
+        return self::call('getMe', [], $this->instanceToken);
+    }
+
+    public static function getMeStatic(): array
+    {
+        return self::call('getMe', []);
+    }
+
+    /** فراخوانی متد دلخواه در Bot API بله */
+    public static function call(string $method, array $payload, ?string $tokenOverride = null): array
+    {
+        $token = $tokenOverride !== null && trim($tokenOverride) !== ''
+            ? trim($tokenOverride)
+            : trim((string)DB::setting('bale_bot_token', ''));
+
+        if ($token === '') {
+            return [false, 'bale_token_not_configured'];
+        }
+
+        $base = self::apiUrl();
+        $url = $base . '/bot' . rawurlencode($token) . '/' . ltrim($method, '/');
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_CONNECTTIMEOUT => 6,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json; charset=utf-8',
+                'Accept: application/json',
+                'User-Agent: FeriaRavan-Bale-Client/4.9.0'
+            ],
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $raw = curl_exec($ch);
+        $errNo = curl_errno($ch);
+        $errMsg = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($errNo || $raw === false) {
+            error_log("feria: bale curl error ($errNo): $errMsg");
+            return [false, "curl_error_{$errNo}: {$errMsg}"];
+        }
+
+        $decoded = json_decode((string)$raw, true);
+        $ok = is_array($decoded) && (!empty($decoded['ok']) || ($decoded['status'] ?? '') === 'OK');
+
+        if (!$ok) {
+            error_log("feria: bale api failure code=$code body=" . mb_substr((string)$raw, 0, 300));
+        }
+
+        return [$ok, $decoded ?: $raw];
+    }
+
+    public static function __callStatic(string $name, array $args)
+    {
+        if ($name === 'sendMessage') {
+            return self::sendMessageStatic($args[0] ?? '', $args[1] ?? '', $args[2] ?? [], $args[3] ?? null);
+        }
+        if ($name === 'getMe') {
+            return self::getMeStatic();
+        }
+        throw new \BadMethodCallException("Static method Bale::$name not found");
     }
 }

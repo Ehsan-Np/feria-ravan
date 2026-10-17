@@ -55,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         'newsletter_title','newsletter_desc',
         'planner_enabled','planner_streak_target','planner_reward_type','planner_reward_percent','planner_reward_message',
         'telegram_bot_token','telegram_bot_username','bale_bot_token','bale_bot_username',
+        'rubika_bot_token','rubika_bot_username',
     ];
     foreach ($keys as $k) {
         if (isset($_POST[$k])) {
@@ -527,6 +528,11 @@ $tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوت
       <small class="hint">مطابق مستندات <code>docs.bale.ai</code> — همان API بات تلگرام با دامنهٔ <code>tapi.bale.ai</code>.</small></div>
     <div class="fr-field"><label>نام کاربری ربات بله</label>
       <input class="fr-input" name="bale_bot_username" value="<?= e($s('bale_bot_username')) ?>" style="direction:ltr" placeholder="@feria_planner_bot"></div>
+    <div class="fr-field"><label>توکن / وب‌هوک بات روبیکا</label>
+      <input class="fr-input" name="rubika_bot_token" value="<?= e($s('rubika_bot_token')) ?>" style="direction:ltr" placeholder="rubika_auth_token_or_bot_key">
+      <small class="hint">توکن احراز هویت بات پلتفرم هوشمند روبیکا جهت ارسال نوتیفیکیشن و یادآور پلنر.</small></div>
+    <div class="fr-field"><label>شناسه یا نام کاربری روبیکا</label>
+      <input class="fr-input" name="rubika_bot_username" value="<?= e($s('rubika_bot_username')) ?>" style="direction:ltr" placeholder="@feria_planner"></div>
   </div>
   <div class="fr-note" style="font-size:12.5px">
     <b>کرون‌جاب یادآوری:</b> این نشانی را روزی یک‌بار (صبح) با ابزار کرون هاست فراخوانی کنید — یادآور فقط در بازهٔ ساعت تعیین‌شده واقعاً ارسال می‌شود:<br>

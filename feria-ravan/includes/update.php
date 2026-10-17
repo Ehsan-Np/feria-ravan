@@ -1210,6 +1210,38 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.8.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۳. نگارش ۴٫۹٫۰: بازنویسی کامل پلنر روزانه با تقویم خورشیدی سال ۱۴۰۵، پایش حس و حال روانی، پشتیبانی روبیکا و اعزام خودکار پیام‌رسان‌ها
+        // ---------------------------------------------------------------------
+        try {
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` ADD COLUMN IF NOT EXISTS `rubika_chat_id` VARCHAR(100) DEFAULT NULL AFTER `bale_chat_id`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` ADD COLUMN IF NOT EXISTS `rubika_username` VARCHAR(60) DEFAULT NULL AFTER `bale_username`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}contacts` ADD COLUMN IF NOT EXISTS `rubika_chat_id` VARCHAR(100) DEFAULT NULL AFTER `bale_chat_id`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}contacts` ADD COLUMN IF NOT EXISTS `rubika_username` VARCHAR(60) DEFAULT NULL AFTER `bale_username`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}contacts` ADD COLUMN IF NOT EXISTS `rubika_ok` TINYINT(1) NOT NULL DEFAULT 0 AFTER `bale_ok`");
+
+            fr_db_run_safe_ddl("CREATE TABLE IF NOT EXISTS `{$p}planner_moods` (
+                `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                `user_id` BIGINT UNSIGNED NOT NULL,
+                `day` DATE NOT NULL,
+                `mood` ENUM('great','good','neutral','tired','stressed') NOT NULL DEFAULT 'good',
+                `energy` TINYINT UNSIGNED NOT NULL DEFAULT 3,
+                `reflection` VARCHAR(500) NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY `uq_user_day` (`user_id`, `day`),
+                KEY `ix_user_day` (`user_id`, `day`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            if (DB::setting('rubika_bot_token', null) === null) DB::setSetting('rubika_bot_token', '');
+            if (DB::setting('rubika_bot_username', null) === null) DB::setSetting('rubika_bot_username', '');
+            if (DB::setting('rubika_api_url', null) === null) DB::setSetting('rubika_api_url', 'https://botapi.rubika.ir/v1');
+            if (DB::setting('telegram_proxy', null) === null) DB::setSetting('telegram_proxy', '');
+            if (DB::setting('telegram_api_url', null) === null) DB::setSetting('telegram_api_url', 'https://api.telegram.org');
+            if (DB::setting('bale_api_url', null) === null) DB::setSetting('bale_api_url', 'https://tapi.bale.ai');
+            if (DB::setting('planner_notify_channels', null) === null) DB::setSetting('planner_notify_channels', 'telegram,bale,rubika');
+        } catch (Throwable $e) { error_log('feria: 4.9.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

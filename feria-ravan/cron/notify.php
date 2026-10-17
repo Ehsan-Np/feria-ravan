@@ -43,6 +43,10 @@ foreach ($poll as $ch => $st) {
 $onlyPoll = PHP_SAPI === 'cli' ? in_array('--poll-only', $argv ?? [], true) : !empty($_GET['poll_only']);
 if (!$onlyPoll) {
     foreach (fr_snotify_run_due($force) as $line) echo "slot: $line\n";
+    try {
+        $pn = fr_planner_remind_due();
+        if ($pn > 0) echo "planner_remind: sent=$pn\n";
+    } catch (Throwable $e) {}
 }
 
 /* ۳) ۲٫۵ — ورکر صف کمپین‌های تبلیغاتی: در هر اجرای کرون (۵ دقیقه) یک دستهٔ کوچک ارسال می‌شود */
