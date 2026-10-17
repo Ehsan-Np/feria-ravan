@@ -56,14 +56,15 @@ echo "====================================================================\n\n";
 // -----------------------------------------------------------------------------
 echo "--- بخش اول: بررسی نگارش ۴٫۱٫۰ و ارتقای پایپ‌لاین ---\n";
 // -----------------------------------------------------------------------------
-it('نسخه سیستم در FR_RELEASE و FR_VERSION دقیقاً برابر 4.1.0 است', function() {
-    return defined('FR_RELEASE') && FR_RELEASE === '4.1.0' && defined('FR_VERSION') && FR_VERSION === '4.1.0';
+it('نسخه سیستم حداقل برابر 4.1.0 است', function() {
+    return defined('FR_RELEASE') && version_compare(FR_RELEASE, '4.1.0', '>=') &&
+           defined('FR_VERSION') && version_compare(FR_VERSION, '4.1.0', '>=');
 });
 
-it('پایپ‌لاین به‌روزرسانی بدون خطا نسخه دیتابیس را به 4.1.0 ارتقا می‌دهد', function() {
+it('پایپ‌لاین به‌روزرسانی بدون خطا نسخه دیتابیس را همگام می‌سازد', function() {
     fr_update_pipeline(true);
     $ver = (string)DB::setting('fr_version');
-    return $ver === '4.1.0';
+    return version_compare($ver, '4.1.0', '>=');
 });
 
 // -----------------------------------------------------------------------------
@@ -197,7 +198,7 @@ if (!$ev) {
         'title'      => 'کارگاه نمونه',
         'slug'       => 'event-sample-' . mt_rand(10, 99),
         'kind'       => 'workshop',
-        'price_base' => 300000,
+        'price'      => 300000,
         'status'     => 'active',
     ]);
     $ev = DB::one("SELECT * FROM " . DB::t('events') . " WHERE id=?", [$evid]);

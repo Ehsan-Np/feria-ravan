@@ -284,6 +284,193 @@
     });
   };
 
+  /* ======================================================================
+     ویرایشگر استاندارد و دوحالته وردپرس (دیداری / متن - کد HTML)
+     ====================================================================== */
+  window.syncAllWpEditors = function () {
+    $$('.fr-wp-editor').forEach(function (wrap) {
+      const id = wrap.dataset.editorId;
+      if (!id) return;
+      const visual = wrap.querySelector('.fr-wp-visual-canvas');
+      const code   = wrap.querySelector('.fr-wp-code-area');
+      const hidden = wrap.querySelector('#hd-' + id) || wrap.querySelector('input[type="hidden"]');
+      if (!hidden) return;
+
+      const codeTab = wrap.querySelector('[data-tab-btn="code"]');
+      const isCodeActive = codeTab && codeTab.classList.contains('active');
+      if (isCodeActive && code) {
+        hidden.value = code.value;
+      } else if (visual) {
+        hidden.value = visual.innerHTML;
+      }
+    });
+  };
+
+  window.initWpEditors = function () {
+    $$('.fr-wp-editor').forEach(function (wrap) {
+      const id = wrap.dataset.editorId;
+      if (!id || wrap.dataset.inited === '1') return;
+      wrap.dataset.inited = '1';
+
+      const visualTab = wrap.querySelector('[data-tab-btn="visual"]');
+      const codeTab   = wrap.querySelector('[data-tab-btn="code"]');
+      const toolbar   = wrap.querySelector('.fr-wp-toolbar');
+      const quicktags = wrap.querySelector('.fr-wp-quicktags');
+      const visual    = wrap.querySelector('.fr-wp-visual-canvas');
+      const code      = wrap.querySelector('.fr-wp-code-area');
+      const hidden    = wrap.querySelector('#hd-' + id) || wrap.querySelector('input[type="hidden"]');
+
+      if (!visual || !code || !hidden) return;
+
+      // سوئیچ به حالت دیداری (Visual)
+      function switchToVisual() {
+        visual.innerHTML = code.value;
+        code.style.display = 'none';
+        if (quicktags) quicktags.style.display = 'none';
+        visual.style.display = 'block';
+        if (toolbar) toolbar.style.display = 'flex';
+        if (visualTab) visualTab.classList.add('active');
+        if (codeTab) codeTab.classList.remove('active');
+        hidden.value = visual.innerHTML;
+        visual.focus();
+      }
+
+      // سوئیچ به حالت متن (Code HTML)
+      function switchToCode() {
+        code.value = visual.innerHTML;
+        visual.style.display = 'none';
+        if (toolbar) toolbar.style.display = 'none';
+        code.style.display = 'block';
+        if (quicktags) quicktags.style.display = 'flex';
+        if (codeTab) codeTab.classList.add('active');
+        if (visualTab) visualTab.classList.remove('active');
+        hidden.value = code.value;
+        code.focus();
+      }
+
+      if (visualTab) visualTab.addEventListener('click', function (e) { e.preventDefault(); switchToVisual(); });
+      if (codeTab) codeTab.addEventListener('click', function (e) { e.preventDefault(); switchToCode(); });
+
+      // همگام‌سازی بلادرنگ هنگام تایپ در هر دو حالت
+      visual.addEventListener('input', function () {
+        hidden.value = visual.innerHTML;
+      });
+      code.addEventListener('input', function () {
+        hidden.value = code.value;
+      });
+
+      // عملکرد دکمه‌های تولبار دیداری
+      if (toolbar) {
+        toolbar.querySelectorAll('button[data-cmd]').forEach(function (btn) {
+          btn.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            const cmd = btn.getAttribute('data-cmd');
+            if (cmd === '__link') {
+              const url = prompt('نشانی پیوند (URL) را وارد کنید:', 'https://');
+              if (url) document.execCommand('createLink', false, url);
+            } else if (cmd === '__image') {
+              const meta = document.querySelector('meta[name=app-url]');
+              const base = meta ? meta.content : '';
+              const inp = document.createElement('input');
+              inp.type = 'file'; inp.accept = 'image/jpeg,image/png,image/webp';
+              inp.onchange = function () {
+                if (!inp.files || !inp.files[0]) return;
+                const f = inp.files[0];
+                if (f.size > 2 * 1024 * 1024) { toast('حجم تصویر باید حداکثر ۲ مگابایت باشد.','err'); return; }
+                const fd = new FormData(); fd.append('file', f);
+                toast('⏳ در حال آپلود تصویر…');
+                fetch((base || '') + '/api/rte-upload.php', { method:'POST', headers:{ 'X-CSRF': window.CSRF || '' }, body: fd })
+                  .then(r => r.json()).then(j => {
+                    if (j.ok && j.url) {
+                      visual.focus();
+                      try { document.execCommand('insertImage', false, j.url); }
+                      catch (err) { visual.innerHTML += '<img src="' + j.url + '" alt="">'; }
+                      toast('تصویر درج شد 🖼');
+                      hidden.value = visual.innerHTML;
+                    } else toast(j.message || 'آپلود ناموفق بود.','err');
+                  }).catch(() => toast('خطای ارتباط در آپلود تصویر.','err'));
+              };
+              inp.click();
+              return;
+            } else if (cmd === '__box_info') {
+              document.execCommand('insertHTML', false, '<div class="fr-callout info"><b>ℹ️ راهنما:</b> متن راهنمای خود را اینجا بنویسید.</div><p><br></p>');
+            } else if (cmd === '__box_success') {
+              document.execCommand('insertHTML', false, '<div class="fr-callout success"><b>✅ نکته:</b> متن نکته کلیدی را اینجا بنویسید.</div><p><br></p>');
+            } else if (cmd === '__box_warn') {
+              document.execCommand('insertHTML', false, '<div class="fr-callout warn"><b>⚠️ هشدار مهم:</b> نکته مهم یا هشدار را اینجا بنویسید.</div><p><br></p>');
+            } else if (cmd.startsWith('formatBlock|')) {
+              document.execCommand('formatBlock', false, cmd.split('|')[1]);
+            } else {
+              document.execCommand(cmd, false, null);
+            }
+            visual.focus();
+            hidden.value = visual.innerHTML;
+          });
+        });
+
+        const selectFormat = toolbar.querySelector('select[data-cmd="formatBlock"]');
+        if (selectFormat) {
+          selectFormat.addEventListener('change', function () {
+            document.execCommand('formatBlock', false, selectFormat.value);
+            visual.focus();
+            hidden.value = visual.innerHTML;
+          });
+        }
+      }
+
+      // عملکرد دکمه‌های کوئیک‌تگز در حالت متن (کد HTML) مانند وردپرس
+      if (quicktags) {
+        quicktags.querySelectorAll('button[data-tag]').forEach(function (btn) {
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            const tag = btn.getAttribute('data-tag');
+            const start = code.selectionStart;
+            const end = code.selectionEnd;
+            const text = code.value;
+            const selected = text.substring(start, end);
+
+            let repl = '';
+            if (tag === 'link') {
+              const u = prompt('نشانی URL پیوند:', 'https://');
+              if (u) repl = '<a href="' + u + '">' + (selected || u) + '</a>';
+            } else if (tag === 'img') {
+              const u = prompt('نشانی اینترنتی تصویر (URL):');
+              if (u) repl = '<img src="' + u + '" alt="" />';
+            } else if (tag === 'box-info') {
+              repl = '<div class="fr-callout info">\n  <b>ℹ️ راهنما:</b> ' + (selected || 'متن راهنما') + '\n</div>\n';
+            } else if (tag === 'box-warn') {
+              repl = '<div class="fr-callout warn">\n  <b>⚠️ هشدار:</b> ' + (selected || 'متن هشدار') + '\n</div>\n';
+            } else if (tag === 'b-quote') {
+              repl = '<blockquote>' + (selected || 'نقل‌قول') + '</blockquote>';
+            } else if (tag === 'close') {
+              // بستن تگ‌ها
+            } else {
+              repl = '<' + tag + '>' + selected + '</' + tag + '>';
+            }
+
+            if (repl) {
+              code.value = text.substring(0, start) + repl + text.substring(end);
+              code.focus();
+              code.selectionStart = start + repl.length;
+              code.selectionEnd = start + repl.length;
+              hidden.value = code.value;
+            }
+          });
+        });
+      }
+    });
+
+    // ثبت خودکار در سابمیت همه فرم‌ها
+    document.querySelectorAll('form').forEach(function (f) {
+      if (!f.dataset.wpSynced) {
+        f.dataset.wpSynced = '1';
+        f.addEventListener('submit', function () {
+          window.syncAllWpEditors();
+        });
+      }
+    });
+  };
+
   function initPcCanvas() {
     $$('.pc-canvas').forEach(function (canvas) {
       var cid = canvas.getAttribute('data-pc-id') || 'default';
@@ -306,6 +493,7 @@
   function onDomReady() {
     initMobileMenu();
     initRte();
+    if (window.initWpEditors) window.initWpEditors();
     animateScaleBars();
     initPcCanvas();
     $$('canvas[data-chart]').forEach(cnv => {

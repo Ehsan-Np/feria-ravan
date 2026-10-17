@@ -95,7 +95,7 @@ public_header([
   <?php if ($t['instructions']): ?>
   <div class="fr-card" style="margin-bottom:18px">
     <h3 style="margin-bottom:10px">📋 قبل از شروع بدانید</h3>
-    <div class="ev-content rte-area" style="line-height:2.1;font-size:14px;color:#2c3a5c"><?= fr_sanitize_html((string)$t['instructions']) ?></div>
+    <div class="ev-content fr-rich-content" style="line-height:2.1;font-size:14px;color:#2c3a5c"><?= fr_render_rich_html((string)$t['instructions']) ?></div>
   </div>
   <?php endif; ?>
 

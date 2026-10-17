@@ -283,8 +283,16 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
         <?= nl2br(e(trim(strip_tags((string)$test['description'])))) ?></div>
       <?php endif; ?>
       <p style="font-size:13px;color:var(--muted)">📝 <?= fa_num($test['question_count']) ?> سؤال · ⏱ حدود <?= fa_num($test['est_minutes']) ?> دقیقه</p>
-      <?php if ($test['instructions']): ?>
-      <div class="fr-alert info" style="font-size:13px"><?= nl2br(e($test['instructions'])) ?></div>
+      <?php if (!empty($test['instructions'])): ?>
+      <div class="fr-instructions-card" style="margin:16px 0;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:14px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.04)">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;color:#0f172a;margin-bottom:10px;border-bottom:1px solid #e2e8f0;padding-bottom:8px">
+          <span style="font-size:18px">📋</span>
+          <span>دستورالعمل و راهنمای شرکت در آزمون</span>
+        </div>
+        <div class="fr-instructions-body fr-rich-content" style="font-size:13px;line-height:2.2;color:#334155">
+          <?= fr_render_rich_html((string)$test['instructions']) ?>
+        </div>
+      </div>
       <?php endif; ?>
       <?php if ($bnn): ?>
       <a href="<?= e($bnn['link'] ?: '#') ?>" style="display:block;margin-top:14px">

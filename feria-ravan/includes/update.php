@@ -1235,6 +1235,16 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.1.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۶. نگارش ۴٫۲٫۰: ویرایشگر دیداری و متنی وردپرسی و رندر استاندارد دستورالعمل قبل از شروع
+        // ---------------------------------------------------------------------
+        try {
+            // اطمینان از صحت محتوای دستورالعمل‌ها و پاک‌سازی هرگونه تگ غیرمجاز قدیمی
+            if (class_exists('TestFields')) {
+                TestFields::ensureSchema();
+            }
+        } catch (Throwable $e) { error_log('feria: 4.2.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

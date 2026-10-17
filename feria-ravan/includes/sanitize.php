@@ -16,7 +16,7 @@ function fr_allowed_tags(): array
 {
     return ['p','br','strong','b','em','i','u','s','span','h2','h3','h4',
             'ul','ol','li','a','blockquote','img','figure','figcaption','hr',
-            'table','thead','tbody','tr','th','td'];
+            'table','thead','tbody','tr','th','td','div','del','ins','code','pre','mark','small'];
 }
 
 /** بررسی امن‌بودن یک URL (برای href/src) */
@@ -81,13 +81,26 @@ function fr_sanitize_html(string $html): string
                 'td'   => ['colspan','rowspan'],
                 'th'   => ['colspan','rowspan'],
             ];
-            $globalOk = ['span','p','h2','h3','h4','blockquote','li','figure','td','th','table','ul','ol']; // style محدود مجاز
+            $globalOk = ['span','p','h2','h3','h4','blockquote','li','figure','td','th','table','ul','ol','div','pre','code','mark','small']; // style محدود مجاز
             $keep = [];
             foreach ($am as $a) {
                 $name  = strtolower($a[1]);
                 // مقدار صفت: از گروه نقل‌قول‌دار یا بدون‌نقل‌قول (بدون هشدار PHP 8)
                 $value = (string)(($a[3] ?? '') !== '' ? $a[3] : (($a[4] ?? '') !== '' ? $a[4] : ($a[5] ?? '')));
                 if (str_starts_with($name, 'on')) continue;                    // رویدادها ممنوع
+                if ($name === 'class') {
+                    if (preg_match('/^[a-zA-Z0-9_\-\s]+$/', $value)) {
+                        $keep[] = 'class="' . e($value) . '"';
+                    }
+                    continue;
+                }
+                if ($name === 'dir') {
+                    $lowDir = strtolower($value);
+                    if (in_array($lowDir, ['rtl','ltr','auto'], true)) {
+                        $keep[] = 'dir="' . $lowDir . '"';
+                    }
+                    continue;
+                }
                 if ($name === 'style') {
                     if (!in_array($tag, $globalOk, true)) continue;
                     $safe = fr_sanitize_style($value);
@@ -112,7 +125,7 @@ function fr_sanitize_html(string $html): string
 }
 
 /**
- * پاک‌سازی style inline — فقط text-align و color امن نگه داشته می‌شوند
+ * پاک‌سازی style inline — خصوصیات امن CSS برای قالب‌بندی متون، رنگ‌ها، فاصله‌ها و کادرها
  */
 function fr_sanitize_style(string $style): string
 {
@@ -123,9 +136,21 @@ function fr_sanitize_style(string $style): string
         $prop = strtolower($prop);
         if ($prop === 'text-align' && in_array(strtolower($val), ['right','left','center','justify'], true)) {
             $out[] = 'text-align:' . strtolower($val);
-        } elseif ($prop === 'color' || $prop === 'background-color') {
-            // فقط مقدار رنگ ساده: #hex / rgb()/rgba() با اعداد — بدون url/expression
-            if (preg_match('/^(#[0-9a-fA-F]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\))$/', $val)) {
+        } elseif ($prop === 'font-weight' && in_array(strtolower($val), ['bold','normal','700','800','600','500','400'], true)) {
+            $out[] = 'font-weight:' . strtolower($val);
+        } elseif ($prop === 'color' || $prop === 'background-color' || $prop === 'background') {
+            // فقط مقادیر رنگ مجاز (#hex, rgb, rgba, نام رنگ‌های امن) بدون url یا expression
+            if (preg_match('/^(#[0-9a-fA-F]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)|transparent|inherit)$/', $val)) {
+                $out[] = $prop . ':' . $val;
+            }
+        } elseif (in_array($prop, ['padding','padding-right','padding-left','padding-top','padding-bottom',
+                                  'margin','margin-right','margin-left','margin-top','margin-bottom',
+                                  'border-radius','font-size','line-height'], true)) {
+            if (preg_match('/^[0-9]+(\.[0-9]+)?(px|em|rem|%)((\s+[0-9]+(\.[0-9]+)?(px|em|rem|%)){0,3})?$/', $val)) {
+                $out[] = $prop . ':' . $val;
+            }
+        } elseif ($prop === 'border' || $prop === 'border-right' || $prop === 'border-left' || $prop === 'border-top' || $prop === 'border-bottom') {
+            if (preg_match('/^[0-9]+(\.[0-9]+)?px\s+(solid|dashed|dotted)\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|transparent)$/', $val)) {
                 $out[] = $prop . ':' . $val;
             }
         }

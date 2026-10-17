@@ -884,4 +884,23 @@ if (!function_exists('fr_admin_delete_user_fully')) {
     }
 }
 
+/**
+ * رندر امن و استاندارد محتواهای متنی غنی (HTML یا متنی) با پاک‌سازی خودکار
+ * مناسب برای دستورالعمل قبل از شروع تست، توضیحات کامل و کادرهای راهنما
+ */
+if (!function_exists('fr_render_rich_html')) {
+    function fr_render_rich_html(?string $content): string
+    {
+        if ($content === null || trim($content) === '') return '';
+        $trimmed = trim($content);
+        require_once __DIR__ . '/sanitize.php';
+        // در صورتی که محتوا تگ‌های HTML دارد با متد پاک‌سازی امن خروجی داده می‌شود
+        if (preg_match('/<[a-z][\s\S]*>/i', $trimmed)) {
+            return fr_sanitize_html($trimmed);
+        }
+        return nl2br(e($trimmed));
+    }
+}
+
+
 

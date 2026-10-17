@@ -222,16 +222,10 @@ echo flash();
         </div>
         <?php endif; ?>
       </div>
-      <div class="fr-field"><label>توضیحات کامل (HTML)</label>
-        <div class="rte-toolbar" data-rte="desc"></div>
-        <div class="rte-area" id="rte-desc" contenteditable="true"><?= $t['description'] ?? '' ?></div>
-        <input type="hidden" name="description" id="hd-desc"></div>
+      <?php fr_wp_editor('description', $t['description'] ?? '', 'desc', 'توضیحات کامل (دیداری و HTML)', 'معرفی جامع آزمون که در صفحه اختصاصی تست روانشناسی نمایش داده می‌شود.'); ?>
     </div>
     <div>
-      <div class="fr-field"><label>دستورالعمل قبل از شروع (HTML)</label>
-        <div class="rte-toolbar" data-rte="inst"></div>
-        <div class="rte-area" id="rte-inst" contenteditable="true"><?= $t['instructions'] ?? '' ?></div>
-        <input type="hidden" name="instructions" id="hd-inst"></div>
+      <?php fr_wp_editor('instructions', $t['instructions'] ?? '', 'inst', 'دستورالعمل قبل از شروع (دیداری و HTML)', 'این دستورالعمل قبل از شروع پاسخ‌گویی در پنل کاربر به صورت زیبا نمایش داده می‌شود. می‌توانید متن، نکات و کادرهای راهنما درج کنید.'); ?>
       <div class="fr-grid cols-2" style="gap:12px">
         <div class="fr-field"><label>قیمت نسخه ویژه (تومان)</label>
           <input class="fr-input" name="price_full" value="<?= fa_num(number_format($t['price_full'])) ?>" style="direction:ltr;text-align:right"></div>
@@ -287,11 +281,7 @@ echo flash();
         [t,d,tt,sh].forEach(function(x){ if(x) x.addEventListener('input',pv); }); pv();
       })();
       </script>
-      <div class="fr-field" style="margin-top:12px"><label>متن تشویقی پایان نسخهٔ رایگان (HTML) — دلخواه و قابل‌ویرایش</label>
-        <div class="rte-toolbar" data-rte="teaser"></div>
-        <div class="rte-area" id="rte-teaser" contenteditable="true"><?= $t['free_teaser'] ?? '' ?></div>
-        <input type="hidden" name="free_teaser" id="hd-teaser">
-        <small style="color:var(--muted)">این متن ته گزارش رایگان نشان داده می‌شود تا کاربر را به خرید نسخهٔ ویژه ترغیب کند. اگر خالی بماند، متن پیش‌فرض سیستم چاپ می‌شود.</small></div>
+      <?php fr_wp_editor('free_teaser', $t['free_teaser'] ?? '', 'teaser', 'متن تشویقی پایان نسخهٔ رایگان (دیداری و HTML)', 'این متن ته گزارش رایگان نشان داده می‌شود تا کاربر را به خرید نسخهٔ ویژه ترغیب کند. اگر خالی بماند، متن پیش‌فرض سیستم چاپ می‌شود.'); ?>
       <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
         <button class="fr-btn" type="submit" onclick="syncRte()">ذخیره تغییرات تست</button>
         <a class="fr-btn ghost" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>">انصراف و بازگشت</a>
@@ -300,7 +290,23 @@ echo flash();
     </div>
   </form>
 </div>
-<script>function syncRte(){['desc','inst','teaser'].forEach(function(k){document.getElementById('hd-'+k).value=document.getElementById('rte-'+k).innerHTML;});}</script>
+<script>
+function syncRte(){
+  if (window.syncAllWpEditors) window.syncAllWpEditors();
+  ['desc','inst','teaser'].forEach(function(k){
+    var h = document.getElementById('hd-'+k);
+    var r = document.getElementById('rte-'+k);
+    var c = document.getElementById('code-'+k);
+    if (h) {
+      if (c && c.style.display !== 'none') {
+        h.value = c.value;
+      } else if (r) {
+        h.value = r.innerHTML;
+      }
+    }
+  });
+}
+</script>
 <?php
 // حالت ویرایش اختصاصی: وقتی کاربر در حال ویرایش تست است، فقط فرم ویرایش نمایش داده می‌شود و جدول سایر تست‌ها مخفی می‌ماند
 admin_layout_end();
