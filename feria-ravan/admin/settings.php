@@ -40,6 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         // نسخهٔ ۲٫۰: دیدگاهها + بارکد QR گزارش چاپی
         'reviews_auto_approve',
         'report_qr_link','report_qr_show',
+        // نسخهٔ ۴٫۵٫۰: اطلاعات ارائه‌دهنده، روانشناس ناظر، لوگو، مهر و تمپلیت استاندارد ISO A4 کارنامه
+        'report_provider_name','report_provider_subtitle','report_provider_license',
+        'report_doctor_name','report_doctor_title','report_doctor_license',
+        'report_provider_logo','report_provider_stamp','report_show_signature_box',
+        'report_provider_phone','report_provider_address','report_provider_website',
+        'report_header_color','report_disclaimer','report_show_qr',
         // نسخهٔ ۲٫۱: برند فوتر + نمادها + برنامه‌ریز روزانه + پیام‌رسان‌ها + خبرنامه
         'logo_desc','footer_links_json','footer_links2_json',
         'footer_badge1_img','footer_badge1_url','footer_badge1_alt','footer_badge1_html',
@@ -58,7 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
             }
             if ($k === 'register_enabled') { $v = $v === '1' ? '1' : '0'; }
             if ($k === 'hide_system_credits') { $v = $v === '1' ? '1' : '0'; }
-            if (in_array($k, ['reviews_auto_approve','report_qr_show'], true)) { $v = $v === '1' ? '1' : '0'; }
+            if (in_array($k, ['reviews_auto_approve','report_qr_show','report_show_signature_box','report_show_qr'], true)) { $v = $v === '1' ? '1' : '0'; }
+            if ($k === 'report_header_color') {
+                $v = preg_match('/^#[0-9a-fA-F]{3,8}$/', $v) ? $v : '#1e3a6e';
+            }
             if ($k === 'report_qr_link') {                       // فقط لینک http(s) سالم پذیرفته می‌شود
                 $v = trim($v);
                 $v = ($v !== '' && preg_match('#^https?://[^\x20"\'<>]+$#i', $v)) ? $v : '';
@@ -124,6 +133,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
                 if (move_uploaded_file($_FILES[$fld]['tmp_name'], $genDir . '/' . $fn)) {
                     DB::setSetting('footer_badge' . $bi . '_img', SITE_URL . '/feria-uploads/general/' . $fn);
                 }
+            }
+        }
+    }
+    /* نسخهٔ ۴٫۵٫۰: آپلود لوگوی اختصاصی کارنامه در feria-uploads/general/ */
+    if (!empty($_FILES['report_provider_logo_file']['tmp_name']) && is_uploaded_file($_FILES['report_provider_logo_file']['tmp_name'])) {
+        $mime = mime_content_type($_FILES['report_provider_logo_file']['tmp_name']);
+        if (isset($map[$mime]) && $_FILES['report_provider_logo_file']['size'] < 2_000_000) {
+            $genDir = FR_ROOT . '/feria-uploads/general';
+            if (!is_dir($genDir)) @mkdir($genDir, 0755, true);
+            $fn = 'report-logo-' . date('YmdHis') . '.' . $map[$mime];
+            if (move_uploaded_file($_FILES['report_provider_logo_file']['tmp_name'], $genDir . '/' . $fn)) {
+                DB::setSetting('report_provider_logo', SITE_URL . '/feria-uploads/general/' . $fn);
+            }
+        }
+    }
+    /* نسخهٔ ۴٫۵٫۰: آپلود مهر و امضای دیجیتال متخصص در feria-uploads/general/ */
+    if (!empty($_FILES['report_provider_stamp_file']['tmp_name']) && is_uploaded_file($_FILES['report_provider_stamp_file']['tmp_name'])) {
+        $mime = mime_content_type($_FILES['report_provider_stamp_file']['tmp_name']);
+        if (isset($map[$mime]) && $_FILES['report_provider_stamp_file']['size'] < 2_000_000) {
+            $genDir = FR_ROOT . '/feria-uploads/general';
+            if (!is_dir($genDir)) @mkdir($genDir, 0755, true);
+            $fn = 'report-stamp-' . date('YmdHis') . '.' . $map[$mime];
+            if (move_uploaded_file($_FILES['report_provider_stamp_file']['tmp_name'], $genDir . '/' . $fn)) {
+                DB::setSetting('report_provider_stamp', SITE_URL . '/feria-uploads/general/' . $fn);
             }
         }
     }
@@ -711,33 +744,162 @@ $tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوت
 <?php admin_layout_end(); exit; ?>
 
 <?php elseif ($tab === 'report'): ?>
+<!-- ── کارت ۱: مشخصات ارائه‌دهنده و مرکز روانشناسی در کارنامه ── -->
 <div class="fr-card">
-  <h3>تنظیمات گزارش‌ها</h3>
-  <div class="fr-field"><label>پانوشت سفارشی گزارش (قابل شخصی‌سازی — بالای کارت اعتبار نمایش داده می‌شود)</label>
-    <div class="rte-toolbar" data-rte="rfoot"></div>
-    <div class="rte-area" id="rte-rfoot" contenteditable="true" style="min-height:90px"><?= e($s('report_footer')) ?></div>
-    <input type="hidden" name="report_footer" id="hd-rfoot"></div>
-  <div class="fr-alert info" style="font-size:13px">
-    💡 کارت اعتبار توسعه‌دهنده (متن و لینک «طراحی و کدنویسی») را می‌توانید از تب
-    <a href="?tab=brand">🎨 برند و ظاهر</a> ویرایش کنید؛ همین متن در پانوشت عمومی سایت و گزارش‌ها دیده می‌شود.
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <h3 style="margin:0">🏛️ اطلاعات مرکز و ارائه‌دهنده آزمون (سربرگ کارنامه رسمی)</h3>
+    <span class="fr-chip purple">استاندارد کارنامه ISO A4</span>
+  </div>
+  <p style="font-size:13px;color:var(--muted);line-height:1.9;margin-top:0">
+    اطلاعات زیر در سربرگ کارنامه چاپی و فایل دانلودی A4 مراجع و مدیر قرار می‌گیرد.
+  </p>
+
+  <div class="fr-grid cols-3" style="margin-bottom:14px">
+    <div class="fr-field">
+      <label>نام رسمی کلینیک / مرکز ارائه‌دهنده:</label>
+      <input class="fr-input" name="report_provider_name" value="<?= e($s('report_provider_name', fr_brand_title())) ?>" placeholder="مثلاً: کلینیک روان‌شناسی و مشاوره فریا">
+      <small class="hint">عنوان اصلی بالای سربرگ کارنامه</small>
+    </div>
+    <div class="fr-field">
+      <label>زیرعنوان و تخصص مرکز:</label>
+      <input class="fr-input" name="report_provider_subtitle" value="<?= e($s('report_provider_subtitle', fr_brand_slogan() ?: 'مرکز تخصصی ارزیابی‌های روان‌شناختی، روان‌سنجی و مشاوره')) ?>" placeholder="مثلاً: مرکز خدمات روان‌شناختی و مشاوره">
+      <small class="hint">توضیح زیر نام کلینیک در سربرگ</small>
+    </div>
+    <div class="fr-field">
+      <label>شماره پروانه / مجوز فعالیت مرکز:</label>
+      <input class="fr-input" name="report_provider_license" value="<?= e($s('report_provider_license')) ?>" placeholder="مثلاً: پروانه نظام روانشناسی: ۱۴۰۳/الف/۱۲۹">
+      <small class="hint">شماره ثبت قانونی یا پروانه تأسیس مرکز</small>
+    </div>
+  </div>
+
+  <div class="fr-grid cols-3" style="margin-bottom:14px">
+    <div class="fr-field">
+      <label>تلفن تماس مرکز در کارنامه:</label>
+      <input class="fr-input" name="report_provider_phone" value="<?= e($s('report_provider_phone')) ?>" dir="ltr" placeholder="021-xxxxxxxx">
+    </div>
+    <div class="fr-field">
+      <label>نشانی وب‌سایت در کارنامه:</label>
+      <input class="fr-input" name="report_provider_website" value="<?= e($s('report_provider_website', SITE_URL)) ?>" dir="ltr" placeholder="<?= SITE_URL ?>">
+    </div>
+    <div class="fr-field">
+      <label>نشانی پستی یا دفتر کلینیک:</label>
+      <input class="fr-input" name="report_provider_address" value="<?= e($s('report_provider_address')) ?>" placeholder="تهران، خیابان ولیعصر...">
+    </div>
   </div>
 </div>
 
-<!-- ── بارکد QR گزارش چاپی (نسخهٔ ۲٫۰) ── -->
+<!-- ── کارت ۲: مشخصات ناظر علمی و روانشناس مسئول آزمون ── -->
 <div class="fr-card">
-  <h3>▣ بارکد QR گزارش چاپی <span class="badge">۲٫۰</span></h3>
-  <div class="fr-grid cols-2">
-    <div class="fr-field"><label>لینک دلخواه داخل بارکد</label>
-      <input class="fr-input" name="report_qr_link" value="<?= e($s('report_qr_link')) ?>" style="direction:ltr" placeholder="<?= SITE_URL ?>" maxlength="255">
-      <small class="hint">این لینک داخل بارکد QR انتهای گزارش قرار می‌گیرد (پیش‌فرض: نشانی سایت). زیر بارکد عنوان «Feria.ir» چاپ می‌شود.</small></div>
-    <div class="fr-field"><label>نمایش بارکد در گزارش</label>
-      <select class="fr-select" name="report_qr_show">
-        <option value="1" <?= $s('report_qr_show','1')==='1'?'selected':'' ?>>نمایش داده شود ✅</option>
-        <option value="0" <?= $s('report_qr_show','1')==='0'?'selected':'' ?>>پنهان شود</option>
-      </select></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <h3 style="margin:0">🩺 مشخصات روانشناس ناظر و مسئول فنی کارنامه</h3>
+    <span class="fr-chip info">امضا و اعتبارسنجی بالینی</span>
   </div>
-  <div class="fr-alert info" style="font-size:13px;margin-bottom:0">
-    💡 بارکد با سرویس نمودار گوگل (Google Chart) ساخته می‌شود؛ اگر اتصال برقرار نبود به‌صورت خودکار با بارکد داخلی جایگزین می‌شود تا چاپ هرگز خراب نشود.
+
+  <div class="fr-grid cols-3" style="margin-bottom:14px">
+    <div class="fr-field">
+      <label>نام و نام خانوادگی روانشناس مسئول:</label>
+      <input class="fr-input" name="report_doctor_name" value="<?= e($s('report_doctor_name')) ?>" placeholder="مثلاً: دکتر مریم جمالی">
+      <small class="hint">در سربرگ و کادر تأییدیه انتهای کارنامه درج می‌شود.</small>
+    </div>
+    <div class="fr-field">
+      <label>عنوان تخصصی روانشناس:</label>
+      <input class="fr-input" name="report_doctor_title" value="<?= e($s('report_doctor_title', 'متخصص روان‌شناسی بالینی و روان‌سنج')) ?>" placeholder="متخصص روان‌شناسی بالینی">
+      <small class="hint">سمت بالینی ناظر آزمون</small>
+    </div>
+    <div class="fr-field">
+      <label>شماره نظام روان‌شناسی / پروانه اشتغال:</label>
+      <input class="fr-input" name="report_doctor_license" value="<?= e($s('report_doctor_license')) ?>" dir="ltr" placeholder="مثلاً: نظام روانشناسی: ۱۲۳۴۵">
+      <small class="hint">شماره عضویت یا پروانه فعالیت در سازمان نظام</small>
+    </div>
+  </div>
+</div>
+
+<!-- ── کارت ۳: لوگو، مهر و امضای دیجیتال کارنامه ── -->
+<div class="fr-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <h3 style="margin:0">🖼️ لوگوی سربرگ و مهر/امضای رسمی کارنامه</h3>
+    <span class="fr-chip">فرمت PNG شفاف، SVG یا JPG</span>
+  </div>
+
+  <div class="fr-grid cols-2" style="gap:20px;margin-bottom:16px">
+    <!-- لوگوی کارنامه -->
+    <div class="fr-field" style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fcfdff">
+      <label style="font-weight:bold;margin-bottom:6px;display:block">🏷️ لوگوی اختصاصی سربرگ کارنامه:</label>
+      <input class="fr-input" name="report_provider_logo" value="<?= e($s('report_provider_logo')) ?>" dir="ltr" placeholder="آدرس تصویر لوگو یا از کادر زیر آپلود کنید">
+      <input type="file" name="report_provider_logo_file" accept="image/*" style="margin-top:8px;font-size:12px;display:block">
+      <small class="hint">در صورت خالی بودن، لوگوی اصلی سایت استفاده می‌شود.</small>
+      <?php $repLogo = fr_report_provider_logo(); if ($repLogo !== ''): ?>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;padding:8px;background:#fff;border-radius:8px;border:1px solid #e2e8f0">
+          <img src="<?= e($repLogo) ?>" alt="پیش‌نمایش لوگوی کارنامه" style="height:48px;max-width:120px;object-fit:contain">
+          <small style="color:var(--muted)">پیش‌نمایش لوگوی سربرگ کارنامه</small>
+        </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- مهر و امضای دیجیتال -->
+    <div class="fr-field" style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fcfdff">
+      <label style="font-weight:bold;margin-bottom:6px;display:block">🔏 تصویر مهر و امضای دیجیتال کلینیک / روانشناس:</label>
+      <input class="fr-input" name="report_provider_stamp" value="<?= e($s('report_provider_stamp')) ?>" dir="ltr" placeholder="آدرس تصویر مهر/امضا یا از کادر زیر آپلود کنید">
+      <input type="file" name="report_provider_stamp_file" accept="image/*" style="margin-top:8px;font-size:12px;display:block">
+      <small class="hint">ترجیحاً تصویر PNG بدون پس‌زمینه (شفاف) جهت قرارگیری در کادر امضای انتهای کارنامه</small>
+      <?php $repStamp = fr_report_provider_stamp(); if ($repStamp !== ''): ?>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;padding:8px;background:#fff;border-radius:8px;border:1px solid #e2e8f0">
+          <img src="<?= e($repStamp) ?>" alt="پیش‌نمایش مهر کارنامه" style="height:55px;max-width:140px;object-fit:contain">
+          <small style="color:var(--muted)">پیش‌نمایش مهر/امضا در انتهای سند</small>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <div class="fr-grid cols-2">
+    <div class="fr-field">
+      <label>نمایش کادر امضا و تأییدیه روانشناس در کارنامه:</label>
+      <select class="fr-select" name="report_show_signature_box">
+        <option value="1" <?= $s('report_show_signature_box','1')==='1'?'selected':'' ?>>نمایش داده شود ✅ (توصیه‌شده برای کارنامه رسمی)</option>
+        <option value="0" <?= $s('report_show_signature_box','1')==='0'?'selected':'' ?>>پنهان شود</option>
+      </select>
+    </div>
+    <div class="fr-field">
+      <label>رنگ تم و گرادیان سربرگ کارنامه:</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input type="color" name="report_header_color" value="<?= e(fr_report_header_color()) ?>" style="width:48px;height:40px;border:none;border-radius:8px;cursor:pointer;padding:0">
+        <input class="fr-input" value="<?= e(fr_report_header_color()) ?>" style="width:110px;direction:ltr" readonly>
+        <span style="font-size:12.5px;color:var(--muted)">رنگ سازمانی سربرگ و خطوط تزئینی کارنامه A4</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── کارت ۴: تنظیمات اعتبارسنجی QR و سلب مسئولیت حقوقی ── -->
+<div class="fr-card">
+  <h3>▣ اعتبارسنجی بارکد QR و متن سلب مسئولیت</h3>
+  <div class="fr-grid cols-2" style="margin-bottom:14px">
+    <div class="fr-field">
+      <label>نمایش بارکد QR در کارنامه:</label>
+      <select class="fr-select" name="report_show_qr">
+        <option value="1" <?= $s('report_show_qr','1')==='1'?'selected':'' ?>>نمایش داده شود ✅</option>
+        <option value="0" <?= $s('report_show_qr','1')==='0'?'selected':'' ?>>پنهان شود</option>
+      </select>
+      <small class="hint">مراجعین می‌توانند با اسکن بارکد اصالت گزارش را استعلام کنند.</small>
+    </div>
+    <div class="fr-field">
+      <label>نشانی اینترنتی داخل بارکد QR (اختیاری):</label>
+      <input class="fr-input" name="report_qr_link" value="<?= e($s('report_qr_link')) ?>" style="direction:ltr" placeholder="<?= SITE_URL ?>" maxlength="255">
+      <small class="hint">در صورت خالی بودن، لینک صفحه کارنامه یا سامانه قرار می‌گیرد.</small>
+    </div>
+  </div>
+
+  <div class="fr-field" style="margin-bottom:14px">
+    <label>متن سلب مسئولیت و تذکر بالینی در پاورقی کارنامه:</label>
+    <textarea class="fr-input" name="report_disclaimer" rows="3" style="line-height:2"><?= e(fr_report_disclaimer()) ?></textarea>
+    <small class="hint">متن حقوقی و اخلاقی انتهای کارنامه در خصوص ارزیابی اولیه و لزوم مشاوره حضوری جهت تشخیص قطعی</small>
+  </div>
+
+  <div class="fr-field">
+    <label>پانوشت سفارشی اضافی گزارش:</label>
+    <div class="rte-toolbar" data-rte="rfoot"></div>
+    <div class="rte-area" id="rte-rfoot" contenteditable="true" style="min-height:80px"><?= e($s('report_footer')) ?></div>
+    <input type="hidden" name="report_footer" id="hd-rfoot">
   </div>
 </div>
 

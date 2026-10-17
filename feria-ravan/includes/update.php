@@ -1165,6 +1165,21 @@ function fr_update_pipeline(bool $force = false): void
             fr_db_run_safe_ddl("ALTER TABLE `{$p}users` MODIFY COLUMN `gender` VARCHAR(30) NULL DEFAULT NULL");
         } catch (Throwable $e) { error_log('feria: 4.4.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۹. نگارش ۴٫۵٫۰: رفع مشکل دریافت/چاپ PDF کارنامه در ابعاد استاندارد ISO A4، تنظیمات ارائه‌دهنده و محرمانگی پروتکل‌های مداخله بالینی
+        // ---------------------------------------------------------------------
+        try {
+            if (DB::setting('report_show_signature_box', null) === null) {
+                DB::setSetting('report_show_signature_box', '1');
+            }
+            if (DB::setting('report_show_qr', null) === null) {
+                DB::setSetting('report_show_qr', '1');
+            }
+            if (DB::setting('report_header_color', null) === null) {
+                DB::setSetting('report_header_color', '#1e3a6e');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.5.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

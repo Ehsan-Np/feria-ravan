@@ -14,6 +14,13 @@ DirectoryIndex index.php
 # سازگاری با پیوندهای آپلود قدیمی: هدایت امن assets/uploads به feria-uploads
 <IfModule mod_rewrite.c>
 RewriteEngine On
+
+# پیشگیری از خطای آدرس‌دهی دوگانه پنل (ناشی از تگ base یا ارجاع نسبی)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^panel/panel/(.*)$ panel/$1 [L,QSA]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^admin/panel/(.*)$ panel/$1 [L,QSA]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^assets/uploads/events/cover-workshop-(.*)$ feria-uploads/workshops/cover-workshop-$1 [L]
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -61,13 +68,7 @@ RewriteRule ^t/disc\-business/?$ test-page.php?s=disc-business [L,QSA]
 RewriteRule ^t/neo/?$ test-page.php?s=neo [L,QSA]
 RewriteRule ^t/gardner\-mi/?$ test-page.php?s=gardner-mi [L,QSA]
 RewriteRule ^t/eq\-shutte/?$ test-page.php?s=eq-shutte [L,QSA]
-RewriteRule ^t/anxiety/?$ test-page.php?s=anxiety [L,QSA]
-RewriteRule ^t/anxiety\-manager/?$ test-page.php?s=anxiety-manager [L,QSA]
-RewriteRule ^t/depression/?$ test-page.php?s=depression [L,QSA]
-RewriteRule ^t/depression\-manager/?$ test-page.php?s=depression-manager [L,QSA]
 RewriteRule ^t/jobsat/?$ test-page.php?s=jobsat [L,QSA]
-RewriteRule ^t/jobsat\-manager/?$ test-page.php?s=jobsat-manager [L,QSA]
-RewriteRule ^t/neo\-manager/?$ test-page.php?s=neo-manager [L,QSA]
 RewriteRule ^t/mbti/?$ test-page.php?s=mbti [L,QSA]
 RewriteRule ^t/holland/?$ test-page.php?s=holland [L,QSA]
 RewriteRule ^t/ysq/?$ test-page.php?s=ysq [L,QSA]
@@ -75,7 +76,12 @@ RewriteRule ^t/baron\-eq/?$ test-page.php?s=baron-eq [L,QSA]
 RewriteRule ^t/mmpi/?$ test-page.php?s=mmpi [L,QSA]
 RewriteRule ^t/raven/?$ test-page.php?s=raven [L,QSA]
 RewriteRule ^t/wais/?$ test-page.php?s=wais [L,QSA]
-RewriteRule ^t/qa\-free\-test\-1792244187/?$ test-page.php?s=qa-free-test-1792244187 [L,QSA]
+RewriteRule ^t/anxiety/?$ test-page.php?s=anxiety [L,QSA]
+RewriteRule ^t/anxiety\-manager/?$ test-page.php?s=anxiety-manager [L,QSA]
+RewriteRule ^t/depression/?$ test-page.php?s=depression [L,QSA]
+RewriteRule ^t/depression\-manager/?$ test-page.php?s=depression-manager [L,QSA]
+RewriteRule ^t/jobsat\-manager/?$ test-page.php?s=jobsat-manager [L,QSA]
+RewriteRule ^t/neo\-manager/?$ test-page.php?s=neo-manager [L,QSA]
 RewriteRule ^p/home/?$ page.php?slug=home [L,QSA]
 RewriteRule ^p/tests/?$ page.php?slug=tests [L,QSA]
 RewriteRule ^p/courses/?$ page.php?slug=courses [L,QSA]

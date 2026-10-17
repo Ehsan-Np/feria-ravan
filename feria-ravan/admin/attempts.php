@@ -219,7 +219,7 @@ if ($viewAttemptId > 0) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
         <a class="fr-btn ghost sm" href="<?= !empty($at['test_id']) ? 'attempts.php?test_id=' . (int)$at['test_id'] : 'attempts.php' ?>">← بازگشت به فهرست نتایج این آزمون (<?= e($at['test_title'] ?? '') ?>)</a>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="fr-btn sm" href="<?= SITE_URL ?>/panel/report-pdf.php?attempt=<?= $at['id'] ?>&auto=1" target="_blank">📄 دریافت / چاپ PDF کارنامه</a>
+          <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'])) ?>" target="_blank">📄 دریافت / چاپ PDF کارنامه</a>
           <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $at['id'] ?>" target="_blank">📋 پرونده بالینی مشاور</a>
           <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $at['id'] ?>" target="_blank">📝 مشاهده و ویرایش پاسخ‌ها</a>
 
@@ -348,7 +348,7 @@ if ($viewAttemptId > 0) {
 
       <!-- رندر کامل کارنامه و تحلیل روان‌سنجی -->
       <div style="background:#fff;border-radius:18px;border:1px solid var(--border);padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.03)">
-        <?= ReportBuilder::build($at, $uObj, $viewLevel) ?>
+        <?= ReportBuilder::build($at, $uObj, $viewLevel, ['isAdmin' => true]) ?>
       </div>
     </div>
     <?php
@@ -643,7 +643,7 @@ echo flash();
                   <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">
                     📋 پرونده
                   </a>
-                  <a class="fr-btn sm ghost" href="<?= SITE_URL ?>/panel/report-pdf.php?attempt=<?= $a['id'] ?>&auto=1" target="_blank" title="دریافت نسخه PDF">
+                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'])) ?>" target="_blank" title="دریافت نسخه چاپی و PDF کارنامه">
                     📄 PDF
                   </a>
                 <?php else: ?>

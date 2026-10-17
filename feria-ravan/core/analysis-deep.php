@@ -116,7 +116,13 @@ function fr_get_specialized_scale_analysis(string $engine, string $slug, string 
 
     if ($isFull) {
         $body .= '<p style="margin-top:10px;line-height:2"><b>⚙️ تحلیل روان‌سنجی سازه:</b> این سازه از طریق شاخص‌های ترکیبی و مقایسه با جامعهٔ مرجع استانداردسازی شده و در پیش‌بینی سازگاری هیجانی و عملکرد پایدار مراجع واجد روایی سازه‌ای بالاست.</p>';
-        $body .= '<div class="deep-interv" style="margin-top:12px;padding:12px 14px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;line-height:2.1;color:#166534"><b>🎯 راهنمای مداخله و پیشنهاد بالینی:</b> ' . $item['interv'] . '</div>';
+        $isAdmin = (bool)(function_exists('current_admin') && current_admin())
+                || (class_exists('ReportBuilder', false) && method_exists('ReportBuilder', 'isAdmin') && ReportBuilder::isAdmin());
+        if ($isAdmin && !empty($item['interv'])) {
+            $body .= '<div class="deep-interv" style="margin-top:12px;padding:12px 14px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;line-height:2.1;color:#166534">'
+                  . '<div style="display:inline-block;padding:2px 8px;border-radius:6px;background:#166534;color:#fff;font-size:11px;font-weight:bold;margin-bottom:6px">🔒 راهنمای بالینی اختصاصی مشاور و مدیر سامانه</div><br>'
+                  . '<b>🎯 راهنمای مداخله و پیشنهاد بالینی:</b> ' . $item['interv'] . '</div>';
+        }
     }
 
     return [
@@ -148,10 +154,16 @@ function fr_deep_scale(string $key, string $code, string $band, string $ctx = 'g
     if (!empty($sc['manif'])) $body .= '<div class="deep-manif" style="margin-top:10px;line-height:2"><b>🔍 تظاهرات رفتاری و نشانگان عینی:</b>' . (string)$sc['manif'] . '</div>';
 
     if ($isFull) {
+        $isAdmin = (bool)(function_exists('current_admin') && current_admin())
+                || (class_exists('ReportBuilder', false) && method_exists('ReportBuilder', 'isAdmin') && ReportBuilder::isAdmin());
         if (!empty($sc['mech'])) $body .= '<p style="margin-top:10px;line-height:2"><b>⚙️ سازوکار روان‌شناختی و عصب‌شناختی:</b> ' . (string)$sc['mech'] . '</p>';
         if ($mgr !== '') $body .= '<p class="deep-ctx" style="margin-top:10px;line-height:2"><b>🔹 در نقش مدیریت و تصمیم‌گیری حرفه‌ای:</b> ' . $mgr . '</p>';
         if ($fam !== '') $body .= '<p class="deep-ctx" style="margin-top:10px;line-height:2"><b>🔹 در روابط عاطفی و خانواده:</b> ' . $fam . '</p>';
-        if (!empty($sc['interv'])) $body .= '<div class="deep-interv" style="margin-top:12px;padding:12px 14px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;line-height:2.1;color:#166534"><b>🎯 راهنمای مداخلهٔ بالینی و پروتکل شواهدمحور:</b>' . (string)$sc['interv'] . '</div>';
+        if (!empty($sc['interv']) && $isAdmin) {
+            $body .= '<div class="deep-interv" style="margin-top:12px;padding:12px 14px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;line-height:2.1;color:#166534">'
+                  . '<div style="display:inline-block;padding:2px 8px;border-radius:6px;background:#166534;color:#fff;font-size:11px;font-weight:bold;margin-bottom:6px">🔒 راهنمای بالینی اختصاصی مشاور و مدیر سامانه</div><br>'
+                  . '<b>🎯 راهنمای مداخلهٔ بالینی و پروتکل شواهدمحور:</b>' . (string)$sc['interv'] . '</div>';
+        }
         if (!empty($sc['ref'])) $body .= '<p class="deep-ref" style="margin-top:10px;font-size:11.5px;color:#64748b">📚 <i>مرجع استاندارد: ' . (string)$sc['ref'] . '</i></p>';
     }
 

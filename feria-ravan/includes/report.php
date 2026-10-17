@@ -27,6 +27,14 @@ final class ReportBuilder
     /** نسخهٔ ۲٫۰ — حالت چاپ: نمودارهای مخصوص چاپ (خطی برای DISC / میله‌ای افقی برای بقیه) */
     private static bool $printMode = false;
 
+    /** نسخهٔ ۴٫۵٫۰ — دسترسی ادمین برای نمایش پروتکل‌های محرمانه مداخله بالینی */
+    private static bool $isAdmin = false;
+
+    public static function isAdmin(): bool
+    {
+        return self::$isAdmin;
+    }
+
     /** کارت اعتباری توسعه‌دهنده — متن/لینک از تنظیمات (footer_credit_text / footer_credit_url) */
     public static function creditBox(): string
     {
@@ -103,6 +111,21 @@ final class ReportBuilder
             $body = $auto ?: ('<p>' . self::fallbackText($r) . '</p>');
             $title = 'تحلیل بُعد «' . ($r['title_fa'] ?? $code) . '»';
         }
+
+        // تأمین و الحاق راهنمای مداخله بالینی منحصراً برای مدیران سامانه (در صورت عدم وجود در قالب باند)
+        if ($isFull && self::$isAdmin && !str_contains($body, 'deep-interv')) {
+            $anyTpl = $tplMap[$code . '|any'][0] ?? null;
+            if ($anyTpl && !empty($anyTpl['body']) && preg_match('/<div[^>]*class=[\x22\x27][^\x22\x27]*deep-interv[^\x22\x27]*[\x22\x27][^>]*>.*?<\/div>/usi', $anyTpl['body'], $im)) {
+                $body .= $im[0];
+            } elseif ($spec && !empty($spec['body']) && preg_match('/<div[^>]*class=[\x22\x27][^\x22\x27]*deep-interv[^\x22\x27]*[\x22\x27][^>]*>.*?<\/div>/usi', $spec['body'], $im)) {
+                $body .= $im[0];
+            }
+        }
+
+        // فیلترسازی و پایش پروتکل‌های محرمانه مداخله بالینی بر مبنای سطح دسترسی
+        if (function_exists('fr_filter_clinical_interventions')) {
+            $body = fr_filter_clinical_interventions($body, self::$isAdmin);
+        }
         ?>
     <div style="border-right:3px solid <?= e($r['color'] ?: 'var(--c-primary)') ?>;padding-right:14px;margin-bottom:22px">
       <b style="font-size:15px"><?= e($title) ?></b>
@@ -160,6 +183,7 @@ final class ReportBuilder
     public static function build(array $attempt, array $user, string $level, array $opts = []): string
     {
         self::$printMode = !empty($opts['print']);
+        self::$isAdmin   = isset($opts['isAdmin']) ? (bool)$opts['isAdmin'] : (bool)(function_exists('current_admin') && current_admin());
         $results = Analyzer::getResults((int)$attempt['id']);
         if (!$results) return '<div class="fr-alert err">نتایج یافت نشد.</div>';
 
@@ -399,7 +423,11 @@ final class ReportBuilder
   <?= self::creditBox() ?>
 </div>
         <?php
-        return (string)ob_get_clean();
+        $html = (string)ob_get_clean();
+        if (function_exists('fr_filter_clinical_interventions')) {
+            $html = fr_filter_clinical_interventions($html, self::$isAdmin);
+        }
+        return $html;
     }
 
     /** نام فارسی موتور برای کادر شفافیت (۱٫۸: تشخیص خانوادهٔ mslikert بر اساس اسلاگ) */

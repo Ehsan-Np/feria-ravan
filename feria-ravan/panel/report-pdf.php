@@ -1,13 +1,12 @@
 <?php
 /**
  * ============================================================================
- *  نسخهٔ چاپی گزارش تست روانشناسی — نسخهٔ ۲٫۰ (بازطراحی حرفه‌ای)
- *  ─ ابعاد دقیق استاندارد ISO A4 (۲۱۰×۲۹۷ میلی‌متر — @page{size:A4;margin:12mm})
- *  ─ قالب رسمی: سربرگ برند + راهنمای نمره‌ها + کارت تأییدیهٔ صدور
- *  ─ نمودار مخصوص هر تست روانشناسی: DISC = نمودار خطی (Line Chart سه‌سری) | بقیه = میله‌ای افقی
- *  ─ دکمهٔ «دانلود PDF» = چاپ مرورگر → Save as PDF — داخل PDF بارکد QR هست
- *  ─ بارکد QR با Google Chart API + کپشن «Feria.ir» + لینک دلخواه مدیر
- *    (تنظیمات ← گزارش: report_qr_link / report_qr_show) + جایگزین خودکار Code39
+ *  کارنامه رسمی ارزیابی روان‌شناختی و دریافت فایل استاندارد ISO A4 — نسخهٔ ۴٫۵٫۰
+ *  ─ ابعاد دقیق استاندارد بین‌المللی ISO A4 (۲۱۰ × ۲۹۷ میلی‌متر — @page{size:A4})
+ *  ─ کنترل دسترسی دوگانه (مدیر سایت برای تمام مراجعین / کاربر عادی برای آزمون‌های خود)
+ *  ─ حفظ محرمانگی بالینی: راهنمای مداخله و پروتکل شواهدمحور منحصراً برای مدیران
+ *  ─ ادغام اطلاعات ارائه‌دهنده، کلینیک، روانشناس ناظر، شماره نظام، لوگو و مهر دیجیتال
+ *  ─ بارکد QR اعتبارسنجی اصالت، کد رهگیری یکتا و کادر امضا و تأییدیه روانشناس
  * ============================================================================
  */
 declare(strict_types=1);
@@ -15,30 +14,103 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/admin-auth.php';
 require_once __DIR__ . '/../includes/view.php';
 require_once __DIR__ . '/../includes/report.php';
 require_once __DIR__ . '/../core/Analyzer.php';
 fr_bootstrap();
 
-$u = require_user();
-$attemptId = (int)($_GET['attempt'] ?? 0);
-$at = DB::one('SELECT * FROM ' . DB::t('attempts') . ' WHERE id=? AND user_id=?', [$attemptId, $u['id']]);
-if (!$at || $at['status'] === 'in_progress') redirect(fr_panel_url());
+$adm = function_exists('current_admin') ? current_admin() : null;
+$u   = function_exists('current_user') ? current_user() : null;
 
-$site   = fr_brand_title();
-$slogan = fr_brand_slogan();
-$logo   = fr_brand_logo();
-$rep    = (string)($at['rep_code'] ?? ('FR-' . $at['id']));
-$issued = strtotime((string)($at['completed_at'] ?: $at['started_at']));
+$attemptId = (int)($_GET['attempt'] ?? ($_GET['id'] ?? 0));
+if ($attemptId <= 0) {
+    if ($adm) redirect(SITE_URL . '/admin/attempts.php');
+    redirect(fr_panel_url('history.php'));
+}
 
-/* ── بارکد QR: سرویس نمودار گوگل + لینک قابل‌تنظیم مدیر ── */
-$qrLink = trim((string)DB::setting('report_qr_link', ''));
-if ($qrLink === '') $qrLink = SITE_URL;
-$qrShow = DB::setting('report_qr_show', '1') === '1';
-$qrSrc  = 'https://chart.googleapis.com/chart?cht=qr&chl=' . rawurlencode($qrLink)
-        . '&chs=150x150&choe=UTF-8&chld=L|1';
+$isAdmin = ($adm !== null);
+$at = null;
+$targetUser = null;
 
-$docTitle = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rep);
+if ($isAdmin) {
+    // مدیر به گزارش کلیه مراجعین دسترسی دارد
+    $at = DB::one('SELECT a.*, t.title as test_title, t.slug as test_slug, t.engine as test_engine, t.audience as test_audience,
+                          u.first_name, u.last_name, u.mobile, u.national_code, u.birth_date, u.gender
+                   FROM ' . DB::t('attempts') . ' a
+                   LEFT JOIN ' . DB::t('tests') . ' t ON t.id = a.test_id
+                   LEFT JOIN ' . DB::t('users') . ' u ON u.id = a.user_id
+                   WHERE a.id = ?', [$attemptId]);
+    if ($at && !empty($at['user_id'])) {
+        $targetUser = DB::one('SELECT * FROM ' . DB::t('users') . ' WHERE id = ?', [$at['user_id']]);
+    }
+} elseif ($u) {
+    // کاربر عادی صرفاً به آزمون‌های خود دسترسی دارد
+    $at = DB::one('SELECT a.*, t.title as test_title, t.slug as test_slug, t.engine as test_engine, t.audience as test_audience,
+                          u.first_name, u.last_name, u.mobile, u.national_code, u.birth_date, u.gender
+                   FROM ' . DB::t('attempts') . ' a
+                   LEFT JOIN ' . DB::t('tests') . ' t ON t.id = a.test_id
+                   LEFT JOIN ' . DB::t('users') . ' u ON u.id = a.user_id
+                   WHERE a.id = ? AND a.user_id = ?', [$attemptId, $u['id']]);
+    $targetUser = $u;
+} else {
+    redirect(SITE_URL . '/auth.php?back=' . urlencode($_SERVER['REQUEST_URI'] ?? ''));
+}
+
+if (!$at || $at['status'] === 'in_progress') {
+    if ($isAdmin) {
+        flash('کارنامه آزمون موردنظر یافت نشد یا آزمون هنوز به اتمام نرسیده است.', 'warn');
+        redirect(SITE_URL . '/admin/attempts.php');
+    }
+    flash('کارنامه آزمون یافت نشد.', 'warn');
+    redirect(fr_panel_url('history.php'));
+}
+
+// اطلاعات هویتی مراجع
+$clientName = trim(($targetUser['first_name'] ?? $at['first_name'] ?? '') . ' ' . ($targetUser['last_name'] ?? $at['last_name'] ?? '')) ?: 'مراجع گرامی';
+$clientMobile = (string)($targetUser['mobile'] ?? $at['mobile'] ?? '');
+$clientNationalCode = (string)($targetUser['national_code'] ?? $at['national_code'] ?? '');
+$clientGender = (string)($targetUser['gender'] ?? $at['gender'] ?? '');
+$clientGenderFa = match($clientGender) { 'female' => 'زن', 'male' => 'مرد', default => 'نامشخص' };
+$clientBirthDate = (string)($targetUser['birth_date'] ?? $at['birth_date'] ?? '');
+$clientAge = '';
+if ($clientBirthDate !== '' && preg_match('/^(\d{4})/', $clientBirthDate, $bm)) {
+    $by = (int)$bm[1];
+    $cy = (int)jdate('Y');
+    if ($by > 1300 && $by <= $cy) {
+        $clientAge = (string)($cy - $by) . ' سال';
+    }
+}
+
+// اطلاعات ارائه‌دهنده و روانشناس ناظر از تنظیمات مدیریت
+$providerName     = fr_report_provider_name();
+$providerSubtitle = fr_report_provider_subtitle();
+$providerLicense  = fr_report_provider_license();
+$doctorName       = fr_report_doctor_name();
+$doctorTitle      = fr_report_doctor_title();
+$doctorLicense    = fr_report_doctor_license();
+$providerLogo     = fr_report_provider_logo();
+$providerStamp    = fr_report_provider_stamp();
+$showSignature    = fr_report_show_signature_box();
+$providerPhone    = fr_report_provider_phone();
+$providerAddress  = fr_report_provider_address();
+$providerWebsite  = fr_report_provider_website();
+$headerColor      = fr_report_header_color();
+$disclaimer       = fr_report_disclaimer();
+$showQr           = fr_report_show_qr();
+
+$repCode = (string)($at['rep_code'] ?? ('FR-' . $at['id']));
+$completedTs = strtotime((string)($at['completed_at'] ?: $at['started_at']));
+$completedFa = fa_num(jdate('l j F Y — ساعت H:i', $completedTs));
+$issueDateFa = fa_num(jdate('j F Y', $completedTs));
+
+// لینک استعلام اصالت کارنامه
+$customQrLink = trim((string)DB::setting('report_qr_link', ''));
+$verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.php?attempt=' . (int)$at['id']);
+$qrSrc = 'https://chart.googleapis.com/chart?cht=qr&chl=' . rawurlencode($verifyUrl) . '&chs=160x160&choe=UTF-8&chld=L|1';
+
+$docTitle = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode);
+$backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']) : fr_panel_url('report.php?attempt=' . (int)$at['id']);
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -50,108 +122,554 @@ $docTitle = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rep);
 <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/feria.css?v=<?= FR_VERSION ?>">
 <?= fr_brand_css() ?>
 <style>
-  /* ══ صفحهٔ نمایش (پیش‌نمایش ورق A4 روی مانیتور) ══ */
-  body{background:#e9ecf5}
-  .pr-bar{position:sticky;top:0;background:linear-gradient(135deg,#2b1650,#1e3a6e);color:#fff;
-    padding:13px 22px;display:flex;gap:14px;align-items:center;justify-content:center;
-    z-index:9;box-shadow:0 4px 18px rgba(40,20,90,.25);flex-wrap:wrap}
-  .pr-bar .fr-btn{border-radius:12px}
-  .pr-page{width:210mm;min-height:297mm;margin:10mm auto;background:#fff;box-sizing:border-box;
-    padding:12mm;box-shadow:0 14px 46px rgba(30,20,80,.16);border-radius:4px;position:relative}
-  /* ══ چاپ: دقیقاً ISO A4، کاغذ سفید بدون سایه ══ */
-  @media print {
-    @page { size: A4; margin: 12mm; }
-    html,body{background:#fff!important}
-    .pr-bar{display:none!important}
-    .pr-page{width:100%!important;min-height:0;margin:0!important;padding:0!important;
-      box-shadow:none!important;border-radius:0}
-    .fr-card{box-shadow:none!important;border:1px solid #e8e4f6!important}
-    .fr-report .fr-card h3{border-bottom:1px solid #efeafc;padding-bottom:6px}
-    a{color:#1c2740!important;text-decoration:none!important}
-    .pr-verify{break-inside:avoid}
+  /* ══ متغیرها و چیدمان استاندارد ISO A4 ══ */
+  :root {
+    --pr-color: <?= e($headerColor) ?>;
+    --pr-accent: #7c3aed;
+    --pr-border: #e2e8f0;
+    --pr-text: #0f172a;
+    --pr-muted: #64748b;
   }
-  /* ══ هدر رسمی (سرلوحه) ══ */
-  .pr-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
-    background:linear-gradient(135deg,#2b1650 0%,#1e3a6e 100%);color:#fff;border-radius:16px;
-    padding:16px 22px;position:relative;overflow:hidden}
-  .pr-head::after{content:'';position:absolute;inset-inline-start:-40px;top:-60px;width:190px;height:190px;
-    background:radial-gradient(circle,rgba(255,255,255,.16),transparent 65%)}
-  .pr-head .pr-brand{display:flex;align-items:center;gap:12px}
-  .pr-head img{width:46px;height:46px;border-radius:14px;background:#fff;padding:4px;object-fit:contain}
-  .pr-head .pr-badge{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);
-    border-radius:12px;padding:6px 14px;font-size:11.5px;text-align:center;line-height:1.8}
-  /* ══ کارت تأییدیهٔ صدور (بارکد QR + کپشن Feria.ir) ══ */
-  .pr-verify{display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;
-    border:1.5px solid #ddd5f5;border-radius:16px;padding:16px 20px;margin-top:18px;background:#fafbfd}
-  .pr-verify .pr-qrbox{text-align:center}
-  .pr-verify .pr-qrbox img{width:96px;height:96px;image-rendering:pixelated;border:6px solid #fff;
-    border-radius:10px;box-shadow:0 4px 14px rgba(60,40,140,.15)}
-  .pr-verify .pr-qrbox .pr-cap{font-size:12.5px;font-weight:800;color:#2b1650;margin-top:5px;letter-spacing:.4px}
-  .pr-verify .pr-meta{font-size:12.5px;color:#4a4370;line-height:2.2}
-  .pr-verify .pr-code{font-weight:800;color:#2b1650}
-  .pr-canvas{display:block;width:100%}
-  .pr-legend{display:flex;gap:16px;justify-content:center;font-size:11.5px;color:var(--muted);
-    margin-top:8px;flex-wrap:wrap}
-  .pr-legend i{display:inline-block;width:22px;height:3px;border-radius:2px;vertical-align:middle;margin-left:5px}
+  * { box-sizing: border-box; }
+  body {
+    background: #e2e8f0;
+    margin: 0;
+    padding: 0;
+    font-family: Vazirmatn, Shabnam, Tahoma, system-ui, sans-serif;
+    color: var(--pr-text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* نوار کنترل بالای صفحه برای دانلود PDF و چاپ (فقط روی مانیتور) */
+  .pr-toolbar {
+    position: sticky;
+    top: 0;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    color: #fff;
+    padding: 12px 24px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 999;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.35);
+    flex-wrap: wrap;
+  }
+  .pr-toolbar-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .pr-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .pr-btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all .2s;
+    border: none;
+  }
+  .pr-btn-download {
+    background: #10b981;
+    color: #fff;
+  }
+  .pr-btn-download:hover { background: #059669; }
+  .pr-btn-print {
+    background: #3b82f6;
+    color: #fff;
+  }
+  .pr-btn-print:hover { background: #2563eb; }
+  .pr-btn-back {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+  .pr-btn-back:hover { background: rgba(255, 255, 255, 0.25); }
+
+  /* ══ برگه استاندارد ISO A4 (210mm × 297mm) ══ */
+  .pr-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 20mm auto;
+    background: #fff;
+    padding: 12mm 14mm;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    position: relative;
+    box-sizing: border-box;
+  }
+
+  /* ══ سربرگ رسمی کارنامه ══ */
+  .pr-header {
+    border-bottom: 2.5px solid var(--pr-color);
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+  .pr-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+  }
+  .pr-logo {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 4px;
+    background: #fff;
+  }
+  .pr-provider-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--pr-color);
+    margin: 0 0 3px 0;
+  }
+  .pr-provider-sub {
+    font-size: 11.5px;
+    color: var(--pr-muted);
+    line-height: 1.6;
+    margin: 0;
+  }
+  .pr-header-left {
+    text-align: left;
+    font-size: 11px;
+    line-height: 1.9;
+    color: #334155;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 14px;
+    min-width: 170px;
+  }
+  .pr-header-left b {
+    color: var(--pr-color);
+  }
+
+  /* ══ شناسنامه مشخصات مراجع و اطلاعات آزمون ══ */
+  .pr-demobox {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-demogrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px 14px;
+    font-size: 11.5px;
+    line-height: 1.8;
+  }
+  .pr-demogrid .item {
+    display: flex;
+    flex-direction: column;
+  }
+  .pr-demogrid .label {
+    color: var(--pr-muted);
+    font-size: 10.5px;
+  }
+  .pr-demogrid .val {
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  /* ══ جدول کمی نمرات و مقیاس‌ها ══ */
+  .pr-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px 0;
+    font-size: 11.5px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-table th {
+    background: #f1f5f9;
+    color: #334155;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    font-weight: 700;
+    text-align: center;
+  }
+  .pr-table td {
+    padding: 7px 10px;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+    color: #1e293b;
+  }
+  .pr-table tr:nth-child(even) { background: #fafafa; }
+  .pr-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  /* ══ کادر تأییدیه، امضا، مهر و بارکد اصالت ══ */
+  .pr-attestation {
+    margin-top: 24px;
+    padding-top: 14px;
+    border-top: 2px dashed #cbd5e1;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-qr-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 14px;
+  }
+  .pr-qr-img {
+    width: 86px;
+    height: 86px;
+    border: 2px solid #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  }
+  .pr-signature-section {
+    min-width: 260px;
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 16px;
+    background: #fafbfd;
+  }
+  .pr-stamp-img {
+    max-height: 64px;
+    max-width: 150px;
+    object-fit: contain;
+    margin: 4px auto;
+    display: block;
+  }
+
+  /* ══ پاورقی قانونی و سلب مسئولیت ══ */
+  .pr-disclaimer {
+    margin-top: 14px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 10px;
+    line-height: 1.8;
+    color: #64748b;
+    text-align: justify;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-footer-meta {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 9.5px;
+    color: #94a3b8;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 6px;
+  }
+
+  /* ══ سازگاری با پرینت و ساخت PDF استاندارد A4 ══ */
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 12mm 12mm;
+    }
+    html, body {
+      background: #fff !important;
+      color: #000 !important;
+      font-size: 10.5pt !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .pr-toolbar { display: none !important; }
+    .pr-sheet {
+      width: 100% !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+    .fr-card {
+      box-shadow: none !important;
+      border: 1px solid #e2e8f0 !important;
+      margin-bottom: 14px !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+    .avoid-break, .pr-demobox, .pr-attestation, .pr-disclaimer, .pr-table {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+    a { color: inherit !important; text-decoration: none !important; }
+  }
+
+  .pr-canvas { display: block; width: 100%; }
+  .pr-legend { display: flex; gap: 16px; justify-content: center; font-size: 11.5px; color: var(--pr-muted); margin-top: 8px; flex-wrap: wrap; }
+  .pr-legend i { display: inline-block; width: 22px; height: 3px; border-radius: 2px; vertical-align: middle; margin-left: 5px; }
 </style>
 </head>
 <body>
 
-<!-- نوار ابزار (فقط روی مانیتور) -->
-<div class="pr-bar">
-  <span style="font-size:13px">📄 برای دریافت فایل، روی <b>«دانلود PDF»</b> بزنید و در پنجرهٔ چاپ، مقصد را <b>Save as PDF</b> انتخاب کنید — بارکد و کد پیگیری داخل سند قرار دارد.</span>
-  <button class="fr-btn white sm" onclick="window.print()">📥 دانلود PDF</button>
-  <a class="fr-btn ghost sm" style="color:#fff;border-color:rgba(255,255,255,.5)" href="report.php?attempt=<?= (int)$at['id'] ?>">بازگشت به گزارش</a>
-</div>
-
-<!-- ورق A4 -->
-<div class="pr-page">
-
-  <!-- سرلوحهٔ رسمی -->
-  <div class="pr-head">
-    <div class="pr-brand">
-      <?php if ($logo !== ''): ?><img src="<?= e($logo) ?>" alt="<?= e($site) ?>"><?php endif; ?>
-      <div>
-        <b style="font-size:17px"><?= e($site) ?></b>
-        <?php if ($slogan !== ''): ?><div style="font-size:11px;opacity:.85;margin-top:2px"><?= e($slogan) ?></div><?php endif; ?>
+<!-- ── نوار ابزار دریافت و ذخیره فایل PDF A4 ── -->
+<div class="pr-toolbar">
+  <div class="pr-toolbar-info">
+    <span style="font-size:20px">📄</span>
+    <div>
+      <b style="font-size:14px">کارنامه رسمی ارزیابی روان‌شناختی (ابعاد استاندارد ISO A4)</b>
+      <div style="font-size:11.5px;opacity:.85;margin-top:2px">
+        کد رهگیری: <b><?= e($repCode) ?></b> &nbsp;·&nbsp;
+        مراجع: <b><?= e($clientName) ?></b> &nbsp;·&nbsp;
+        <?php if ($isAdmin): ?>
+          <span style="background:#4338ca;padding:2px 8px;border-radius:6px;font-size:11px">🛡️ دسترسی مدیر / مشاور فعال است</span>
+        <?php else: ?>
+          <span style="background:#059669;padding:2px 8px;border-radius:6px;font-size:11px">🔒 نسخه معتبر مراجع</span>
+        <?php endif; ?>
       </div>
     </div>
-    <div class="pr-badge">
-      📋 گزارش رسمی تست روانشناسی روان‌شناختی<br>
-      <span style="opacity:.85">تاریخ صدور: <?= fa_num(jdate('j F Y', $issued)) ?></span>
+  </div>
+
+  <div class="pr-toolbar-actions">
+    <?php if ($isAdmin): ?>
+      <a class="pr-btn-action" style="background:#6366f1;color:#fff" href="<?= SITE_URL ?>/admin/settings.php?tab=report" target="_blank" title="ویرایش لوگو، نام مرکز، مشخصات روانشناس و مهر">
+        ⚙️ تنظیمات ارائه‌دهنده
+      </a>
+    <?php endif; ?>
+    <button class="pr-btn-action pr-btn-download" onclick="window.frSavePdf()" title="دانلود و ذخیره فایل PDF با کیفیت برداری استاندارد A4">
+      📥 دانلود فایل PDF (A4)
+    </button>
+    <button class="pr-btn-action pr-btn-print" onclick="window.print()" title="چاپ مستقیم سند">
+      🖨️ چاپ مستقیم
+    </button>
+    <a class="pr-btn-action pr-btn-back" href="<?= e($backUrl) ?>">
+      ← بازگشت
+    </a>
+  </div>
+</div>
+
+<!-- ── برگه رسمی A4 ── -->
+<div class="pr-sheet" id="reportSheet">
+
+  <!-- ۱. سربرگ رسمی ارائه‌دهنده و کلینیک -->
+  <header class="pr-header">
+    <div class="pr-header-right">
+      <?php if ($providerLogo !== ''): ?>
+        <img class="pr-logo" src="<?= e($providerLogo) ?>" alt="<?= e($providerName) ?>">
+      <?php endif; ?>
+      <div>
+        <h1 class="pr-provider-title"><?= e($providerName) ?></h1>
+        <p class="pr-provider-sub"><?= e($providerSubtitle) ?></p>
+        <?php if ($providerLicense !== ''): ?>
+          <div style="font-size:10.5px;color:var(--pr-color);font-weight:600;margin-top:2px">
+            <?= e($providerLicense) ?>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <div class="pr-header-left">
+      <div>کد کارنامه: <b dir="ltr"><?= e($repCode) ?></b></div>
+      <div>تاریخ صدور: <b><?= $issueDateFa ?></b></div>
+      <?php if ($doctorName !== ''): ?>
+        <div>ناظر بالینی: <b><?= e($doctorName) ?></b></div>
+      <?php endif; ?>
+      <?php if ($doctorLicense !== ''): ?>
+        <div>شماره نظام: <b dir="ltr"><?= e($doctorLicense) ?></b></div>
+      <?php endif; ?>
+    </div>
+  </header>
+
+  <!-- ۲. شناسنامه اطلاعات مراجع و ارزیابی -->
+  <div class="pr-demobox">
+    <div class="pr-demogrid">
+      <div class="item">
+        <span class="label">نام و نام خانوادگی مراجع:</span>
+        <span class="val"><?= e($clientName) ?></span>
+      </div>
+      <div class="item">
+        <span class="label">کد ملی / شناسه هویتی:</span>
+        <span class="val" dir="ltr"><?= e($clientNationalCode ?: '—') ?></span>
+      </div>
+      <div class="item">
+        <span class="label">شماره تلفن همراه:</span>
+        <span class="val" dir="ltr"><?= fa_num($clientMobile ?: '—') ?></span>
+      </div>
+      <div class="item">
+        <span class="label">جنسیت / سن:</span>
+        <span class="val"><?= e($clientGenderFa) ?><?= $clientAge !== '' ? (' / ' . fa_num($clientAge)) : '' ?></span>
+      </div>
+      <div class="item">
+        <span class="label">عنوان ابزار سنجش:</span>
+        <span class="val" style="color:var(--pr-color)"><?= e($at['test_title'] ?? 'آزمون روان‌شناختی') ?></span>
+      </div>
+      <div class="item">
+        <span class="label">تاریخ و زمان اجرا:</span>
+        <span class="val"><?= $completedFa ?></span>
+      </div>
+      <div class="item">
+        <span class="label">سطح ارزیابی:</span>
+        <span class="val"><?= $at['mode'] === 'full' ? 'گزارش تفصیلی و تخصصی' : 'گزارش غربالگری اولیه' ?></span>
+      </div>
+      <div class="item">
+        <span class="label">روانشناس / مسئول فنی:</span>
+        <span class="val"><?= e($doctorName ?: ($providerName)) ?></span>
+      </div>
     </div>
   </div>
 
-  <!-- بدنهٔ گزارش (حالت چاپ: نمودار خطی/افقی مخصوص چاپ) -->
-  <?= ReportBuilder::build($at, $u, $at['mode'], ['print' => true]) ?>
-
-  <!-- کارت تأییدیهٔ صدور — بارکد QR + کپشن Feria.ir (۲٫۰) -->
-  <?php if ($qrShow): ?>
-  <div class="pr-verify" dir="rtl">
-    <div class="pr-meta">
-      <b style="font-size:14px;color:#2b1650">🔏 تأییدیهٔ صدور گزارش</b><br>
-      کد پیگیری گزارش: <span class="pr-code" dir="ltr"><?= e($rep) ?></span><br>
-      تاریخ صدور: <?= fa_num(jdate('l j F Y', $issued)) ?><br>
-      <span style="font-size:11.5px;color:var(--muted)">برای بررسی صحت و ادعای این گزارش، بارکد را اسکن کنید.</span>
-      <div id="frQrNote" style="display:none;font-size:10.5px;color:var(--muted)">بارکد جایگزین (حالت آفلاین)</div>
-    </div>
-    <div class="pr-qrbox">
-      <img id="frQrImg" src="<?= e($qrSrc) ?>" alt="QR" loading="eager" decoding="async"
-           data-fallback="1">
-      <span id="frQrFallback" style="display:none"><?= barcode39_svg($rep, 52) ?></span>
-      <div class="pr-cap"><?= e(fr_brand_name_en() ?: 'Feria.ir') ?></div>
-    </div>
+  <!-- ۳. جدول خلاصه نمرات تراز و وضعیت مقیاس‌ها -->
+  <?php
+  $results = Analyzer::getResults((int)$at['id']);
+  if (!empty($results)):
+  ?>
+  <div class="avoid-break" style="margin-bottom:18px">
+    <h3 style="font-size:13px;margin:0 0 8px 0;color:var(--pr-color);border-right:3px solid var(--pr-color);padding-right:8px">
+      📊 جدول رسمی نمرات تراز، استن و رتبه درصدی مقیاس‌ها
+    </h3>
+    <table class="pr-table">
+      <thead>
+        <tr>
+          <th style="width:36px">ردیف</th>
+          <th style="text-align:right">مقیاس / سازه روان‌شناختی</th>
+          <th style="width:75px">نمره درصد</th>
+          <th style="width:75px">نمره تراز T</th>
+          <th style="width:65px">استن</th>
+          <th style="width:85px">رتبه درصدی</th>
+          <th style="width:95px">دامنه تفسیری</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php
+        $idx = 1;
+        $bandFaMap = [
+          'very_low'  => ['خیلی پایین', '#3aa0ff', '#eff6ff'],
+          'low'       => ['پایین', '#19a974', '#f0fdf4'],
+          'medium'    => ['متعادل', '#8b5cf6', '#faf5ff'],
+          'high'      => ['بالا', '#f59e0b', '#fffbeb'],
+          'very_high' => ['خیلی بالا', '#e0393f', '#fef2f2'],
+        ];
+        foreach ($results as $res):
+            $bInfo = $bandFaMap[$res['band']] ?? [$res['band'], '#64748b', '#f8fafc'];
+        ?>
+        <tr>
+          <td><?= fa_num($idx++) ?></td>
+          <td style="text-align:right;font-weight:600"><?= e($res['title_fa'] ?? $res['scale_code']) ?></td>
+          <td><b><?= fa_num($res['percent']) ?>٪</b></td>
+          <td dir="ltr"><?= !empty($res['t_score']) ? fa_num($res['t_score']) : '—' ?></td>
+          <td><?= !empty($res['sten_score']) ? (fa_num($res['sten_score']) . '/۱۰') : '—' ?></td>
+          <td><?= !empty($res['percentile']) ? (fa_num($res['percentile']) . '٪') : '—' ?></td>
+          <td>
+            <span class="pr-pill" style="color:<?= $bInfo[1] ?>;background:<?= $bInfo[2] ?>;border:1px solid <?= $bInfo[1] ?>44">
+              <?= e($bInfo[0]) ?>
+            </span>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
   </div>
   <?php endif; ?>
+
+  <!-- ۴. بدنه تحلیلی کارنامه روان‌سنجی (نمودارهای وکتور + تحلیل تخصصی) -->
+  <div class="pr-content">
+    <?= ReportBuilder::build($at, $targetUser ?: [
+        'first_name' => $at['first_name'] ?? '',
+        'last_name' => $at['last_name'] ?? '',
+        'mobile' => $at['mobile'] ?? '',
+    ], $at['mode'], [
+        'print'   => true,
+        'isAdmin' => $isAdmin,
+    ]) ?>
+  </div>
+
+  <!-- ۵. کادر اعتبارسنجی QR و امضا و مهر رسمی مرکز -->
+  <div class="pr-attestation">
+    <!-- بارکد و استعلام اصالت -->
+    <?php if ($showQr): ?>
+      <div class="pr-qr-section">
+        <img id="frQrImg" class="pr-qr-img" src="<?= e($qrSrc) ?>" alt="بارکد اصالت سنجی">
+        <span id="frQrFallback" style="display:none"><?= barcode39_svg($repCode, 52) ?></span>
+        <div style="font-size:11px;line-height:1.9">
+          <b style="color:var(--pr-color);font-size:12px">🔏 اصالت‌سنجی رسمی کارنامه</b><br>
+          کد رهگیری: <b style="color:#0f172a" dir="ltr"><?= e($repCode) ?></b><br>
+          <span style="color:var(--pr-muted)">جهت استعلام اصالت و صدور این کارنامه، بارکد را اسکن فرمایید.</span>
+        </div>
+      </div>
+    <?php endif; ?>
+
+    <!-- کادر امضا و مهر ناظر بالینی -->
+    <?php if ($showSignature): ?>
+      <div class="pr-signature-section">
+        <div style="font-size:12px;font-weight:700;color:var(--pr-color);margin-bottom:6px">
+          تأییدیه و مهر ناظر علمی آزمون
+        </div>
+        <?php if ($providerStamp !== ''): ?>
+          <img class="pr-stamp-img" src="<?= e($providerStamp) ?>" alt="مهر و امضا">
+        <?php else: ?>
+          <div style="height:55px;border-bottom:1px dashed #cbd5e1;display:flex;align-items:flex-end;justify-content:center;color:#94a3b8;font-size:10.5px;padding-bottom:4px">
+            محل مهر و امضای روانشناس ناظر
+          </div>
+        <?php endif; ?>
+        <div style="font-size:11.5px;font-weight:700;color:#1e293b;margin-top:4px">
+          <?= e($doctorName ?: $providerName) ?>
+        </div>
+        <div style="font-size:10.5px;color:var(--pr-muted)">
+          <?= e($doctorTitle) ?><?= $doctorLicense !== '' ? (' — نظام: ' . e($doctorLicense)) : '' ?>
+        </div>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- ۶. تذکرات بالینی و سلب مسئولیت حقوقی -->
+  <?php if ($disclaimer !== ''): ?>
+    <div class="pr-disclaimer">
+      <b>⚠️ یادداشت بالینی و سلب مسئولیت:</b> <?= e($disclaimer) ?>
+    </div>
+  <?php endif; ?>
+
+  <!-- ۷. مشخصات تماس و پاورقی نهایی -->
+  <footer class="pr-footer-meta">
+    <div>
+      <?= e($providerName) ?>
+      <?php if ($providerPhone !== ''): ?> &nbsp;·&nbsp; تلفن: <?= e($providerPhone) ?><?php endif; ?>
+      <?php if ($providerAddress !== ''): ?> &nbsp;·&nbsp; نشانی: <?= e($providerAddress) ?><?php endif; ?>
+    </div>
+    <div>
+      <?= e($providerWebsite) ?> &nbsp;·&nbsp; سامانه روان‌سنجی فریا روان
+    </div>
+  </footer>
 
 </div>
 
 <script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
 <script>
 /* ══════════════════════════════════════════════════════════════════
-   نمودارهای مخصوص چاپ (۲٫۰) — رسم روی Canvas بدون هیچ وابستگی
-   line  → نمودار خطی چندسریی (مخصوص DISC)
-   hbars → میله‌ای افقی با رنگ هر مقیاس و نام باند (سایر تست‌های روانشناسی)
+   رسم باکیفیت و برداری نمودارهای اختصاصی چاپ ISO A4 روی Canvas
+   line  → نمودار خطی DISC
+   hbars → نمودار میله‌ای افقی سایر آزمون‌ها
    ══════════════════════════════════════════════════════════════════ */
 (function () {
   function faN(n) { return String(Math.round(n)).replace(/\d/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }); }
@@ -161,26 +679,22 @@ $docTitle = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rep);
     cnv.width = cssW * 2; cnv.height = cssH * 2; ctx.scale(2, 2);
     return { ctx: ctx, w: cssW, h: cssH };
   }
-  var FONT = 'Vazirmatn, Tahoma, sans-serif';
+  var FONT = 'Vazirmatn, Shabnam, Tahoma, sans-serif';
 
-  /* ── نمودار خطی چندسریی: DISC ── */
   function drawLine(cnv, cfg) {
     var p = prep(cnv), ctx = p.ctx, w = p.w, h = p.h;
     var padL = 14, padR = 40, padT = 30, padB = 34;
     var xs = cfg.labels.length, ix = function (i) { return padL + (w - padL - padR) * i / Math.max(1, xs - 1); };
     var iy = function (v) { return h - padB - (h - padT - padB) * Math.max(0, Math.min(100, v)) / 100; };
-    /* خطوط شبکه + درصدها (سمت راست، فارسی) */
     ctx.strokeStyle = '#efecf8'; ctx.lineWidth = 1;
-    ctx.fillStyle = '#a49ec7'; ctx.font = '10px ' + FONT; ctx.textAlign = 'left';
+    ctx.fillStyle = '#94a3b8'; ctx.font = '10px ' + FONT; ctx.textAlign = 'left';
     for (var gi = 0; gi <= 5; gi++) {
       var y = iy(gi * 20);
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
       ctx.fillText(faN(gi * 20) + '٪', w - padR + 6, y + 3);
     }
-    /* لیبل محور افقی */
-    ctx.fillStyle = '#4a4370'; ctx.font = 'bold 11px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillStyle = '#334155'; ctx.font = 'bold 11px ' + FONT; ctx.textAlign = 'center';
     cfg.labels.forEach(function (lb, i) { ctx.fillText(lb, ix(i), h - padB + 18); });
-    /* هر سری: خط + نقطهٔ دولایه + مقدار روی نقطه */
     cfg.series.forEach(function (s) {
       ctx.strokeStyle = s.color; ctx.lineWidth = 2.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.beginPath();
@@ -189,38 +703,32 @@ $docTitle = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rep);
       s.values.forEach(function (v, i) {
         ctx.beginPath(); ctx.arc(ix(i), iy(v), 4.4, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
         ctx.beginPath(); ctx.arc(ix(i), iy(v), 3.2, 0, 7); ctx.fillStyle = s.color; ctx.fill();
-        ctx.fillStyle = '#3a3360'; ctx.font = 'bold 9.5px ' + FONT; ctx.textAlign = 'center';
+        ctx.fillStyle = '#1e293b'; ctx.font = 'bold 9.5px ' + FONT; ctx.textAlign = 'center';
         ctx.fillText(faN(v) + '٪', ix(i), iy(v) - 9);
       });
     });
   }
 
-  /* ── میله‌ای افقی: NEO / YSQ / screen / jobsat / mslikert ── */
   function drawHBars(cnv, cfg) {
     var bars = cfg.bars || [];
-    /* ارتفاع بومی واکنش‌گرا: برای مقیاس‌های زیاد (YSQ ۱۸تایی) منعطف */
-    var rowH = bars.length > 10 ? 21 : 26;
-    var needH = bars.length * rowH + 22;
+    var rowH = bars.length > 10 ? 22 : 28;
+    var needH = bars.length * rowH + 24;
     if (cnv.offsetHeight < needH) cnv.style.height = needH + 'px';
     var p = prep(cnv), ctx = p.ctx, w = p.w, h = p.h;
-    var labelW = 150, padR = 14, padL = 46;
+    var labelW = 150, padR = 14, padL = 50;
     var x0 = labelW, x1 = w - padL - padR;
     bars.forEach(function (b, i) {
       var y = 10 + i * rowH, bh = rowH * 0.52;
-      /* عنوان مقیاس (راست‌چین) */
-      ctx.fillStyle = '#3a3360'; ctx.font = 'bold 10.5px ' + FONT; ctx.textAlign = 'right';
+      ctx.fillStyle = '#1e293b'; ctx.font = 'bold 10.5px ' + FONT; ctx.textAlign = 'right';
       ctx.fillText(b.label, labelW - 8, y + bh - 2);
-      /* ریل زمینه */
-      ctx.fillStyle = '#f2f0fa';
+      ctx.fillStyle = '#f1f5f9';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x0, y, x1 - x0, bh, bh / 2); ctx.fill(); }
       else ctx.fillRect(x0, y, x1 - x0, bh);
-      /* میلهٔ شاخص */
       var bw = Math.max(3, (x1 - x0) * Math.min(100, b.value) / 100);
       ctx.fillStyle = b.color;
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x0, y, bw, bh, bh / 2); ctx.fill(); }
       else ctx.fillRect(x0, y, bw, bh);
-      /* مقدار + باند */
-      ctx.fillStyle = '#5b547f'; ctx.font = 'bold 9.5px ' + FONT; ctx.textAlign = 'left';
+      ctx.fillStyle = '#475569'; ctx.font = 'bold 9.5px ' + FONT; ctx.textAlign = 'left';
       ctx.fillText(faN(b.value) + '٪' + (b.band ? ' — ' + b.band : ''), x0 + bw + 6, y + bh - 2);
     });
   }
@@ -229,32 +737,42 @@ $docTitle = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $rep);
     try {
       var cfg = JSON.parse(cnv.getAttribute('data-pr'));
       if (cfg.type === 'line') drawLine(cnv, cfg); else drawHBars(cnv, cfg);
-      /* راهنمای سری‌های نمودار خطی */
       var lg = cnv.parentNode.querySelector('[data-pr-legend]');
       if (lg && cfg.type === 'line') {
         lg.innerHTML = cfg.series.map(function (s) {
           return '<span><i style="background:' + s.color + '"></i>' + s.name + '</span>';
         }).join('');
       }
-    } catch (e) { /* نادیده */ }
+    } catch (e) { }
   });
 
-  /* ── بارکد QR: اگر سرویس گوگل در دسترس نبود → بارکد داخلی Code39 ── */
+  // جایگزین بارکد QR در صورت عدم اتصال
   var qr = document.getElementById('frQrImg');
   if (qr) {
     var swap = function () {
       qr.style.display = 'none';
-      var fb = document.getElementById('frQrFallback'), nt = document.getElementById('frQrNote');
+      var fb = document.getElementById('frQrFallback');
       if (fb) fb.style.display = 'inline-block';
-      if (nt) nt.style.display = 'block';
     };
     if (qr.complete && qr.naturalWidth === 0) swap();
     qr.addEventListener('error', swap);
   }
 
-  /* ── چاپ خودکار با ?auto=1 + نام فایل سند از عنوان صفحه ── */
+  // متد ذخیره و دریافت مستقیم PDF استاندارد ISO A4
+  window.frSavePdf = function () {
+    // باز کردن پنجره چاپ مرورگر که خروجی برداری ۱۰۰٪ دقیق A4 تولید می‌کند
+    window.print();
+  };
+
+  // چاپ خودکار در صورت فراخوانی با ?auto=1
   if (new URLSearchParams(location.search).get('auto') === '1') {
-    setTimeout(function () { window.print(); }, 650);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () {
+        setTimeout(function () { window.print(); }, 400);
+      });
+    } else {
+      setTimeout(function () { window.print(); }, 700);
+    }
   }
 })();
 </script>

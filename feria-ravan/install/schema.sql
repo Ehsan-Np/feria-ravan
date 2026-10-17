@@ -1026,7 +1026,10 @@ INSERT IGNORE INTO `{{prefix}}settings` (`key`, `value`, `autoload`) VALUES
 ('site_title', 'فریا روان', 1),
 ('site_slogan', 'سامانه جامع تست‌های روانشناسی، کارگاه و مشاوره', 1),
 ('footer_credit_text', 'طراحی و کد نویسی : احسان نادری پناه – 09024561001 | فریا', 1),
-('footer_credit_url', 'https://feria.ir', 1);
+('footer_credit_url', 'https://feria.ir', 1),
+('report_show_signature_box', '1', 1),
+('report_show_qr', '1', 1),
+('report_header_color', '#1e3a6e', 1);
 
 
 INSERT IGNORE INTO `{{prefix}}tests` (`id`, `slug`, `title`, `short_desc`, `engine`, `audience`, `question_count`, `est_minutes`, `price_full`, `price_sale`, `free_enabled`, `sort_order`, `status`) VALUES

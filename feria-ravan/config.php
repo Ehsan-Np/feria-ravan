@@ -22,7 +22,7 @@ if (!defined('DB_PREFIX')) define('DB_PREFIX', '{{DB_PREFIX}}');
 if (!defined('SITE_URL'))  define('SITE_URL',  '{{SITE_URL}}');
 
 /* کلید رمزنگاری داده‌های حساس — در صورت عدم مقداردهی، به‌صورت خودکار و ایمن تولید می‌شود */
-$rawCryptKey = '{{ENCRYPT_KEY}}';
+$rawCryptKey = '1d695bc8e6b75c418d0761c79b0ea4aaa74d3fdf604096e418e062c362bed0bc';
 if ($rawCryptKey === '{{' . 'ENCRYPT_KEY' . '}}' || trim($rawCryptKey) === '') {
     $keyFile = __DIR__ . '/storage/.crypt_key';
     $savedKey = '';
@@ -60,7 +60,7 @@ if (!defined('FR_ENV')) define('FR_ENV', 'production');
 
 if (!defined('FR_ROOT')) define('FR_ROOT', dirname(__FILE__));
 /* نسخهٔ ۲٫۵: نگارش واقعی کد در includes/version.php (FR_RELEASE) است؛ این‌جا فقط Fallback */
-if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.4.0');
+if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.5.0');
 
 /* ---------------------------------------------------------------------------
  | اگر این فایل هنوز «قالب خام» است (مقادیر جایگزین نشده‌اند)، نصب انجام نشده

@@ -902,5 +902,134 @@ if (!function_exists('fr_render_rich_html')) {
     }
 }
 
+/**
+ * ============================================================================
+ *  تنظیمات و متغیرهای کارنامه رسمی ارزیابی و گزارش PDF (نسخهٔ ۴٫۵٫۰)
+ * ============================================================================
+ */
+if (!function_exists('fr_report_provider_name')) {
+    function fr_report_provider_name(): string {
+        $v = trim((string)DB::setting('report_provider_name', ''));
+        return $v !== '' ? $v : fr_brand_title();
+    }
+}
+
+if (!function_exists('fr_report_provider_subtitle')) {
+    function fr_report_provider_subtitle(): string {
+        $v = trim((string)DB::setting('report_provider_subtitle', ''));
+        return $v !== '' ? $v : (fr_brand_slogan() ?: 'مرکز تخصصی ارزیابی‌های روان‌شناختی، روان‌سنجی و مشاوره');
+    }
+}
+
+if (!function_exists('fr_report_provider_license')) {
+    function fr_report_provider_license(): string {
+        return trim((string)DB::setting('report_provider_license', ''));
+    }
+}
+
+if (!function_exists('fr_report_doctor_name')) {
+    function fr_report_doctor_name(): string {
+        return trim((string)DB::setting('report_doctor_name', ''));
+    }
+}
+
+if (!function_exists('fr_report_doctor_title')) {
+    function fr_report_doctor_title(): string {
+        $v = trim((string)DB::setting('report_doctor_title', ''));
+        return $v !== '' ? $v : 'متخصص روان‌شناسی بالینی و روان‌سنج';
+    }
+}
+
+if (!function_exists('fr_report_doctor_license')) {
+    function fr_report_doctor_license(): string {
+        return trim((string)DB::setting('report_doctor_license', ''));
+    }
+}
+
+if (!function_exists('fr_report_provider_logo')) {
+    function fr_report_provider_logo(): string {
+        $v = trim((string)DB::setting('report_provider_logo', ''));
+        return $v !== '' ? $v : fr_brand_logo();
+    }
+}
+
+if (!function_exists('fr_report_provider_stamp')) {
+    function fr_report_provider_stamp(): string {
+        return trim((string)DB::setting('report_provider_stamp', ''));
+    }
+}
+
+if (!function_exists('fr_report_show_signature_box')) {
+    function fr_report_show_signature_box(): bool {
+        return DB::setting('report_show_signature_box', '1') === '1';
+    }
+}
+
+if (!function_exists('fr_report_show_qr')) {
+    function fr_report_show_qr(): bool {
+        return DB::setting('report_show_qr', '1') === '1' && DB::setting('report_qr_show', '1') === '1';
+    }
+}
+
+if (!function_exists('fr_report_provider_phone')) {
+    function fr_report_provider_phone(): string {
+        return trim((string)DB::setting('report_provider_phone', ''));
+    }
+}
+
+if (!function_exists('fr_report_provider_address')) {
+    function fr_report_provider_address(): string {
+        return trim((string)DB::setting('report_provider_address', ''));
+    }
+}
+
+if (!function_exists('fr_report_provider_website')) {
+    function fr_report_provider_website(): string {
+        $v = trim((string)DB::setting('report_provider_website', ''));
+        return $v !== '' ? $v : SITE_URL;
+    }
+}
+
+if (!function_exists('fr_report_header_color')) {
+    function fr_report_header_color(): string {
+        $v = trim((string)DB::setting('report_header_color', ''));
+        return preg_match('/^#[0-9a-fA-F]{3,8}$/', $v) ? $v : '#1e3a6e';
+    }
+}
+
+if (!function_exists('fr_report_disclaimer')) {
+    function fr_report_disclaimer(): string {
+        $v = trim((string)DB::setting('report_disclaimer', ''));
+        if ($v !== '') return $v;
+        return 'این کارنامه بر اساس ابزارهای معتبر روان‌سنجی تولید شده است و به عنوان راهنمای خودشناسی و ارزیابی اولیه بالینی معتبر است. هرگونه تشخیص قطعی و مداخله تخصصی باید زیر نظر روانشناس ذی‌صلاح صورت پذیرد.';
+    }
+}
+
+/**
+ * فیلترسازی و حذف بخش‌های محرمانه اتاق درمان و پروتکل‌های مداخله برای کاربران عادی
+ * الزام حفاظتی: «🎯 راهنمای مداخلهٔ بالینی و پروتکل شواهدمحور» به هیچ وجه نباید در اختیار کاربر قرار گیرد
+ * و تنها برای مدیران و مشاوران ارشد سایت قابل نمایش است.
+ */
+if (!function_exists('fr_filter_clinical_interventions')) {
+    function fr_filter_clinical_interventions(string $html, bool $isAdmin = false): string
+    {
+        if ($isAdmin) {
+            return $html;
+        }
+
+        // ۱) حذف کامل بلوک‌های با کلاس deep-interv
+        $clean = preg_replace('/<div[^>]*class=[\x22\x27][^\x22\x27]*deep-interv[^\x22\x27]*[\x22\x27][^>]*>.*?<\/div>/usi', '', $html);
+
+        // ۲) حذف پاراگراف‌ها یا بخش‌های دارای عنوان راهنمای مداخله
+        $clean = preg_replace('/<(?:p|div|section|li)[^>]*>.*?<b[^>]*>.*?(?:راهنمای\s*مداخله|پروتکل\s*مداخله).*?<\/b>.*?<\/(?:p|div|section|li)>/usi', '', (string)$clean);
+
+        // ۳) حذف کادرهای مشخص شده با data-section="clinical-intervention"
+        $clean = preg_replace('/<div[^>]*data-section=[\x22\x27]clinical-intervention[\x22\x27][^>]*>.*?<\/div>/usi', '', (string)$clean);
+
+        return (string)$clean;
+    }
+}
+
+
 
 
