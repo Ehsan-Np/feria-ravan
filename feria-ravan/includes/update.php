@@ -1084,6 +1084,12 @@ function fr_update_pipeline(bool $force = false): void
             require_once FR_ROOT . '/core/analysis-deep.php';
         } catch (Throwable $e) { error_log('feria: 3.5.1 clinical psychometric engine migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۵٫۲: فیلدهای سفارشی و منطق شرطی تست‌های روان‌شناسی ---- */
+        try {
+            require_once FR_ROOT . '/core/TestFields.php';
+            TestFields::ensureSchema();
+        } catch (Throwable $e) { error_log('feria: 3.5.2 test custom fields migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

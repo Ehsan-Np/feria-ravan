@@ -15,7 +15,10 @@ require_once __DIR__ . '/../includes/commerce.php';
 require_once __DIR__ . '/../includes/wallet.php';
 require_once __DIR__ . '/../core/Kavenegar.php';
 require_once __DIR__ . '/../core/Zarinpal.php';
+require_once __DIR__ . '/../core/TestFields.php';
 fr_bootstrap();
+
+TestFields::ensureSchema();
 
 $u    = require_user();
 $activeDyadToken = trim((string)($_GET['dyad_token'] ?? ($_SESSION['active_dyad_token'] ?? '')));
@@ -87,78 +90,94 @@ if ($open && $open['os'] === 'paid' && $completedFree) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = (string)($_POST['mode'] ?? 'free');
 
-    // استفاده از هدیه پرداخت‌شده توسط همراه
-    if ($isDyadGift && ($mode === 'gift' || $mode === 'full')) {
-        if ($completedFree) {
-            DB::update('attempts', ['mode' => 'full', 'order_id' => $dyadContext['order1_id']], 'id=?', [$completedFree['id']]);
-            require_once __DIR__ . '/../core/Analyzer.php';
-            Analyzer::scoreAttempt((int)$completedFree['id']);
-            require_once __DIR__ . '/../core/DyadAnalyzer.php';
-            DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$completedFree['id']);
-            flash('آزمون شما با استفاده از هدیهٔ همراهتان به نسخه تخصصی ارتقا یافت! گزارش تطابق آماده است 🎉', 'ok');
-            redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
-        } else {
-            $aid = DB::insert('attempts', [
-                'user_id'    => $u['id'],
-                'test_id'    => $test['id'],
-                'mode'       => 'full',
-                'order_id'   => $dyadContext['order1_id'],
-                'ip'         => client_ip_bin(),
-                'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
-            ]);
-            log_activity('test_start', 'attempt', $aid, ['mode' => 'full', 'test' => $test['slug'], 'dyad_gift' => 1]);
-            redirect(fr_panel_url('take.php?attempt=' . $aid));
-        }
-    }
+    // اعتبارسنجی فیلدهای سفارشی و اجرای منطق شرطی
+    $tfValidation = TestFields::validateAndProcess((int)$test['id'], $mode, $_POST);
+    if (!$tfValidation['ok']) {
+        $err = implode('<br>', $tfValidation['errors']);
+    } else {
+        $customFieldsJson = $tfValidation['json'];
 
-    if ($mode === 'free') {
-        if (!$test['free_enabled']) $err = 'نسخهٔ رایگان این تست روانشناسی غیرفعال است.';
-        else {
-            // هر کاربر فقط یک نسخهٔ رایگان از هر تست روانشناسی
-            $hadFree = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') .
-                " WHERE user_id=? AND test_id=? AND mode='free'", [$u['id'], $test['id']]);
-            if ($hadFree) $err = 'نسخهٔ رایگان هر تست روانشناسی فقط یک‌بار قابل انجام است؛ نسخهٔ ویژه را انتخاب کنید.';
-            else {
+        // استفاده از هدیه پرداخت‌شده توسط همراه
+        if ($isDyadGift && ($mode === 'gift' || $mode === 'full')) {
+            if ($completedFree) {
+                $upData = ['mode' => 'full', 'order_id' => $dyadContext['order1_id']];
+                if ($customFieldsJson !== null) $upData['custom_fields_json'] = $customFieldsJson;
+                DB::update('attempts', $upData, 'id=?', [$completedFree['id']]);
+                require_once __DIR__ . '/../core/Analyzer.php';
+                Analyzer::scoreAttempt((int)$completedFree['id']);
+                require_once __DIR__ . '/../core/DyadAnalyzer.php';
+                DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$completedFree['id']);
+                flash('آزمون شما با استفاده از هدیهٔ همراهتان به نسخه تخصصی ارتقا یافت! گزارش تطابق آماده است 🎉', 'ok');
+                redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
+            } else {
                 $aid = DB::insert('attempts', [
-                    'user_id'=>$u['id'], 'test_id'=>$test['id'], 'mode'=>'free',
-                    'ip'=>client_ip_bin(), 'user_agent'=>substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+                    'user_id'            => $u['id'],
+                    'test_id'            => $test['id'],
+                    'mode'               => 'full',
+                    'order_id'           => $dyadContext['order1_id'],
+                    'custom_fields_json' => $customFieldsJson,
+                    'ip'                 => client_ip_bin(),
+                    'user_agent'         => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
                 ]);
-                log_activity('test_start', 'attempt', $aid, ['mode'=>'free','test'=>$test['slug']]);
+                log_activity('test_start', 'attempt', $aid, ['mode' => 'full', 'test' => $test['slug'], 'dyad_gift' => 1]);
                 redirect(fr_panel_url('take.php?attempt=' . $aid));
             }
         }
-    } else {
-        $code = trim((string)($_POST['discount_code'] ?? ''));
-        $useWallet = !empty($_POST['use_wallet']);
-        $upgradeAttemptId = (int)($_POST['upgrade_attempt'] ?? ($_GET['upgrade_attempt'] ?? 0));
-        if ($upgradeAttemptId <= 0 && $completedFree) {
-            $upgradeAttemptId = (int)$completedFree['id'];
-        }
-        $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet, $upgradeAttemptId > 0 ? $upgradeAttemptId : null);
-        if ($r['error']) $err = $r['error'];
-        else {
-            if ($dyadContext && !empty($r['order']['id'])) {
-                DB::update('dyads', ['order2_id' => $r['order']['id']], 'id=?', [$dyadContext['id']]);
-            }
-            if ($r['payment_url']) {
-                redirect($r['payment_url']);          // → درگاه
-            } else {
-                if ($dyadContext && !empty($r['attempt_id'])) {
-                    require_once __DIR__ . '/../core/DyadAnalyzer.php';
-                    DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$r['attempt_id']);
+
+        if ($mode === 'free') {
+            if (!$test['free_enabled']) $err = 'نسخهٔ رایگان این تست روانشناسی غیرفعال است.';
+            else {
+                // هر کاربر فقط یک نسخهٔ رایگان از هر تست روانشناسی
+                $hadFree = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') .
+                    " WHERE user_id=? AND test_id=? AND mode='free'", [$u['id'], $test['id']]);
+                if ($hadFree) $err = 'نسخهٔ رایگان هر تست روانشناسی فقط یک‌بار قابل انجام است؛ نسخهٔ ویژه را انتخاب کنید.';
+                else {
+                    $aid = DB::insert('attempts', [
+                        'user_id'            => $u['id'],
+                        'test_id'            => $test['id'],
+                        'mode'               => 'free',
+                        'custom_fields_json' => $customFieldsJson,
+                        'ip'                 => client_ip_bin(),
+                        'user_agent'         => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+                    ]);
+                    log_activity('test_start', 'attempt', $aid, ['mode'=>'free','test'=>$test['slug']]);
+                    redirect(fr_panel_url('take.php?attempt=' . $aid));
                 }
-                $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
-                if ($attRow && $attRow['status'] === 'completed') {
-                    if ($dyadContext) {
-                        redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
-                    }
-                    redirect(fr_panel_url('report.php?attempt=' . (int)$r['attempt_id']));
+            }
+        } else {
+            $code = trim((string)($_POST['discount_code'] ?? ''));
+            $useWallet = !empty($_POST['use_wallet']);
+            $upgradeAttemptId = (int)($_POST['upgrade_attempt'] ?? ($_GET['upgrade_attempt'] ?? 0));
+            if ($upgradeAttemptId <= 0 && $completedFree) {
+                $upgradeAttemptId = (int)$completedFree['id'];
+            }
+            $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet, $upgradeAttemptId > 0 ? $upgradeAttemptId : null, $customFieldsJson);
+            if ($r['error']) $err = $r['error'];
+            else {
+                if ($dyadContext && !empty($r['order']['id'])) {
+                    DB::update('dyads', ['order2_id' => $r['order']['id']], 'id=?', [$dyadContext['id']]);
+                }
+                if ($r['payment_url']) {
+                    redirect($r['payment_url']);          // → درگاه
                 } else {
-                    redirect(fr_panel_url('take.php?attempt=' . (int)$r['attempt_id']));
+                    if ($dyadContext && !empty($r['attempt_id'])) {
+                        require_once __DIR__ . '/../core/DyadAnalyzer.php';
+                        DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$r['attempt_id']);
+                    }
+                    $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
+                    if ($attRow && $attRow['status'] === 'completed') {
+                        if ($dyadContext) {
+                            redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
+                        }
+                        redirect(fr_panel_url('report.php?attempt=' . (int)$r['attempt_id']));
+                    } else {
+                        redirect(fr_panel_url('take.php?attempt=' . (int)$r['attempt_id']));
+                    }
                 }
             }
         }
     }
+}
 }
 
 /* آیا قبلاً نسخهٔ رایگان انجام داده؟ */
@@ -217,6 +236,23 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
 
 <div class="fr-card">
   <h3><?= e($test['title']) ?></h3>
+
+  <?php
+  $testCustomFields = TestFields::getFieldsForTest((int)$test['id'], 'all');
+  if (!empty($testCustomFields)):
+  ?>
+  <div class="fr-test-custom-fields-wrapper" style="margin-bottom:24px;padding:20px 22px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:14px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;border-bottom:1px solid #e2e8f0;padding-bottom:10px">
+      <span style="font-size:22px">📋</span>
+      <div>
+        <b style="font-size:15px;color:#1e3a8a">اطلاعات و گزینه‌های پیش از آزمون</b>
+        <div style="font-size:12px;color:#64748b;margin-top:2px">لطفاً پیش از ثبت‌نام نهایی و شروع آزمون، گزینه‌های زیر را تعیین فرمایید:</div>
+      </div>
+    </div>
+    <?= TestFields::renderFormFields($testCustomFields, (array)($_POST['test_custom_fields'] ?? [])) ?>
+  </div>
+  <?php endif; ?>
+
   <div class="fr-grid cols-2" style="margin-bottom:0">
     <div>
       <p style="font-size:14px;color:#2c3a5c;line-height:2"><?= nl2br(e($test['short_desc'] ?? '')) ?></p>

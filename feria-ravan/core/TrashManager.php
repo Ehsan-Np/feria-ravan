@@ -718,10 +718,10 @@ final class TrashManager
 
             // ۷. ثبت‌نام‌های رویدادها (کارگاه‌ها / دوره‌ها)
             if ($type === 'all' || $type === 'registration') {
-                $sql = "SELECT r.id, r.status, r.deleted_at, r.created_at, e.title AS event_title, e.kind,
+                $sql = "SELECT r.id, r.status, r.deleted_at, r.created_at, COALESCE(e.title, 'رویداد حذف‌شده') AS event_title, COALESCE(e.kind, 'workshop') AS kind,
                                u.first_name, u.last_name, u.mobile
                         FROM " . DB::t('event_registrations') . " r
-                        JOIN " . DB::t('events') . " e ON e.id=r.event_id
+                        LEFT JOIN " . DB::t('events') . " e ON e.id=r.event_id
                         LEFT JOIN " . DB::t('users') . " u ON u.id=r.user_id
                         WHERE r.deleted_at IS NOT NULL";
                 $p = [];

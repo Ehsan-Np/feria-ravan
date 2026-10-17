@@ -268,6 +268,14 @@ it('normalizeType maps workshops to event', TrashManager::normalizeType('worksho
 
 // Test registration soft-delete and restore
 $testEvId = (int)DB::val("SELECT id FROM " . DB::t('events') . " LIMIT 1");
+if ($testEvId <= 0) {
+    $testEvId = DB::insert('events', [
+        'title' => 'کارگاه تست برای زباله‌دان',
+        'kind' => 'workshop',
+        'price' => 50000,
+        'status' => 'active',
+    ]);
+}
 $rndMob = '0912' . random_int(1000000, 9999999);
 $testRegUser = DB::insert('users', ['first_name' => 'کاربر', 'last_name' => 'رویداد', 'mobile' => $rndMob]);
 $testRegId = DB::insert('event_registrations', [

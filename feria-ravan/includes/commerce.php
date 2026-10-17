@@ -79,7 +79,7 @@ function validate_discount(string $code, int $testId, int $userId, int $amount, 
  * پشتیبانی از ارتقای مستقیم آزمونِ تکمیل‌شدهٔ رایگان به نسخهٔ ویژه بدون نیاز به پاسخ‌گویی دوباره
  * @return array ['order'=>array,'payment_url'=>?string,'error'=>?string,'attempt_id'=>?int]
  */
-function create_full_order(array $u, array $test, ?string $discountCode, bool $useWallet = false, ?int $upgradeAttemptId = null): array
+function create_full_order(array $u, array $test, ?string $discountCode, bool $useWallet = false, ?int $upgradeAttemptId = null, ?string $customFieldsJson = null): array
 {
     // نسخهٔ ۲٫۸: قیمت نهایی = قیمت با تخفیف در صورت اعتبار، وگرنه قیمت اصلی
     if (!array_key_exists('price_sale', $test)) {
@@ -97,10 +97,14 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
     }
 
     // ۱) سفارش
-    $orderId = DB::insert('orders', [
+    $orderData = [
         'user_id'=>$u['id'], 'test_id'=>$test['id'], 'kind'=>'test_full', 'amount'=>$amount,
         'discount_code'=> $d['code'] ?? null, 'discount_amt'=>$discAmt, 'payable'=>$payable,
-    ]);
+    ];
+    if ($customFieldsJson !== null) {
+        $orderData['custom_fields_json'] = $customFieldsJson;
+    }
+    $orderId = DB::insert('orders', $orderData);
 
     // ۲) جلسهٔ تست روانشناسی: اتصال به تلاش قبلی (برای ارتقا) یا ایجاد تلاش ویژه جدید
     $attemptId = null;
@@ -109,7 +113,9 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
                            ' WHERE id=? AND user_id=? AND test_id=?', [$upgradeAttemptId, $u['id'], $test['id']]);
         if ($existing) {
             $attemptId = (int)$existing['id'];
-            DB::update('attempts', ['order_id'=>$orderId], 'id=?', [$attemptId]);
+            $attUpdate = ['order_id'=>$orderId];
+            if ($customFieldsJson !== null) $attUpdate['custom_fields_json'] = $customFieldsJson;
+            DB::update('attempts', $attUpdate, 'id=?', [$attemptId]);
         }
     }
 
@@ -120,7 +126,9 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
             [$u['id'], $test['id']]);
         if ($lastCompleted) {
             $attemptId = (int)$lastCompleted['id'];
-            DB::update('attempts', ['order_id'=>$orderId], 'id=?', [$attemptId]);
+            $attUpdate = ['order_id'=>$orderId];
+            if ($customFieldsJson !== null) $attUpdate['custom_fields_json'] = $customFieldsJson;
+            DB::update('attempts', $attUpdate, 'id=?', [$attemptId]);
         }
     }
 
@@ -131,16 +139,22 @@ function create_full_order(array $u, array $test, ?string $discountCode, bool $u
             [$u['id'], $test['id']]);
         if ($lastInProgress) {
             $attemptId = (int)$lastInProgress['id'];
-            DB::update('attempts', ['order_id'=>$orderId], 'id=?', [$attemptId]);
+            $attUpdate = ['order_id'=>$orderId];
+            if ($customFieldsJson !== null) $attUpdate['custom_fields_json'] = $customFieldsJson;
+            DB::update('attempts', $attUpdate, 'id=?', [$attemptId]);
         }
     }
 
     if (!$attemptId) {
         // جلسهٔ جدید در حالت ویژه (قبل از پرداخت ساخته می‌شود؛ بعد از پرداخت آزاد می‌شود)
-        $attemptId = DB::insert('attempts', [
+        $newAttData = [
             'user_id'=>$u['id'], 'test_id'=>$test['id'], 'order_id'=>$orderId, 'mode'=>'full',
             'ip'=>client_ip_bin(), 'user_agent'=>substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
-        ]);
+        ];
+        if ($customFieldsJson !== null) {
+            $newAttData['custom_fields_json'] = $customFieldsJson;
+        }
+        $attemptId = DB::insert('attempts', $newAttData);
     }
 
     // ۳) ثبت استفاده از کد تخفیف (همینجا ظرفیت رزرو می‌شود)

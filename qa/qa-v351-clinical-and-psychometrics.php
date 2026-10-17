@@ -208,9 +208,9 @@ assert_test(str_contains($ccContent, 'فرضیه تشخیصی افتراقی') |
 // =========================================================================
 echo "\n7. Testing Version & Architecture Integrity:\n";
 
-assert_test(FR_RELEASE === '3.5.1', "includes/version.php sets FR_RELEASE to 3.5.1");
+assert_test(version_compare(FR_RELEASE, '3.5.1', '>='), "includes/version.php sets FR_RELEASE to 3.5.1 or higher");
 $configContent = file_get_contents(FR_ROOT . '/config.php');
-assert_test(str_contains($configContent, '3.5.1'), "config.php default version matches 3.5.1");
+assert_test(str_contains($configContent, '3.5.'), "config.php default version matches 3.5.x series");
 $updateContent = file_get_contents(FR_ROOT . '/includes/update.php');
 assert_test(str_contains($updateContent, '۳٫۵٫۱'), "includes/update.php contains 3.5.1 migration hook");
 

@@ -29,6 +29,7 @@ function admin_layout(array $admin, string $active, string $title): void
         ['questions','❓ سوالات','/admin/questions.php'],
         ['templates','📝 قالب‌های تحلیل','/admin/templates.php'],
         ['attempts','📊 نتایج و تحلیل مراجعین','/admin/attempts.php'],
+        ['test-fields','📋 فیلدهای سفارشی تست‌ها','/admin/test-fields.php'],
         ['users','👥 کاربران','/admin/users.php'],
         ['fields','🧩 فیلدهای ثبت‌نام','/admin/fields.php'],
         ['discounts','🏷 کدهای تخفیف','/admin/discounts.php'],
@@ -78,7 +79,7 @@ function admin_layout(array $admin, string $active, string $title): void
 
     $singlesTop = ['dashboard', 'profile', 'userpanel'];      // آیتم‌های تکی بالای منو
     $groupDefs  = [
-        ['id' => 'grp-tests',    'label' => '🧠 تست‌های روانشناسی',      'keys' => ['tests', 'questions', 'templates', 'attempts']],
+        ['id' => 'grp-tests',    'label' => '🧠 تست‌های روانشناسی',      'keys' => ['tests', 'questions', 'templates', 'attempts', 'test-fields']],
         ['id' => 'grp-users',    'label' => '👥 کاربران و ثبت‌نام',      'keys' => ['users', 'fields', 'registrants', 'reviews']],
         ['id' => 'grp-events',   'label' => '🎓 رویدادها',               'keys' => ['workshops', 'courses']],
         ['id' => 'grp-consult',  'label' => '🛋 مشاوره',                 'keys' => ['consult', 'consult-schedule', 'consult-bookings']],

@@ -71,6 +71,15 @@ admin_layout($adm, 'consult', 'خلاصه پرونده بالینی — ' . user
     </div>
   </div>
 
+  <!-- اطلاعات ثبت‌شده پیش از آزمون، همراه مراجع و درخواست مشاوره -->
+  <?php
+  $attemptRaw = DB::one('SELECT custom_fields_json FROM ' . DB::t('attempts') . ' WHERE id=?', [$attemptId]);
+  if (!empty($attemptRaw['custom_fields_json'])):
+    require_once FR_ROOT . '/core/TestFields.php';
+    echo TestFields::renderDisplayCard($attemptRaw['custom_fields_json'], '📋 اطلاعات ثبت‌شده پیش از آزمون مراجع (همراه، مشاوره رایگان و گزینه‌ها)');
+  endif;
+  ?>
+
   <!-- کارت هشدارهای بالینی (Red Flags) -->
   <?php if (!empty($summary['red_flags'])): ?>
   <div class="fr-card" style="background:#fef2f2;border:1.5px solid #f87171;border-radius:14px;margin-bottom:24px">

@@ -124,6 +124,28 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}test_questions` (
   KEY `ix_test_sort` (`test_id`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}test_fields` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `test_id` INT UNSIGNED NOT NULL DEFAULT 0,
+  `label` VARCHAR(255) NOT NULL,
+  `name` VARCHAR(60) NOT NULL,
+  `type` VARCHAR(30) NOT NULL DEFAULT 'text',
+  `options` MEDIUMTEXT NULL,
+  `placeholder` VARCHAR(255) NULL,
+  `help_text` VARCHAR(255) NULL,
+  `required` TINYINT(1) NOT NULL DEFAULT 0,
+  `condition_field` VARCHAR(60) NULL,
+  `condition_operator` VARCHAR(20) NOT NULL DEFAULT 'equals',
+  `condition_value` VARCHAR(255) NULL,
+  `show_in_free` TINYINT(1) NOT NULL DEFAULT 1,
+  `show_in_full` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort_order` INT NOT NULL DEFAULT 0,
+  `active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `ix_test_active` (`test_id`, `active`, `sort_order`),
+  KEY `ix_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `{{prefix}}scoring_keys` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `test_id` INT UNSIGNED NOT NULL,
@@ -173,6 +195,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}orders` (
   `discount_code` VARCHAR(40) NULL,
   `discount_amt` INT UNSIGNED NOT NULL DEFAULT 0,
   `payable` INT UNSIGNED NOT NULL DEFAULT 0,
+  `custom_fields_json` MEDIUMTEXT NULL,
   `pay_stage` VARCHAR(12) NOT NULL DEFAULT 'full',
   `parent_order_id` BIGINT UNSIGNED NULL,
   `status` ENUM('pending','paid','failed','canceled','refunded') NOT NULL DEFAULT 'pending',
@@ -207,6 +230,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}attempts` (
   `progress` INT UNSIGNED NOT NULL DEFAULT 0,
   `duration_sec` INT UNSIGNED NOT NULL DEFAULT 0,
   `validity_json` TEXT NULL,
+  `custom_fields_json` MEDIUMTEXT NULL,
   `growth_injected` TINYINT(1) NOT NULL DEFAULT 0,
   `rep_code` VARCHAR(40) NULL,
   `context` MEDIUMTEXT NULL,

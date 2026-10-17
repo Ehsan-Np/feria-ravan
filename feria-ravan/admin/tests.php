@@ -187,7 +187,10 @@ echo flash();
 <div class="fr-card" style="margin:0">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px">
     <h3 style="margin:0">✏️ ویرایش تست روانشناسی: <?= e($t['title']) ?> <?= $t['status']==='trash' ? '<span class="fr-chip warn">در زباله‌دان</span>' : '' ?></h3>
-    <a class="fr-btn ghost sm" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>">← بازگشت به فهرست تست‌ها</a>
+    <div style="display:flex;gap:8px">
+      <a class="fr-btn sm purple" href="test-fields.php?test_id=<?= $t['id'] ?>" style="background:#7c3aed;color:#fff">📋 فیلدهای سفارشی این آزمون</a>
+      <a class="fr-btn ghost sm" href="tests.php<?= $t['status']==='trash' ? '?view=trash' : '' ?>">← بازگشت به فهرست تست‌ها</a>
+    </div>
   </div>
   <form method="post" enctype="multipart/form-data" class="fr-grid cols-2">
     <?= csrf_field() ?>
@@ -302,6 +305,7 @@ endif;
 <div class="fr-card">
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
     <h3 style="margin:0">تست‌های روانشناسی سیستم</h3>
+    <a class="fr-btn sm purple" href="test-fields.php" style="background:#7c3aed;color:#fff;text-decoration:none">📋 فیلدهای سفارشی تست‌ها</a>
     <a class="fr-chip <?= $view==='active'?'purple':'info' ?>" href="?view=active" style="text-decoration:none">لیست اصلی (<?= fa_num($activeCount) ?>)</a>
     <a class="fr-chip <?= $view==='trash'?'purple':'info' ?>" href="?view=trash" style="text-decoration:none">🗑 زباله‌دان (<?= fa_num($trashCount) ?>)</a>
     <span style="border-right:1px solid var(--line);margin:0 4px;height:16px;display:inline-block"></span>
@@ -394,6 +398,7 @@ endif;
             <a class="fr-btn sm ghost" href="?edit=<?= $t['id'] ?>" title="ویرایش تست روانشناسی">ویرایش</a>
             <a class="fr-btn sm" href="questions.php?test=<?= $t['id'] ?>" title="مدیریت سوالات">سوالات</a>
             <a class="fr-btn sm ghost" href="templates.php?test=<?= $t['id'] ?>" title="قالب‌های تحلیل">الگوها</a>
+            <a class="fr-btn sm ghost" href="test-fields.php?test_id=<?= $t['id'] ?>" title="فیلدهای سفارشی این آزمون">فیلدها</a>
             <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="attempts.php?test_id=<?= $t['id'] ?>" title="مشاهده نتایج و تحلیل‌های مراجعین">📊 تحلیل مراجعین</a>
             <a class="fr-btn sm ghost" href="registrants.php?ctx=test&id=<?= $t['id'] ?>" title="مدیریت شرکت‌کنندگان">👥</a>
             <form method="post" style="display:inline" onsubmit="return confirm('انتقال تست «<?= htmlspecialchars($t['title'], ENT_QUOTES, 'UTF-8') ?>» به سطل زباله؟');">

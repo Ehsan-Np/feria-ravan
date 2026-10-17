@@ -78,7 +78,27 @@ admin_layout($adm, 'orders', 'سفارش‌ها و تراکنش‌ها');
       <td style="font-size:12.5px"><?= e(trim($o['first_name'].' '.$o['last_name'])) ?><br>
         <small style="color:var(--muted)"><?= fa_num($o['mobile']) ?></small></td>
       <td><span class="fr-chip <?= $kc ?>" style="font-size:10.5px"><?= $kt ?></span></td>
-      <td style="font-size:12px"><?= e($o['ititle']) ?></td>
+      <td style="font-size:12px">
+        <?= e($o['ititle']) ?>
+        <?php if (!empty($o['custom_fields_json'])):
+          $cfData = json_decode((string)$o['custom_fields_json'], true);
+          if (!empty($cfData) && is_array($cfData)):
+            $snippets = [];
+            foreach ($cfData as $item) {
+                $snippets[] = ($item['label'] ?? '') . ': ' . ($item['value'] ?? '');
+            }
+        ?>
+          <div style="font-size:11px;color:#2563eb;margin-top:3px" title="<?= e(implode(' | ', $snippets)) ?>">
+            📋 <?= fa_num(count($cfData)) ?> فیلد سفارشی
+            <?php if (!empty($cfData['has_companion']['value']) && ($cfData['has_companion']['value'] === 'بله' || str_contains((string)$cfData['has_companion']['value'], 'بله'))): ?>
+              <span class="fr-chip purple sm" style="font-size:10px;padding:1px 5px">همراه‌دار</span>
+            <?php endif; ?>
+            <?php if (!empty($cfData['free_consultation']['value']) && str_contains((string)$cfData['free_consultation']['value'], 'بله')): ?>
+              <span class="fr-chip ok sm" style="font-size:10px;padding:1px 5px">مشاوره رایگان</span>
+            <?php endif; ?>
+          </div>
+        <?php endif; endif; ?>
+      </td>
       <td><?= fa_num(number_format($o['amount'])) ?></td>
       <td style="font-size:12px"><?= $o['discount_amt'] ? fa_num(number_format($o['discount_amt'])) . ' (' . e($o['discount_code']) . ')' : '—' ?></td>
       <td><b><?= fa_num(number_format($o['payable'])) ?></b></td>

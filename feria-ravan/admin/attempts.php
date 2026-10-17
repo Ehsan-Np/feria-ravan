@@ -338,6 +338,14 @@ if ($viewAttemptId > 0) {
       </div>
       <?php endif; ?>
 
+      <!-- اطلاعات و گزینه‌های پیش از آزمون مراجع -->
+      <?php
+      if (!empty($at['custom_fields_json'])):
+        require_once FR_ROOT . '/core/TestFields.php';
+        echo TestFields::renderDisplayCard($at['custom_fields_json'], '📋 اطلاعات ثبت‌شده پیش از آزمون مراجع (همراه، مشاوره و فیلدهای سفارشی)');
+      endif;
+      ?>
+
       <!-- رندر کامل کارنامه و تحلیل روان‌سنجی -->
       <div style="background:#fff;border-radius:18px;border:1px solid var(--border);padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.03)">
         <?= ReportBuilder::build($at, $uObj, $viewLevel) ?>
