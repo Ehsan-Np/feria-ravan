@@ -140,7 +140,34 @@ $verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.p
 $qrSvg = fr_qr_svg($verifyUrl, 115);
 
 $docTitle = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode);
-if ((isset($_GET['offline_html']) && $_GET['offline_html'] === '1') || (isset($_GET['download_file']) && $_GET['download_file'] === '1')) {
+
+// دانلود مستقیم فایل باینری PDF استاندارد ISO A4 از سمت سرور
+$isPdfDownload = (!empty($_GET['download']) && $_GET['download'] === '1')
+              || (!empty($_GET['download_pdf']) && $_GET['download_pdf'] === '1')
+              || (!empty($_GET['pdf']) && $_GET['pdf'] === '1')
+              || (!empty($_GET['format']) && $_GET['format'] === 'pdf')
+              || (!empty($_GET['download_file']) && $_GET['download_file'] === '1');
+
+if ($isPdfDownload && empty($_GET['print'])) {
+    require_once __DIR__ . '/../core/CarnetPdfBuilder.php';
+    try {
+        $pdfData = CarnetPdfBuilder::build((int)$at['id'], $isAdmin);
+        if (!headers_sent()) {
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $docTitle . '.pdf"');
+            header('Content-Length: ' . strlen($pdfData));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            header('Pragma: public');
+        }
+        while (ob_get_level() > 0) { @ob_end_clean(); }
+        echo $pdfData;
+        exit;
+    } catch (\Throwable $pe) {
+        error_log('Carnet PDF direct stream error: ' . $pe->getMessage());
+    }
+}
+
+if (isset($_GET['offline_html']) && $_GET['offline_html'] === '1') {
     if (!headers_sent()) {
         header('Content-Type: text/html; charset=UTF-8');
         header('Content-Disposition: attachment; filename="' . $docTitle . '.html"');
@@ -497,10 +524,10 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     <button class="pr-btn-action pr-btn-print" style="background:#1e3a6e;color:#fff;font-weight:600" onclick="window.frPrintReport()" title="چاپ مستقیم با پرینتر سیستم یا ذخیره پرینت استاندارد A4">
       🖨️ چاپ با پرینتر (نسخه چاپی)
     </button>
-    <button class="pr-btn-action pr-btn-download" style="background:#059669;color:#fff" onclick="window.frSavePdf()" title="دانلود و ذخیره مستقیم فایل PDF رسمی در ابعاد استاندارد A4">
+    <a class="pr-btn-action pr-btn-download" style="background:#059669;color:#fff" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&download=1') ?>" title="دانلود و ذخیره مستقیم فایل PDF رسمی در ابعاد استاندارد A4">
       📥 دانلود فایل PDF کارنامه (A4)
-    </button>
-    <a class="pr-btn-action" style="background:#0284c7;color:#fff" href="<?= e(SITE_URL . '/panel/report-pdf.php?attempt=' . (int)$at['id'] . '&download_file=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه برای باز کردن یا چاپ آفلاین">
+    </a>
+    <a class="pr-btn-action" style="background:#0284c7;color:#fff" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&offline_html=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه برای باز کردن یا چاپ آفلاین">
       💾 دریافت مستقیم فایل
     </a>
     <a class="pr-btn-action pr-btn-back" href="<?= e($backUrl) ?>">

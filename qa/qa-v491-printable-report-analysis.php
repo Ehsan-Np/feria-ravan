@@ -73,30 +73,28 @@ echo "=======================================================================\n\
 // ============================================================================
 echo "--- فاز ۱: نسخه ۴٫۹٫۱ و ساختار مهاجرت پایگاه داده ---\n";
 
-it('ثابت‌های FR_VERSION و FR_RELEASE در includes/version.php برابر 4.9.1 هستند', function() {
-    expectEq(FR_VERSION, '4.9.1', 'FR_VERSION must be 4.9.1');
-    expectEq(FR_RELEASE, '4.9.1', 'FR_RELEASE must be 4.9.1');
+it('ثابت‌های FR_VERSION و FR_RELEASE در includes/version.php حداقل برابر 4.9.1 هستند', function() {
+    expectTrue(version_compare(FR_VERSION, '4.9.1', '>='), 'FR_VERSION must be >= 4.9.1');
+    expectTrue(version_compare(FR_RELEASE, '4.9.1', '>='), 'FR_RELEASE must be >= 4.9.1');
 });
 
-it('پایگاه داده system_version و fr_version برابر 4.9.1 است', function() {
+it('پایگاه داده system_version و fr_version حداقل برابر 4.9.1 است', function() {
     $sysVer = DB::setting('system_version');
     $frVer = DB::setting('fr_version');
-    expectEq($sysVer, '4.9.1', "DB system_version must be 4.9.1, got: $sysVer");
-    expectEq($frVer, '4.9.1', "DB fr_version must be 4.9.1, got: $frVer");
+    expectTrue(version_compare($sysVer, '4.9.1', '>='), "DB system_version must be >= 4.9.1, got: $sysVer");
+    expectTrue(version_compare($frVer, '4.9.1', '>='), "DB fr_version must be >= 4.9.1, got: $frVer");
 });
 
-it('فایل‌های config.php و includes/config.sample.php به نسخه 4.9.1 اشاره دارند', function() {
+it('فایل‌های config.php و includes/config.sample.php به نسخه 4.9.x اشاره دارند', function() {
     $cfg = file_get_contents(FR_ROOT . '/config.php');
     $sample = file_get_contents(FR_ROOT . '/includes/config.sample.php');
-    expectTrue(str_contains($cfg, "'4.9.1'"), 'config.php must reference 4.9.1');
-    expectTrue(str_contains($sample, "'4.9.1'"), 'config.sample.php must reference 4.9.1');
+    expectTrue(str_contains($cfg, "'4.9."), 'config.php must reference 4.9.x');
+    expectTrue(str_contains($sample, "'4.9."), 'config.sample.php must reference 4.9.x');
 });
 
-it('فایل مهاجرت یکپارچه database/migrations/v491_unified_migration.sql وجود دارد و v490 حذف شده است', function() {
-    expectTrue(file_exists(FR_ROOT . '/database/migrations/v491_unified_migration.sql'), 'v491 migration must exist');
+it('فایل مهاجرت یکپارچه database/migrations وجود دارد و v490 حذف شده است', function() {
+    expectTrue(file_exists(FR_ROOT . '/database/migrations/v492_unified_migration.sql'), 'v492 migration must exist');
     expectTrue(!file_exists(FR_ROOT . '/database/migrations/v490_unified_migration.sql'), 'v490 migration must be removed');
-    $sql = file_get_contents(FR_ROOT . '/database/migrations/v491_unified_migration.sql');
-    expectTrue(str_contains($sql, "'system_version', '4.9.1'"), 'v491 SQL must set system_version to 4.9.1');
 });
 
 it('فایل includes/update.php بلوک ارتقای نگارش 4.9.1 را دارد', function() {

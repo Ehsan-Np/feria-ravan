@@ -1,6 +1,6 @@
 -- ============================================================================
 -- فریا روان (Feria Ravan) — اسکریپت تجمیعی و یکپارچه مهاجرت پایگاه‌داده
--- نگارش: ۴٫۹٫۱ (v4.9.1 Unified Migration)
+-- نگارش: ۴٫۹٫۲ (v4.9.2 Unified Migration)
 -- تجمیع تمامی تغییرات، جداول جدید، ستون‌ها، ایندکس‌ها و تنظیمات نگارش‌های سامانه
 -- ============================================================================
 
@@ -238,11 +238,11 @@ VALUES
   ('planner_notify_channels', 'telegram,bale,rubika', 1)
 ON DUPLICATE KEY UPDATE `key`=`key`;
 
--- ۳٫۵. ثبت و تثبیت نگارش ۴٫۹٫۱ در تنظیمات سامانه
+-- ۳٫۵. ثبت و تثبیت نگارش ۴٫۹٫۲ در تنظیمات سامانه
 INSERT INTO `{{prefix}}settings` (`key`, `value`, `autoload`)
 VALUES 
-  ('fr_version', '4.9.1', 1),
-  ('system_version', '4.9.1', 1)
-ON DUPLICATE KEY UPDATE `value`='4.9.1';
+  ('fr_version', '4.9.2', 1),
+  ('system_version', '4.9.2', 1)
+ON DUPLICATE KEY UPDATE `value`='4.9.2';
 
 SET FOREIGN_KEY_CHECKS=1;

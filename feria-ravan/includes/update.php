@@ -1250,6 +1250,17 @@ function fr_update_pipeline(bool $force = false): void
             DB::setSetting('fr_version', '4.9.1');
         } catch (Throwable $e) { error_log('feria: 4.9.1 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۵. نگارش ۴٫۹٫۲: تولید بومی فایل باینری PDF کارنامه با TCPDF و رفع خطای موقت تلگرام، بله و روبیکا
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('system_version', '4.9.2');
+            DB::setSetting('fr_version', '4.9.2');
+            if (DB::setting('report_pdf_download_mode', null) === null) {
+                DB::setSetting('report_pdf_download_mode', 'direct_binary_pdf');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.9.2 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
