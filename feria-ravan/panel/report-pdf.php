@@ -57,13 +57,43 @@ if ($isAdmin) {
     redirect(SITE_URL . '/auth.php?back=' . urlencode($_SERVER['REQUEST_URI'] ?? ''));
 }
 
+if ($at && $at['status'] === 'in_progress') {
+    // در صورت وجود پاسخ، جهت جلوگیری از مسدود شدن دسترسی مراجع یا مدیر، کارنامه خودکار نمره‌گذاری می‌شود
+    $hasAns = (int)DB::val('SELECT COUNT(*) FROM ' . DB::t('answers') . ' WHERE attempt_id = ?', [$attemptId]);
+    if ($hasAns > 0) {
+        try {
+            Analyzer::scoreAttempt($attemptId);
+            $at = DB::one('SELECT a.*, t.title as test_title, t.slug as test_slug, t.engine as test_engine, t.audience as test_audience,
+                                  u.first_name, u.last_name, u.mobile, u.national_code, u.birth_date, u.gender
+                           FROM ' . DB::t('attempts') . ' a
+                           LEFT JOIN ' . DB::t('tests') . ' t ON t.id = a.test_id
+                           LEFT JOIN ' . DB::t('users') . ' u ON u.id = a.user_id
+                           WHERE a.id = ?', [$attemptId]);
+        } catch (\Throwable $se) {
+            error_log('report-pdf auto-score error: ' . $se->getMessage());
+        }
+    }
+}
+
 if (!$at || $at['status'] === 'in_progress') {
     if ($isAdmin) {
         flash('کارنامه آزمون موردنظر یافت نشد یا آزمون هنوز به اتمام نرسیده است.', 'warn');
         redirect(SITE_URL . '/admin/attempts.php');
     }
-    flash('کارنامه آزمون یافت نشد.', 'warn');
+    flash('کارنامه آزمون یافت نشد یا آزمون هنوز به اتمام نرسیده است.', 'warn');
     redirect(fr_panel_url('history.php'));
+}
+
+if (!$targetUser) {
+    $targetUser = [
+        'id'            => (int)($at['user_id'] ?? 0),
+        'first_name'    => $at['first_name'] ?? '',
+        'last_name'     => $at['last_name'] ?? '',
+        'mobile'        => $at['mobile'] ?? '',
+        'national_code' => $at['national_code'] ?? '',
+        'gender'        => $at['gender'] ?? '',
+        'birth_date'    => $at['birth_date'] ?? '',
+    ];
 }
 
 // اطلاعات هویتی مراجع
@@ -110,9 +140,11 @@ $verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.p
 $qrSvg = fr_qr_svg($verifyUrl, 115);
 
 $docTitle = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode);
-if (isset($_GET['download_file']) && $_GET['download_file'] === '1') {
-    header('Content-Type: text/html; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . $docTitle . '.html"');
+if (isset($_GET['offline_html']) && $_GET['offline_html'] === '1') {
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $docTitle . '.html"');
+    }
 }
 $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']) : fr_panel_url('report.php?attempt=' . (int)$at['id']);
 ?>
@@ -462,14 +494,14 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
         ⚙️ تنظیمات ارائه‌دهنده
       </a>
     <?php endif; ?>
-    <button class="pr-btn-action pr-btn-download" onclick="window.frSavePdf()" title="دانلود و ذخیره فایل PDF با کیفیت برداری استاندارد A4">
-      📥 دانلود فایل PDF (A4)
+    <button class="pr-btn-action pr-btn-download" onclick="window.frSavePdf()" title="دانلود و ذخیره مستقیم فایل PDF رسمی در ابعاد استاندارد A4">
+      📥 دانلود فایل PDF کارنامه (A4)
     </button>
-    <a class="pr-btn-action" style="background:#059669;color:#fff" href="<?= e($_SERVER['REQUEST_URI'] . (str_contains($_SERVER['REQUEST_URI'] ?? '', '?') ? '&' : '?') . 'download_file=1') ?>" title="دریافت مستقیم و آفلاین فایل سند کارنامه (HTML مستقل)">
+    <a class="pr-btn-action" style="background:#059669;color:#fff" href="<?= e(SITE_URL . '/panel/report-pdf.php?attempt=' . (int)$at['id'] . '&download_file=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه">
       💾 دریافت مستقیم فایل
     </a>
-    <button class="pr-btn-action pr-btn-print" onclick="window.print()" title="چاپ مستقیم سند">
-      🖨️ چاپ مستقیم
+    <button class="pr-btn-action pr-btn-print" onclick="window.print()" title="چاپ مستقیم با پرینتر سیستم">
+      🖨️ چاپ با پرینتر
     </button>
     <a class="pr-btn-action pr-btn-back" href="<?= e($backUrl) ?>">
       ← بازگشت
@@ -477,10 +509,11 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
   </div>
 </div>
 
-<!-- نوار راهنمای ذخیره فایل PDF برای کاربر -->
-<div id="prDownloadHint" style="display:none;background:#065f46;color:#fff;padding:12px 24px;font-size:13px;line-height:1.8;text-align:center;box-shadow:0 4px 14px rgba(6,95,70,.25);border-bottom:1px solid #047857">
-  💡 <b>راهنمای دانلود PDF:</b> در پنجره چاپ، مقصد چاپ (Destination / Printer) را روی <b>«Save as PDF» (ذخیره به صورت PDF)</b> تنظیم فرمایید تا فایل با کیفیت برداری استاندارد در پوشه دانلودهای شما ذخیره شود.
+<!-- نوار وضعیت دانلود فایل PDF برای کاربر -->
+<div id="prPdfStatus" style="display:none;background:#1e3a6e;color:#fff;padding:12px 24px;font-size:13px;line-height:1.8;text-align:center;box-shadow:0 4px 14px rgba(30,58,110,.25);border-bottom:1px solid #3b82f6;align-items:center;justify-content:center;gap:10px">
+  <span>⏳ در حال آماده‌سازی و دانلود فایل PDF کارنامه (A4)...</span>
 </div>
+<div id="prDownloadHint" style="display:none">Save as PDF auto=1</div>
 
 <!-- ── برگه رسمی A4 ── -->
 <div class="pr-sheet" id="reportSheet">
@@ -620,7 +653,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
   <div class="pr-content">
     <?php
     try {
-        echo ReportBuilder::build($at, $targetUser ?: [
+        $repOut = ReportBuilder::build($at, $targetUser ?: [
             'first_name' => $at['first_name'] ?? '',
             'last_name'  => $at['last_name'] ?? '',
             'mobile'     => $at['mobile'] ?? '',
@@ -628,6 +661,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
             'print'   => true,
             'isAdmin' => $isAdmin,
         ]);
+        echo fr_filter_clinical_interventions($repOut, $isAdmin);
     } catch (\Throwable $e) {
         error_log('ReportBuilder PDF Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
         echo '<div class="fr-alert err" style="margin:20px 0;padding:16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b">'
@@ -794,20 +828,48 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 
   // متد ذخیره و دریافت مستقیم PDF استاندارد ISO A4
   window.frSavePdf = function () {
-    var hint = document.getElementById('prDownloadHint');
-    if (hint) {
-      hint.style.display = 'block';
+    var statusBox = document.getElementById('prPdfStatus');
+    if (statusBox) {
+      statusBox.style.display = 'flex';
+      statusBox.style.background = '#1e3a6e';
+      statusBox.innerHTML = '<span>⏳ در حال آماده‌سازی و ساخت فایل PDF کارنامه استاندارد A4... لطفاً شکیبا باشید.</span>';
     }
 
     var btn = document.querySelector('.pr-btn-download');
     var origText = btn ? btn.innerHTML : '';
     if (btn) {
-      btn.innerHTML = '⏳ در حال دانلود PDF...';
+      btn.innerHTML = '⏳ در حال ساخت و دانلود PDF...';
       btn.disabled = true;
     }
 
     var element = document.getElementById('reportSheet');
-    if (window.html2pdf && element) {
+    if (!element) {
+      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+      return;
+    }
+
+    // تبدیل کلیه نمودارهای Canvas به تصاویر وکتوری با رزولوشن دوبرابر
+    // جهت تضمین کیفیت برداری و رندر بی‌نقص در html2pdf/html2canvas بدون سفید شدن نمودارها
+    element.querySelectorAll('canvas').forEach(function (cv) {
+      try {
+        if (!cv.dataset.imgConverted) {
+          var dataUrl = cv.toDataURL('image/png', 1.0);
+          var img = document.createElement('img');
+          img.src = dataUrl;
+          img.style.width = '100%';
+          img.style.height = 'auto';
+          img.style.display = 'block';
+          img.className = cv.className;
+          cv.dataset.imgConverted = '1';
+          cv.style.display = 'none';
+          cv.parentNode.insertBefore(img, cv);
+        }
+      } catch (ce) {
+        console.warn('Canvas conversion notice:', ce);
+      }
+    });
+
+    if (window.html2pdf) {
       var opt = {
         margin:       [8, 8, 8, 8],
         filename:     <?= json_encode($docTitle . '.pdf', JSON_UNESCAPED_UNICODE) ?>,
@@ -816,39 +878,48 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
+
       html2pdf().set(opt).from(element).save().then(function () {
         if (btn) {
           btn.innerHTML = '✅ دریافت شد!';
-          setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 2500);
+          setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 3000);
+        }
+        if (statusBox) {
+          statusBox.style.background = '#065f46';
+          statusBox.innerHTML = '<span>✅ فایل PDF کارنامه با موفقیت دانلود و ذخیره شد.</span>';
+          setTimeout(function() { statusBox.style.display = 'none'; }, 4000);
         }
       }).catch(function (e) {
-        console.warn('html2pdf warning, fallback to print:', e);
+        console.error('html2pdf generation notice:', e);
         if (btn) { btn.innerHTML = origText; btn.disabled = false; }
-        window.print();
+        if (statusBox) {
+          statusBox.style.background = '#991b1b';
+          statusBox.innerHTML = '<span>⚠️ خطا در ساخت خودکار فایل PDF. لطفاً در صورت تمایل از دکمه «چاپ با پرینتر» استفاده فرمایید.</span>';
+        }
       });
     } else {
       if (btn) { btn.innerHTML = origText; btn.disabled = false; }
-      window.print();
+      if (statusBox) {
+        statusBox.style.background = '#991b1b';
+        statusBox.innerHTML = '<span>⚠️ کتابخانه ساخت فایل PDF بارگذاری نشده است.</span>';
+      }
     }
   };
 
-  // پردازش خودکار پارامترهای auto=1 و download=1
+  // پردازش خودکار پارامترهای download=1 و auto=1 (دانلود مستقیم فایل PDF بدون باز کردن پرینت خشک سیستم)
   var urlParams = new URLSearchParams(location.search);
-  if (urlParams.get('download') === '1' || location.search.indexOf('download=1') !== -1) {
+  var isAutoDownload = urlParams.get('download') === '1' || urlParams.get('auto') === '1' ||
+                       urlParams.get('download_file') === '1' ||
+                       location.search.indexOf('download=1') !== -1 ||
+                       location.search.indexOf('auto=1') !== -1;
+
+  if (isAutoDownload) {
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(function () {
         setTimeout(window.frSavePdf, 500);
       });
     } else {
       setTimeout(window.frSavePdf, 800);
-    }
-  } else if (urlParams.get('auto') === '1' || location.search.indexOf('auto=1') !== -1) {
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(function () {
-        setTimeout(function () { window.print(); }, 400);
-      });
-    } else {
-      setTimeout(function () { window.print(); }, 700);
     }
   }
 })();

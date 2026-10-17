@@ -1201,6 +1201,15 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.7.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۲. نگارش ۴٫۸٫۰: رفع قطعی خطای موقت در دریافت فایل تحلیل، دانلود مستقیم PDF با استاندارد ISO A4 و حذف کامل پنجره پرینت پیش‌فرض
+        // ---------------------------------------------------------------------
+        try {
+            if (DB::setting('report_pdf_download_mode', null) === null) {
+                DB::setSetting('report_pdf_download_mode', 'direct_pdf');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.8.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

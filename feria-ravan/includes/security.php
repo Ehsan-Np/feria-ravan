@@ -162,6 +162,10 @@ function log_activity(string $action, ?string $entity = null, ?int $entityId = n
  * -------------------------------------------------------------------------*/
 function fr_bootstrap(): void
 {
+    static $bootstrapped = false;
+    if ($bootstrapped) return;
+    $bootstrapped = true;
+
     /* مهم: قبل از لود config ثابت FR_ROOT تعریف نمی‌کنیم تا با نصب‌های قدیمی
        (تعریف مستقیم در config.php) هشدار redefine رخ ندهد — مسیر با __DIR__ می‌گیریم */
     $root = dirname(__DIR__);

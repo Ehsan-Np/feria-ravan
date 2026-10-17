@@ -478,8 +478,9 @@ function fr_safe_back(?string $back): string
 }
 
 /** نام کامل کاربر از ردیف کاربر */
-function user_fullname(array $u): string
+function user_fullname(?array $u = null): string
 {
+    if (!$u) return 'کاربر گرامی';
     return trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: 'کاربر گرامی';
 }
 

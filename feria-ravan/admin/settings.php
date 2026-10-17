@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         'report_doctor_name','report_doctor_title','report_doctor_license',
         'report_provider_logo','report_provider_stamp','report_show_signature_box',
         'report_provider_phone','report_provider_address','report_provider_website',
-        'report_header_color','report_disclaimer','report_show_qr',
+        'report_header_color','report_disclaimer','report_show_qr','report_pdf_download_mode',
         // نسخهٔ ۲٫۱: برند فوتر + نمادها + برنامه‌ریز روزانه + پیام‌رسان‌ها + خبرنامه
         'logo_desc','footer_links_json','footer_links2_json',
         'footer_badge1_img','footer_badge1_url','footer_badge1_alt','footer_badge1_html',
@@ -886,6 +886,14 @@ $tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوت
       <label>نشانی اینترنتی داخل بارکد QR (اختیاری):</label>
       <input class="fr-input" name="report_qr_link" value="<?= e($s('report_qr_link')) ?>" style="direction:ltr" placeholder="<?= SITE_URL ?>" maxlength="255">
       <small class="hint">در صورت خالی بودن، لینک صفحه کارنامه یا سامانه قرار می‌گیرد.</small>
+    </div>
+    <div class="fr-field">
+      <label>حالت پیش‌فرض دکمه دریافت کارنامه:</label>
+      <select class="fr-select" name="report_pdf_download_mode">
+        <option value="direct_pdf" <?= $s('report_pdf_download_mode','direct_pdf')==='direct_pdf'?'selected':'' ?>>دانلود مستقیم فایل PDF استاندارد A4 (پیش‌فرض) ✅</option>
+        <option value="interactive" <?= $s('report_pdf_download_mode')==='interactive'?'selected':'' ?>>مشاهده سند A4 در صفحه جدید با دکمه‌های پرینت و دانلود</option>
+      </select>
+      <small class="hint">رفتار سیستم هنگام کلیک مراجع یا مدیر روی دکمه دریافت فایل کارنامه</small>
     </div>
   </div>
 

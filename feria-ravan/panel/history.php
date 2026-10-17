@@ -186,8 +186,8 @@ panel_layout($u, 'history');
             <?php if ($r['mode'] === 'free'): ?>
             <a class="fr-btn sm accent" href="<?= e(fr_panel_url('test-start.php?id=' . (int)$r['test_id'] . '&upgrade_attempt=' . (int)$r['id'])) ?>" title="ارتقا به ویژه">⭐ ویژه</a>
             <?php endif; ?>
-            <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . (int)$r['id'] . '&auto=1')) ?>" target="_blank" title="دریافت نسخه چاپی و PDF کارنامه">PDF 📄</a>
-            <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . (int)$r['id'] . '&download_file=1')) ?>" target="_blank" title="دانلود مستقیم فایل سند کارنامه">💾 دریافت فایل</a>
+            <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . (int)$r['id'] . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">PDF 📥</a>
+            <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . (int)$r['id'])) ?>" target="_blank" title="مشاهده نسخه چاپی کارنامه A4">📄 A4</a>
             <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('barcode.php?attempt=' . (int)$r['id'])) ?>" title="بارکد گزارش">▮▮▮</a>
           <?php endif; ?>
           <?php if ($r['order_id'] && $r['order_status']==='paid'): ?>

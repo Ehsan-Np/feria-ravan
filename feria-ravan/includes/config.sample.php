@@ -42,4 +42,4 @@ if (!defined('FR_ENV')) define('FR_ENV', 'production');
 /* محض جلوگیری از هشدار «Constant already defined» — fr_bootstrap ممکن است پیشاپیش تعریف کرده باشد */
 if (!defined('FR_ROOT')) define('FR_ROOT', dirname(__FILE__));
 /* نسخهٔ ۲٫۵: نگارش واقعی کد در includes/version.php (FR_RELEASE) است؛ این‌جا فقط Fallback */
-if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.7.0');
+if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.8.0');

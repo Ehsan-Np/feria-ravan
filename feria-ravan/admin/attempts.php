@@ -219,8 +219,8 @@ if ($viewAttemptId > 0) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
         <a class="fr-btn ghost sm" href="<?= !empty($at['test_id']) ? 'attempts.php?test_id=' . (int)$at['test_id'] : 'attempts.php' ?>">← بازگشت به فهرست نتایج این آزمون (<?= e($at['test_title'] ?? '') ?>)</a>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'] . '&auto=1')) ?>" target="_blank">📄 دریافت / چاپ PDF کارنامه</a>
-          <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'] . '&download_file=1')) ?>" target="_blank" title="دانلود مستقیم فایل سند کارنامه">💾 دریافت فایل</a>
+          <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'] . '&download=1')) ?>" target="_blank">📥 دریافت فایل PDF کارنامه</a>
+          <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'])) ?>" target="_blank" title="مشاهده سند رسمی کارنامه A4">📄 مشاهده نسخه A4</a>
           <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $at['id'] ?>" target="_blank">📋 پرونده بالینی مشاور</a>
           <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $at['id'] ?>" target="_blank">📝 مشاهده و ویرایش پاسخ‌ها</a>
 
@@ -644,11 +644,11 @@ echo flash();
                   <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">
                     📋 پرونده
                   </a>
-                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'] . '&auto=1')) ?>" target="_blank" title="دریافت نسخه چاپی و PDF کارنامه">
-                    📄 PDF
+                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'] . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">
+                    📥 PDF
                   </a>
-                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'] . '&download_file=1')) ?>" target="_blank" title="دانلود مستقیم فایل سند کارنامه">
-                    💾 فایل
+                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'])) ?>" target="_blank" title="مشاهده نسخه رسمی کارنامه A4">
+                    📄 برگه A4
                   </a>
                 <?php else: ?>
                   <form method="post" style="display:inline" onsubmit="return confirm('پیامک یادآوری به همراه لینک ادامه برای مراجع ارسال شود؟')">

@@ -180,20 +180,38 @@ final class ReportBuilder
      */
     /**
      * ساخت HTML گزارش
+     * @param ?array $attempt ردیف آزمون
+     * @param ?array $user ردیف کاربر آزمون‌دهنده
+     * @param ?string $level free|full
      * @param array $opts نسخهٔ ۲٫۰: ['print'=>true] → نمودار مخصوص چاپ + بدون کنواس‌های نمایشی
      */
-    public static function build(array $attempt, array $user, ?string $level = 'full', array $opts = []): string
+    public static function build(?array $attempt, ?array $user = null, ?string $level = 'full', array $opts = []): string
     {
+        if (empty($attempt) || empty($attempt['id'])) {
+            return '<div class="fr-alert err">شناسه آزمون موردنظر نامعتبر است یا یافت نشد.</div>';
+        }
+
+        $user = $user ?: [
+            'id'         => (int)($attempt['user_id'] ?? 0),
+            'first_name' => $attempt['first_name'] ?? '',
+            'last_name'  => $attempt['last_name'] ?? '',
+            'mobile'     => $attempt['mobile'] ?? '',
+        ];
+
         $level = ($level === 'free') ? 'free' : 'full';
         $attempt['mode'] = $level;
         self::$printMode = !empty($opts['print']);
         self::$isAdmin   = isset($opts['isAdmin']) ? (bool)$opts['isAdmin'] : (bool)(function_exists('current_admin') && current_admin());
         $results = Analyzer::getResults((int)$attempt['id']);
         if (!$results && ($attempt['status'] ?? '') === 'completed') {
-            Analyzer::scoreAttempt((int)$attempt['id']);
-            $results = Analyzer::getResults((int)$attempt['id']);
+            try {
+                Analyzer::scoreAttempt((int)$attempt['id']);
+                $results = Analyzer::getResults((int)$attempt['id']);
+            } catch (\Throwable $se) {
+                error_log('ReportBuilder scoreAttempt notice: ' . $se->getMessage());
+            }
         }
-        if (!$results) return '<div class="fr-alert err">نتایج یافت نشد.</div>';
+        if (!$results) return '<div class="fr-alert err">نتایج ارزیابی برای این آزمون یافت نشد.</div>';
 
         $test  = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$attempt['test_id']])
                ?: ['id' => (int)($attempt['test_id'] ?? 0), 'title' => 'آزمون روان‌شناختی', 'engine' => 'disc', 'slug' => '', 'audience' => 'general'];

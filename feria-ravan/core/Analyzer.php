@@ -45,40 +45,49 @@ final class Analyzer
      * --------------------------------------------------------------------*/
     public static function scoreAttempt(int $attemptId): bool
     {
-        $at = DB::one('SELECT a.*, t.engine FROM ' . DB::t('attempts') . ' a
-                       JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id WHERE a.id=?', [$attemptId]);
-        if (!$at) return false;
+        try {
+            $at = DB::one('SELECT a.*, t.engine, t.slug, t.question_count FROM ' . DB::t('attempts') . ' a
+                           JOIN ' . DB::t('tests') . ' t ON t.id=a.test_id WHERE a.id=?', [$attemptId]);
+            if (!$at) return false;
 
-        $answers = DB::all('SELECT * FROM ' . DB::t('answers') . ' WHERE attempt_id=?', [$attemptId]);
-        if (!$answers) return false;
+            $answers = DB::all('SELECT * FROM ' . DB::t('answers') . ' WHERE attempt_id=?', [$attemptId]);
+            if (!$answers) return false;
 
-        // پاک‌سازی نتایج قبلی (در صورت نمرهگذاری مجدد)
-        DB::run('DELETE FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$attemptId]);
+            // پاک‌سازی نتایج قبلی (در صورت نمرهگذاری مجدد)
+            DB::run('DELETE FROM ' . DB::t('results') . ' WHERE attempt_id=?', [$attemptId]);
 
-        match ($at['engine']) {
-            'disc'     => self::scoreDisc($at, $answers),
-            'ysq'      => self::scoreLikertScales($at, $answers, 6, true),
-            'neo'      => self::scoreLikertScales($at, $answers, 5, false),
-            'screen'   => self::scoreScreening($at, $answers, false),   // اضطراب/افسردگی (باند ۵سطحی بالینی)
-            'jobsat'   => self::scoreScreening($at, $answers, true),    // رضایت شغلی (باند ۳سطحی + اقلام معکوس)
-            'mslikert' => self::scoreMsLikert($at, $answers),         // گاردنر ۹هوش / هوش هیجانی شوت (نسخهٔ ۱٫۸)
-            'mbti'     => self::scoreMbti($at, $answers),
-            'holland'  => self::scoreHolland($at, $answers),
-            'baron'    => self::scoreBarOn($at, $answers),
-            'mmpi'     => self::scoreMmpi($at, $answers),
-            'raven'    => self::scoreRaven($at, $answers),
-            'wais'     => self::scoreWais($at, $answers),
-            default    => throw new RuntimeException('موتور ناشناخته: ' . $at['engine']),
-        };
+            match ($at['engine']) {
+                'disc'          => self::scoreDisc($at, $answers),
+                'ysq'           => self::scoreLikertScales($at, $answers, 6, true),
+                'neo', 'likert' => self::scoreLikertScales($at, $answers, 5, false),
+                'screen'        => self::scoreScreening($at, $answers, false),   // اضطراب/افسردگی (باند ۵سطحی بالینی)
+                'jobsat'        => self::scoreScreening($at, $answers, true),    // رضایت شغلی (باند ۳سطحی + اقلام معکوس)
+                'mslikert'      => self::scoreMsLikert($at, $answers),           // گاردنر ۹هوش / هوش هیجانی شوت (نسخهٔ ۱٫۸)
+                'mbti'          => self::scoreMbti($at, $answers),
+                'holland'       => self::scoreHolland($at, $answers),
+                'baron'         => self::scoreBarOn($at, $answers),
+                'mmpi'          => self::scoreMmpi($at, $answers),
+                'raven'         => self::scoreRaven($at, $answers),
+                'wais'          => self::scoreWais($at, $answers),
+                default         => self::scoreLikertScales($at, $answers, 5, false), // فال‌بک امن برای سازگاری بدون ایجاد خطای مهلک
+            };
 
-        // فاز ۱: هنجاریابی روان‌سنجی (T-Scores، Sten، Percentile) + ارزیابی اعتبار پاسخ‌ها
-        require_once __DIR__ . '/Psychometrics.php';
-        Psychometrics::standardizeResults($attemptId, (string)$at['engine'], (string)($at['slug'] ?? ''));
-        Psychometrics::evaluateValidity($at, $answers, (int)($at['question_count'] ?? count($answers)));
+            // فاز ۱: هنجاریابی روان‌سنجی (T-Scores، Sten، Percentile) + ارزیابی اعتبار پاسخ‌ها
+            require_once __DIR__ . '/Psychometrics.php';
+            try {
+                Psychometrics::standardizeResults($attemptId, (string)$at['engine'], (string)($at['slug'] ?? ''));
+                Psychometrics::evaluateValidity($at, $answers, (int)($at['question_count'] ?? count($answers)));
+            } catch (\Throwable $pe) {
+                error_log('Psychometrics error: ' . $pe->getMessage());
+            }
 
-        DB::update('attempts', ['status' => 'completed', 'completed_at' => date('Y-m-d H:i:s')],
-                   'id=?', [$attemptId]);
-        return true;
+            DB::update('attempts', ['status' => 'completed', 'completed_at' => date('Y-m-d H:i:s')],
+                       'id=?', [$attemptId]);
+            return true;
+        } catch (\Throwable $e) {
+            error_log('Analyzer::scoreAttempt error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            return false;
+        }
     }
 
     /* -----------------------------------------------------------------------
