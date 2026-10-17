@@ -55,24 +55,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (trim((string)$nm) === '' && trim((string)($fms[$i] ?? '')) === '') continue; // ردیف کاملاً خالی نادیده
         $comps[] = ['name' => (string)$nm, 'mobile' => (string)($fms[$i] ?? ''), 'is_free' => 1];
     }
-    $code = trim((string)($_POST['discount_code'] ?? ''));
-    $useWallet = !empty($_POST['use_wallet']);          // پرداخت با موجودی کیف پول (۱٫۶)
-    /* ۳٫۰: انتخاب کاربر — پرداخت کامل یا پیش‌پرداخت (بیعانه) */
-    $payMode = (string)($_POST['pay_mode'] ?? 'full') === 'deposit' ? 'deposit' : 'full';
+    $submittedCode  = trim((string)($_POST['discount_code'] ?? ''));
+    $rawEnteredCode = trim((string)($_POST['raw_discount_code'] ?? ''));
+    $code           = '';
 
-    $r = create_event_order($u, $ev, $comps, $code !== '' ? $code : null, $useWallet, $payMode);
-    if ($r['error']) {
-        $err = $r['message'] ?? $r['error'];
-        $initQuote = $r['quote'] ?: $initQuote;
-    } elseif ($r['payment_url']) {
-        redirect($r['payment_url']);                                  // به درگاه
-    } else {
-        $depDone = (int)($r['deposit'] ?? 0) > 0;
-        redirect($evHome . '?ok=' . urlencode($depDone
-            ? 'پیش‌پرداخت شما در «' . $ev['title'] . '» ثبت شد و جایتان قطعی است 🎉 — مانده را با لینک پیامکی یا دکمهٔ «تصفیهٔ حساب» همین پنل پرداخت کنید.'
-            : (!empty($r['wallet'])
-                ? 'ثبت‌نام شما در «' . $ev['title'] . '» با کیف پول قطعی شد 🎉👛'
-                : 'ثبت‌نام شما در «' . $ev['title'] . '» با موفقیت انجام شد 🎉')));
+    if ($submittedCode !== '' || $rawEnteredCode !== '') {
+        $targetCode = $submittedCode !== '' ? $submittedCode : $rawEnteredCode;
+        $sessDiscount = $_SESSION['applied_discounts']['event_' . (int)$ev['id']] ?? null;
+
+        if (
+            !$sessDiscount ||
+            mb_strtolower((string)$sessDiscount['code']) !== mb_strtolower($targetCode) ||
+            (int)($sessDiscount['event_id'] ?? 0) !== (int)$ev['id'] ||
+            (time() - (int)($sessDiscount['time'] ?? 0)) > 7200
+        ) {
+            $err = 'برای استفاده از تخفیف، حتماً باید دکمهٔ «اعمال کد» را انتخاب کنید.';
+        } else {
+            $code = (string)$sessDiscount['code'];
+        }
+    }
+
+    if (!$err) {
+        $useWallet = !empty($_POST['use_wallet']);          // پرداخت با موجودی کیف پول (۱٫۶)
+        /* ۳٫۰: انتخاب کاربر — پرداخت کامل یا پیش‌پرداخت (بیعانه) */
+        $payMode = (string)($_POST['pay_mode'] ?? 'full') === 'deposit' ? 'deposit' : 'full';
+
+        $r = create_event_order($u, $ev, $comps, $code !== '' ? $code : null, $useWallet, $payMode);
+        if ($r['error']) {
+            $err = $r['message'] ?? $r['error'];
+            $initQuote = $r['quote'] ?: $initQuote;
+        } elseif ($r['payment_url']) {
+            unset($_SESSION['applied_discounts']['event_' . (int)$ev['id']]);
+            redirect($r['payment_url']);                                  // به درگاه
+        } else {
+            unset($_SESSION['applied_discounts']['event_' . (int)$ev['id']]);
+            $depDone = (int)($r['deposit'] ?? 0) > 0;
+            redirect($evHome . '?ok=' . urlencode($depDone
+                ? 'پیش‌پرداخت شما در «' . $ev['title'] . '» ثبت شد و جایتان قطعی است 🎉 — مانده را با لینک پیامکی یا دکمهٔ «تصفیهٔ حساب» همین پنل پرداخت کنید.'
+                : (!empty($r['wallet'])
+                    ? 'ثبت‌نام شما در «' . $ev['title'] . '» با کیف پول قطعی شد 🎉👛'
+                    : 'ثبت‌نام شما در «' . $ev['title'] . '» با موفقیت انجام شد 🎉')));
+        }
     }
 }
 
@@ -152,9 +175,10 @@ panel_layout($u, $ev['kind'] === 'course' ? 'courses' : 'workshops');
     <div class="fr-card">
       <h3 style="margin-bottom:10px">🎟 کد تخفیف</h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <input class="fr-input" id="dcCode" name="discount_code" placeholder="کد تخفیف (اختیاری)"
+        <input class="fr-input" id="dcCode" name="raw_discount_code" placeholder="کد تخفیف (اختیاری)"
                style="direction:ltr;text-align:right;flex:1;min-width:180px"
-               value="<?= e($_POST['discount_code'] ?? '') ?>">
+               value="<?= e($_POST['raw_discount_code'] ?? ($_POST['discount_code'] ?? '')) ?>" autocomplete="off">
+        <input type="hidden" name="discount_code" id="appliedDiscountCode" value="">
         <button type="button" class="fr-btn ghost" id="dcApply">اعمال کد</button>
       </div>
       <div id="dcMsg" style="font-size:12.5px;margin-top:8px"></div>
@@ -304,8 +328,41 @@ function renderQuote(q){
 }
 
 /* درخواست قیمت از سرور (تنها منبع حقیقت) */
+let APPLIED_CODE = '';
+const dcCodeInp = document.getElementById('dcCode');
+const appliedDcInp = document.getElementById('appliedDiscountCode');
+const dcApplyBtn = document.getElementById('dcApply');
+const dcMsg = document.getElementById('dcMsg');
+
+// اینتر در کادر تخفیف -> اعمال کد به‌جای ثبت زودهنگام فرم
+if (dcCodeInp && dcApplyBtn) {
+  dcCodeInp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      dcApplyBtn.click();
+    }
+  });
+
+  // تغییر متن کد تخفیف -> لغو وضعیت اعمال‌شده تا فشردن دوباره دکمه اعمال
+  dcCodeInp.addEventListener('input', function() {
+    const cur = dcCodeInp.value.trim();
+    if (APPLIED_CODE && cur !== APPLIED_CODE) {
+      APPLIED_CODE = '';
+      appliedDcInp.value = '';
+      refreshQuote();
+      dcMsg.innerHTML = '<span style="color:#d97706">⚠️ متن کد تغییر کرد؛ برای اعمال حتماً دکمه «اعمال کد» را بزنید.</span>';
+    } else if (!cur) {
+      APPLIED_CODE = '';
+      appliedDcInp.value = '';
+      refreshQuote();
+      dcMsg.innerHTML = '';
+    }
+  });
+}
+
 async function refreshQuote(){
-  const code = document.getElementById('dcCode').value.trim();
+  // تخفیف فقط با کدی محاسبه می‌شود که کاربر دکمه اعمال آن را فشرده باشد
+  const code = APPLIED_CODE;
   try {
     const r = await api(CODE_API, {event_id: EVENT_ID, cmp: companionCount(), free: freeCount(), code: code});
     if (r.ok && r.quote) renderQuote(r.quote);
@@ -313,16 +370,58 @@ async function refreshQuote(){
   } catch(e) { /* خطای شبکه — قیمت سمت سرور در ثبت نهایی دوباره محاسبه می‌شود */ }
 }
 
-/* اعمال کد تخفیف */
-document.getElementById('dcApply').onclick = async function(){
-  const msg = document.getElementById('dcMsg');
-  msg.innerHTML = '⏳ درحال بررسی...';
-  const r = await refreshQuote();
-  if (r) {
-    msg.style.color = r.code_ok ? '#0c7a4d' : '#b0262c';
-    msg.innerHTML = r.message ? (r.code_ok ? '✅ ' : '⚠️ ') + r.message : '';
+/* اعمال کد تخفیف با دکمه اختصاصی */
+if (dcApplyBtn) {
+  dcApplyBtn.onclick = async function(){
+    const typed = dcCodeInp ? dcCodeInp.value.trim() : '';
+    if (!typed) {
+      APPLIED_CODE = '';
+      if (appliedDcInp) appliedDcInp.value = '';
+      if (dcMsg) dcMsg.innerHTML = '<span style="color:#64748b">لطفاً کد تخفیف را وارد کنید و دکمه اعمال را بزنید.</span>';
+      await refreshQuote();
+      return;
+    }
+    if (dcMsg) dcMsg.innerHTML = '⏳ درحال بررسی...';
+    try {
+      const r = await api(CODE_API, {event_id: EVENT_ID, cmp: companionCount(), free: freeCount(), code: typed});
+      if (r && r.code_ok) {
+        APPLIED_CODE = typed;
+        if (appliedDcInp) appliedDcInp.value = typed;
+        if (dcMsg) {
+          dcMsg.style.color = '#0c7a4d';
+          dcMsg.innerHTML = '✅ ' + (r.message || 'کد تخفیف با موفقیت اعمال شد.');
+        }
+        if (r.quote) renderQuote(r.quote);
+      } else {
+        APPLIED_CODE = '';
+        if (appliedDcInp) appliedDcInp.value = '';
+        if (dcMsg) {
+          dcMsg.style.color = '#b0262c';
+          dcMsg.innerHTML = '⚠️ ' + ((r && r.message) ? r.message : 'کد تخفیف معتبر نیست.');
+        }
+        await refreshQuote();
+      }
+    } catch(err) {
+      if (dcMsg) dcMsg.innerHTML = '<span style="color:#b0262c">خطا در ارتباط با سرور.</span>';
+    }
+  };
+}
+
+// رهگیری سابمیت فرم برای جلوگیری از ارسال بدون زدن دکمه اعمال
+document.querySelector('form')?.addEventListener('submit', function(e) {
+  if (dcCodeInp) {
+    const typed = dcCodeInp.value.trim();
+    if (typed !== '' && APPLIED_CODE === '') {
+      e.preventDefault();
+      if (dcMsg) {
+        dcMsg.innerHTML = '<span style="display:inline-block;background:#fee2e2;color:#991b1b;padding:5px 9px;border-radius:6px;font-weight:700">⚠️ شما کد تخفیف را وارد کرده‌اید اما دکمه «اعمال کد» را انتخاب نکرده‌اید! لطفاً ابتدا دکمه «اعمال کد» را بزنید یا کادر آن را پاک کنید.</span>';
+      }
+      dcApplyBtn.focus();
+      dcCodeInp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
   }
-};
+});
 
 document.getElementById('cmpAdd') && document.getElementById('cmpAdd').addEventListener('click',function(){ addCmpRow('',''); });
 

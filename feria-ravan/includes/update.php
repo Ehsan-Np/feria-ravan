@@ -1226,6 +1226,15 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.0.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۵. نگارش ۴٫۱٫۰: تثبیت گام‌های فیلدهای سفارشی و اعتبارسنجی الزامی دکمه اعمال کدهای تخفیف
+        // ---------------------------------------------------------------------
+        try {
+            if (class_exists('TestFields')) {
+                TestFields::ensureSchema();
+            }
+        } catch (Throwable $e) { error_log('feria: 4.1.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

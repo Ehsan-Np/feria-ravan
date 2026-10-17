@@ -145,33 +145,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } else {
-            $code = trim((string)($_POST['discount_code'] ?? ''));
-            $useWallet = !empty($_POST['use_wallet']);
-            $upgradeAttemptId = (int)($_POST['upgrade_attempt'] ?? ($_GET['upgrade_attempt'] ?? 0));
-            if ($upgradeAttemptId <= 0 && $completedFree) {
-                $upgradeAttemptId = (int)$completedFree['id'];
-            }
-            $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet, $upgradeAttemptId > 0 ? $upgradeAttemptId : null, $customFieldsJson);
-            if ($r['error']) $err = $r['error'];
-            else {
-                if ($dyadContext && !empty($r['order']['id'])) {
-                    DB::update('dyads', ['order2_id' => $r['order']['id']], 'id=?', [$dyadContext['id']]);
-                }
-                if ($r['payment_url']) {
-                    redirect($r['payment_url']);          // → درگاه
+            $submittedCode  = trim((string)($_POST['discount_code'] ?? ''));
+            $rawEnteredCode = trim((string)($_POST['raw_discount_code'] ?? ''));
+            $code           = '';
+
+            // بررسی دقیق الزام فشردن دکمه «اعمال» برای کد تخفیف
+            if ($submittedCode !== '' || $rawEnteredCode !== '') {
+                $targetCode = $submittedCode !== '' ? $submittedCode : $rawEnteredCode;
+                $sessDiscount = $_SESSION['applied_discounts']['test_' . (int)$test['id']] ?? null;
+
+                if (
+                    !$sessDiscount ||
+                    mb_strtolower((string)$sessDiscount['code']) !== mb_strtolower($targetCode) ||
+                    (int)($sessDiscount['test_id'] ?? 0) !== (int)$test['id'] ||
+                    (time() - (int)($sessDiscount['time'] ?? 0)) > 7200
+                ) {
+                    $err = 'برای استفاده از تخفیف، حتماً باید دکمهٔ «اعمال» کد تخفیف را بزنید.';
                 } else {
-                    if ($dyadContext && !empty($r['attempt_id'])) {
-                        require_once __DIR__ . '/../core/DyadAnalyzer.php';
-                        DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$r['attempt_id']);
+                    $code = (string)$sessDiscount['code'];
+                }
+            }
+
+            if (!$err) {
+                $useWallet = !empty($_POST['use_wallet']);
+                $upgradeAttemptId = (int)($_POST['upgrade_attempt'] ?? ($_GET['upgrade_attempt'] ?? 0));
+                if ($upgradeAttemptId <= 0 && $completedFree) {
+                    $upgradeAttemptId = (int)$completedFree['id'];
+                }
+                $r = create_full_order($u, $test, $code !== '' ? $code : null, $useWallet, $upgradeAttemptId > 0 ? $upgradeAttemptId : null, $customFieldsJson);
+                if ($r['error']) $err = $r['error'];
+                else {
+                    unset($_SESSION['applied_discounts']['test_' . (int)$test['id']]);
+                    if ($dyadContext && !empty($r['order']['id'])) {
+                        DB::update('dyads', ['order2_id' => $r['order']['id']], 'id=?', [$dyadContext['id']]);
                     }
-                    $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
-                    if ($attRow && $attRow['status'] === 'completed') {
-                        if ($dyadContext) {
-                            redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
-                        }
-                        redirect(fr_panel_url('report.php?attempt=' . (int)$r['attempt_id']));
+                    if ($r['payment_url']) {
+                        redirect($r['payment_url']);          // → درگاه
                     } else {
-                        redirect(fr_panel_url('take.php?attempt=' . (int)$r['attempt_id']));
+                        if ($dyadContext && !empty($r['attempt_id'])) {
+                            require_once __DIR__ . '/../core/DyadAnalyzer.php';
+                            DyadAnalyzer::joinDyad($activeDyadToken, (int)$u['id'], (int)$r['attempt_id']);
+                        }
+                        $attRow = DB::one('SELECT status FROM ' . DB::t('attempts') . ' WHERE id=?', [(int)$r['attempt_id']]);
+                        if ($attRow && $attRow['status'] === 'completed') {
+                            if ($dyadContext) {
+                                redirect(fr_panel_url('dyad-report.php?id=' . $dyadContext['id']));
+                            }
+                            redirect(fr_panel_url('report.php?attempt=' . (int)$r['attempt_id']));
+                        } else {
+                            redirect(fr_panel_url('take.php?attempt=' . (int)$r['attempt_id']));
+                        }
                     }
                 }
             }
@@ -327,11 +350,15 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
           </div>
           <input type="hidden" name="upgrade_attempt" value="<?= (int)$completedFree['id'] ?>">
           <?php endif; ?>
-          <div style="display:flex;gap:8px;margin-bottom:12px">
-            <input class="fr-input" id="dcCode" name="discount_code" placeholder="کد تخفیف (اختیاری)" style="direction:ltr;text-align:right">
-            <button class="fr-btn ghost sm" type="button" id="btnDc">اعمال</button>
+          <div style="background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:12px;padding:12px;margin-bottom:12px">
+            <label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:6px">🎟️ کد تخفیف:</label>
+            <div style="display:flex;gap:8px">
+              <input class="fr-input" id="dcCode" name="raw_discount_code" placeholder="کد تخفیف (اختیاری)" style="direction:ltr;text-align:right;flex:1" autocomplete="off">
+              <input type="hidden" name="discount_code" id="appliedDiscountCode" value="">
+              <button class="fr-btn ghost sm" type="button" id="btnDc" style="min-width:75px">اعمال</button>
+            </div>
+            <div id="dcMsg" style="font-size:12px;margin-top:8px"></div>
           </div>
-          <div id="dcMsg" style="font-size:12.5px;margin-bottom:10px"></div>
           <?php $wBal = wallet_balance((int)$u['id']); if ($wBal > 0 && $pDeal['final'] > 0): ?>
           <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;background:#fff;border:1.5px dashed #d4dcec;border-radius:12px;padding:9px 11px;margin-bottom:12px">
             <input type="checkbox" name="use_wallet" value="1" style="width:17px;height:17px">
@@ -350,19 +377,96 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
   </div>
 </div>
 <script>
-/* بررسی زندهٔ کد تخفیف */
-const base = <?= $pDeal['final'] ?>;
-document.getElementById('btnDc').onclick = async () => {
-  const code = document.getElementById('dcCode').value.trim();
-  if (!code) { document.getElementById('dcMsg').innerHTML=''; document.getElementById('priceBox').textContent=''; return; }
-  const r = await api('../api/discount.php', {code, test_id: <?= (int)$test['id'] ?>});
-  const el = document.getElementById('dcMsg');
-  el.innerHTML = '<span style="color:' + (r.ok ? '#0c7a4d' : '#b0262c') + '">' + r.message + '</span>';
-  if (r.ok) {
-    document.getElementById('priceBox').innerHTML =
-      '<s style="color:#a49ec7;font-size:15px">' + r.amount_f + '</s> &nbsp; <span>' + r.payable_f + '</span>';
+/* بررسی زنده و الزام فشردن دکمه «اعمال» کد تخفیف */
+const dcInp = document.getElementById('dcCode');
+const appliedDcInp = document.getElementById('appliedDiscountCode');
+const btnDc = document.getElementById('btnDc');
+const dcMsg = document.getElementById('dcMsg');
+const priceBox = document.getElementById('priceBox');
+let appliedCode = '';
+
+if (dcInp && btnDc) {
+  // اینتر داخل کادر تخفیف -> فعال‌سازی دکمه اعمال به‌جای سابمیت ناخواسته فرم
+  dcInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btnDc.click();
+    }
+  });
+
+  // در صورت ویرایش متن کد پس از اعمال، وضعیت تخفیف لغو و پیام هشدار نمایش می‌یابد
+  dcInp.addEventListener('input', () => {
+    const cur = dcInp.value.trim();
+    if (appliedCode && cur !== appliedCode) {
+      appliedCode = '';
+      appliedDcInp.value = '';
+      dcMsg.innerHTML = '<span style="color:#d97706">⚠️ متن کد تغییر کرد؛ برای محاسبهٔ تخفیف حتماً دکمه «اعمال» را بزنید.</span>';
+      if (priceBox && priceBox.dataset.original) {
+        priceBox.innerHTML = priceBox.dataset.original;
+      }
+    } else if (!cur) {
+      appliedCode = '';
+      appliedDcInp.value = '';
+      dcMsg.innerHTML = '';
+      if (priceBox && priceBox.dataset.original) {
+        priceBox.innerHTML = priceBox.dataset.original;
+      }
+    }
+  });
+
+  // ذخیره حالت اولیه باکس قیمت
+  if (priceBox && !priceBox.dataset.original) {
+    priceBox.dataset.original = priceBox.innerHTML;
   }
-};
+
+  btnDc.onclick = async () => {
+    const code = dcInp.value.trim();
+    if (!code) {
+      appliedCode = '';
+      appliedDcInp.value = '';
+      dcMsg.innerHTML = '<span style="color:#64748b">لطفاً کد تخفیف را وارد کنید و دکمه «اعمال» را بزنید.</span>';
+      if (priceBox && priceBox.dataset.original) priceBox.innerHTML = priceBox.dataset.original;
+      await api('../api/discount.php', {code: '', test_id: <?= (int)$test['id'] ?>, act: 'clear'});
+      return;
+    }
+    btnDc.disabled = true;
+    dcMsg.innerHTML = '<span style="color:#64748b">⏳ در حال اعتبارسنجی کد تخفیف...</span>';
+    try {
+      const r = await api('../api/discount.php', {code, test_id: <?= (int)$test['id'] ?>});
+      if (r.ok) {
+        appliedCode = code;
+        appliedDcInp.value = code;
+        dcMsg.innerHTML = '<span style="color:#0c7a4d;font-weight:700">✅ ' + (r.message || 'کد تخفیف اعمال شد.') + '</span>';
+        if (priceBox) {
+          priceBox.innerHTML = '<s style="color:#a49ec7;font-size:15px">' + r.amount_f + '</s> &nbsp; <span style="color:#0c7a4d;font-weight:800">' + r.payable_f + '</span>';
+        }
+      } else {
+        appliedCode = '';
+        appliedDcInp.value = '';
+        dcMsg.innerHTML = '<span style="color:#b0262c;font-weight:700">❌ ' + (r.message || 'کد تخفیف نامعتبر است.') + '</span>';
+        if (priceBox && priceBox.dataset.original) priceBox.innerHTML = priceBox.dataset.original;
+      }
+    } catch (e) {
+      dcMsg.innerHTML = '<span style="color:#b0262c">خطا در ارتباط با سرور.</span>';
+    } finally {
+      btnDc.disabled = false;
+    }
+  };
+}
+
+// جلوگیری قطعی از ثبت فرم در صورتی که کاربر کد را تایپ کرده ولی دکمه اعمال را نزده باشد
+document.getElementById('fullForm')?.addEventListener('submit', (e) => {
+  if (dcInp) {
+    const typed = dcInp.value.trim();
+    if (typed !== '' && appliedCode === '') {
+      e.preventDefault();
+      dcMsg.innerHTML = '<span style="display:inline-block;background:#fee2e2;color:#991b1b;padding:5px 9px;border-radius:6px;font-weight:700">⚠️ شما کد تخفیف را وارد کرده‌اید اما دکمه «اعمال» را انتخاب نکرده‌اید! جهت بهره‌مندی از تخفیف ابتدا دکمه «اعمال» را بزنید یا کادر را پاک کنید.</span>';
+      btnDc.focus();
+      dcInp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+  }
+});
 
 // همگام‌سازی و تزریق داده‌های فیلدهای پیش از آزمون در هنگام ثبت هر یک از فرم‌ها (رایگان / ویژه / هدیه)
 document.querySelectorAll('form').forEach(f => {

@@ -22,7 +22,7 @@ if (!defined('DB_PREFIX')) define('DB_PREFIX', '{{DB_PREFIX}}');
 if (!defined('SITE_URL'))  define('SITE_URL',  '{{SITE_URL}}');
 
 /* کلید رمزنگاری داده‌های حساس — در صورت عدم مقداردهی، به‌صورت خودکار و ایمن تولید می‌شود */
-$rawCryptKey = '{{ENCRYPT_KEY}}';
+$rawCryptKey = '2028ca40a2f629a7b79a3720ef5b406d201d63ca3c4c187c81923666fecb5dab';
 if ($rawCryptKey === '{{' . 'ENCRYPT_KEY' . '}}' || trim($rawCryptKey) === '') {
     $keyFile = __DIR__ . '/storage/.crypt_key';
     $savedKey = '';
@@ -41,8 +41,8 @@ if ($rawCryptKey === '{{' . 'ENCRYPT_KEY' . '}}' || trim($rawCryptKey) === '') {
     }
     if (is_writable(__FILE__)) {
         $cfgContent = @file_get_contents(__FILE__);
-        if ($cfgContent && str_contains($cfgContent, "'{{ENCRYPT_KEY}}'")) {
-            $updatedCfg = str_replace("'{{ENCRYPT_KEY}}'", var_export($savedKey, true), $cfgContent);
+        if ($cfgContent && str_contains($cfgContent, "'2028ca40a2f629a7b79a3720ef5b406d201d63ca3c4c187c81923666fecb5dab'")) {
+            $updatedCfg = str_replace("'2028ca40a2f629a7b79a3720ef5b406d201d63ca3c4c187c81923666fecb5dab'", var_export($savedKey, true), $cfgContent);
             @file_put_contents(__FILE__, $updatedCfg, LOCK_EX);
         }
     }
@@ -60,7 +60,7 @@ if (!defined('FR_ENV')) define('FR_ENV', 'production');
 
 if (!defined('FR_ROOT')) define('FR_ROOT', dirname(__FILE__));
 /* نسخهٔ ۲٫۵: نگارش واقعی کد در includes/version.php (FR_RELEASE) است؛ این‌جا فقط Fallback */
-if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.0.0');
+if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.1.0');
 
 /* ---------------------------------------------------------------------------
  | اگر این فایل هنوز «قالب خام» است (مقادیر جایگزین نشده‌اند)، نصب انجام نشده

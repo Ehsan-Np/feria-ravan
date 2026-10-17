@@ -71,21 +71,59 @@ if (!empty($in['event_id'])) {
             $out['code_ok']    = true;
             $out['discount_f'] = toman($q2['discount_amount']);
             $out['payable_f']  = toman($q2['payable']);
+
+            // ثبت اعتبارسنجی موفق کد تخفیف در نشست برای جلوگیری از سابمیت بدون فشردن دکمه اعمال
+            if (!isset($_SESSION['applied_discounts'])) $_SESSION['applied_discounts'] = [];
+            $_SESSION['applied_discounts']['event_' . $eventId] = [
+                'code'     => $code,
+                'time'     => time(),
+                'event_id' => $eventId,
+                'user_id'  => (int)$u['id'],
+            ];
+        } else {
+            unset($_SESSION['applied_discounts']['event_' . $eventId]);
         }
+    } else {
+        unset($_SESSION['applied_discounts']['event_' . $eventId]);
     }
     json_out($out);
 }
 
 /* ---------------------------------------------------------------------------
- | حالت تست روانشناسی (رفتار قبلی)
+ | حالت تست روانشناسی (بررسی زنده و ثبت در نشست کاربری)
  * -------------------------------------------------------------------------*/
 $testId = (int)($in['test_id'] ?? 0);
 $test   = DB::one('SELECT price_full, price_sale FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [$testId]);
 if (!$test) json_out(['ok'=>false,'message'=>'تست روانشناسی یافت نشد.']);
 
 // نسخهٔ ۲٫۸: کد تخفیف روی «قیمت نهایی» (پس از تخفیف قیمت‌گذاری) اعمال می‌شود
-$_deal  = fr_price_deal((int)$test['price_full'], isset($test['price_sale']) ? (int)$test['price_sale'] : null);
-$v = validate_discount((string)($in['code'] ?? ''), $testId, (int)$u['id'], $_deal['final']);
+$_deal   = fr_price_deal((int)$test['price_full'], isset($test['price_sale']) ? (int)$test['price_sale'] : null);
+$rawCode = trim((string)($in['code'] ?? ''));
+$act     = (string)($in['act'] ?? '');
+
+if ($act === 'clear' || $rawCode === '') {
+    unset($_SESSION['applied_discounts']['test_' . $testId]);
+    json_out([
+        'ok'        => true,
+        'cleared'   => true,
+        'amount_f'  => toman($_deal['final']),
+        'payable_f' => toman($_deal['final']),
+        'message'   => 'کد تخفیف حذف شد.',
+    ]);
+}
+
+$v = validate_discount($rawCode, $testId, (int)$u['id'], $_deal['final']);
 $v['amount_f']  = toman($_deal['final']);
 $v['payable_f'] = toman($v['payable']);
+if (!empty($v['ok'])) {
+    if (!isset($_SESSION['applied_discounts'])) $_SESSION['applied_discounts'] = [];
+    $_SESSION['applied_discounts']['test_' . $testId] = [
+        'code'    => $rawCode,
+        'time'    => time(),
+        'test_id' => $testId,
+        'user_id' => (int)$u['id'],
+    ];
+} else {
+    unset($_SESSION['applied_discounts']['test_' . $testId]);
+}
 json_out($v);
