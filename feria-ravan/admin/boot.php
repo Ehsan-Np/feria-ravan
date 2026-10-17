@@ -44,6 +44,7 @@ function admin_layout(array $admin, string $active, string $title): void
         ['consult-bookings','📋 نوبت‌های مشاوره','/admin/consult-bookings.php'],
         ['tickets','🎫 تیکت‌ها','/admin/tickets.php'],
         ['pages','📄 برگه‌ها و صفحه‌ساز','/admin/pages.php'],
+        ['menus','📋 فهرست‌ها و منوها','/admin/menus.php'],
         ['permalinks','🔗 پیوندهای یکتا','/admin/permalinks.php'],
         ['banners','🖼 بنرها','/admin/banners.php'],
         ['newsletter','✉️ خبرنامه پیامکی','/admin/newsletter.php'],
@@ -86,7 +87,7 @@ function admin_layout(array $admin, string $active, string $title): void
         ['id' => 'grp-consult',  'label' => '🛋 مشاوره',                 'keys' => ['consult', 'consult-schedule', 'consult-bookings']],
         ['id' => 'grp-sales',    'label' => '💳 فروش و مالی',            'keys' => ['orders', 'discounts', 'refunds', 'tickets']],
         ['id' => 'grp-marketing','label' => '📨 بازاریابی و اطلاع‌رسانی', 'keys' => ['newsletter', 'contacts', 'campaigns', 'notifications', 'planner', 'sms']],
-        ['id' => 'grp-content',  'label' => '🖼 محتوا و سئو',            'keys' => ['pages', 'banners', 'texts', 'permalinks']],
+        ['id' => 'grp-content',  'label' => '🖼 محتوا و سئو',            'keys' => ['pages', 'menus', 'banners', 'texts', 'permalinks']],
         ['id' => 'grp-system',   'label' => '⚙️ سیستم',                  'keys' => ['monitor', 'roles', 'trash', 'settings', 'updater']],
     ];
 

@@ -9,6 +9,10 @@
 declare(strict_types=1);
 require_once __DIR__ . '/seo.php';
 require_once __DIR__ . '/texts.php';    // نسخهٔ ۲٫۱: متن‌های قابل‌شخصی‌سازی (ری‌برندینگ)
+require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/../core/MenuBuilder.php';
+require_once __DIR__ . '/../core/PageBuilder.php';
 
 /**
  * سربرگ صفحات عمومی
@@ -56,6 +60,21 @@ function public_header(array $opts = [], string $title = ''): void
 </head>
 <body class="pb<?= $tone ? ' ' . e($tone) : '' ?>" data-active="<?= e($active) ?>">
 <script>window.CSRF='<?= csrf_token() ?>';</script>
+
+<?php
+// ۳٫۷٫۰: بررسی وجود سربرگ سفارشی فعال طراحی‌شده با صفحه‌ساز دیداری
+if (empty($_GET['classic']) && empty($_GET['default_header']) && class_exists('PageBuilder')) {
+    $customHeader = PageBuilder::getActiveHeader();
+    if ($customHeader && !empty($customHeader['content_html'])) {
+        if (!empty($customHeader['content_css'])) {
+            echo "<style id=\"fr-custom-header-css\">\n" . $customHeader['content_css'] . "\n</style>\n";
+        }
+        echo PageBuilder::resolveWidgets($customHeader['content_html']);
+        return;
+    }
+}
+?>
+
 <!-- ===================== ناوبری عمومی ===================== -->
 <header class="pb-nav" id="pbNav">
   <div class="pb-nav-in">
@@ -221,6 +240,21 @@ function public_footer(): void
     ]);
     $badges = fr_footer_badges();
     $u = function_exists('current_user') ? current_user() : null;
+
+    // ۳٫۷٫۰: بررسی وجود پاورقی سفارشی فعال طراحی‌شده با صفحه‌ساز دیداری
+    if (empty($_GET['classic']) && empty($_GET['default_footer']) && class_exists('PageBuilder')) {
+        $customFooter = PageBuilder::getActiveFooter();
+        if ($customFooter && !empty($customFooter['content_html'])) {
+            if (!empty($customFooter['content_css'])) {
+                echo "<style id=\"fr-custom-footer-css\">\n" . $customFooter['content_css'] . "\n</style>\n";
+            }
+            echo PageBuilder::resolveWidgets($customFooter['content_html']);
+            echo '<script src="' . SITE_URL . '/assets/js/feria.js?v=' . FR_VERSION . '"></script>';
+            echo '<script src="' . SITE_URL . '/assets/js/site.js?v=' . FR_VERSION . '"></script>';
+            echo '</body></html>';
+            return;
+        }
+    }
     ?>
 <!-- ===================== فوتر عمومی (نسخهٔ ۲٫۱) ===================== -->
 <footer class="pb-foot">

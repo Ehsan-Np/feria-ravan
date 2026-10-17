@@ -269,20 +269,30 @@ $isHome  = !empty($page['is_home']);
 <body>
 
   <!-- نوار ابزار بالای ویرایشگر -->
+  <?php
+    $pType = $page['page_type'] ?? 'page';
+    $backTab = in_array($pType, ['header', 'footer'], true) ? '?tab=' . $pType : '';
+    $typeLabel = ($pType === 'header') ? '🔝 سربرگ: ' : (($pType === 'footer') ? '🔻 پاورقی: ' : '📄 ');
+  ?>
   <header id="pb-topbar">
     <div class="pb-brand-box">
-      <a href="pages.php" class="pb-btn ghost" style="padding:5px 12px">
-        ← برگه‌ها
+      <a href="pages.php<?= $backTab ?>" class="pb-btn ghost" style="padding:5px 12px">
+        ← بازگشت
       </a>
       <div style="font-size:14px;font-weight:700;color:#f8fafc">
-        <?= e($page['title']) ?>
+        <?= $typeLabel . e($page['title']) ?>
         <?php if ($isHome): ?>
           <span style="background:#f59e0b;color:#0f172a;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-right:6px">⭐️ صفحه اصلی</span>
         <?php endif; ?>
+        <?php if (!empty($page['is_default'])): ?>
+          <span style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-right:6px">⭐️ قالب فعال سراسری</span>
+        <?php endif; ?>
       </div>
-      <a href="<?= $isHome ? SITE_URL . '/' : SITE_URL . '/page.php?slug=' . urlencode((string)$page['slug']) ?>" target="_blank" class="pb-btn ghost" style="font-size:11px;padding:4px 8px" title="مشاهده پیش‌نمایش در تب جدید">
-        👁️ نمایش زنده
-      </a>
+      <?php if ($pType === 'page'): ?>
+        <a href="<?= $isHome ? SITE_URL . '/' : SITE_URL . '/page.php?slug=' . urlencode((string)$page['slug']) ?>" target="_blank" class="pb-btn ghost" style="font-size:11px;padding:4px 8px" title="مشاهده پیش‌نمایش در تب جدید">
+          👁️ نمایش زنده
+        </a>
+      <?php endif; ?>
     </div>
 
     <!-- سوئیچ نمایش دستگاه‌ها -->

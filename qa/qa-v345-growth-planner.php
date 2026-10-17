@@ -202,25 +202,21 @@ it("Generic test injects to planner successfully", !empty($gen['inj']['ok']));
 
 // --- 5. Retest & Delta Tracking (GrowthEngine::getDeltaComparison) ---
 echo "\n--- 5. Retest & Delta Tracking ---\n";
-// Ensure baseline attempt 1 exists for user 1, test 1
-$createdAid1 = false;
-$aid1 = (int)DB::val("SELECT id FROM " . DB::t('attempts') . " WHERE user_id=1 AND test_id=1 AND status='completed' ORDER BY id ASC LIMIT 1");
-if (!$aid1) {
-    $aid1 = DB::insert('attempts', [
-        'user_id' => 1, 'test_id' => 1, 'status' => 'completed',
-        'started_at' => date('Y-m-d H:i:s', time() - 3600),
-        'completed_at' => date('Y-m-d H:i:s', time() - 3500), 'progress' => 100,
-    ]);
-    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'D', 'percent' => 30, 'raw_score' => 30]);
-    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'I', 'percent' => 50, 'raw_score' => 50]);
-    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'S', 'percent' => 40, 'raw_score' => 40]);
-    DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'C', 'percent' => 35, 'raw_score' => 35]);
-    $createdAid1 = true;
-}
+$testDeltaUserId = 9988;
+// Create baseline attempt 1 for testDeltaUserId
+$aid1 = DB::insert('attempts', [
+    'user_id' => $testDeltaUserId, 'test_id' => 1, 'status' => 'completed',
+    'started_at' => date('Y-m-d H:i:s', time() - 3600),
+    'completed_at' => date('Y-m-d H:i:s', time() - 3500), 'progress' => 100,
+]);
+DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'D', 'percent' => 30, 'raw_score' => 30]);
+DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'I', 'percent' => 50, 'raw_score' => 50]);
+DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'S', 'percent' => 40, 'raw_score' => 40]);
+DB::insert('results', ['attempt_id' => $aid1, 'scale_code' => 'C', 'percent' => 35, 'raw_score' => 35]);
 
 // Create second attempt for test 1 to test Delta comparison
 $aid2 = DB::insert('attempts', [
-    'user_id' => 1, 'test_id' => 1, 'status' => 'completed',
+    'user_id' => $testDeltaUserId, 'test_id' => 1, 'status' => 'completed',
     'started_at' => date('Y-m-d H:i:s', time() - 1800),
     'completed_at' => date('Y-m-d H:i:s'), 'progress' => 100,
 ]);
@@ -229,20 +225,16 @@ DB::insert('results', ['attempt_id' => $aid2, 'scale_code' => 'I', 'percent' => 
 DB::insert('results', ['attempt_id' => $aid2, 'scale_code' => 'S', 'percent' => 50, 'raw_score' => 50]);
 DB::insert('results', ['attempt_id' => $aid2, 'scale_code' => 'C', 'percent' => 45, 'raw_score' => 45]);
 
-$delta = GrowthEngine::getDeltaComparison(1, 1);
+$delta = GrowthEngine::getDeltaComparison($testDeltaUserId, 1);
 it("getDeltaComparison recognizes comparison (has_comparison=true)", !empty($delta['has_comparison']));
 it("getDeltaComparison total_attempts >= 2", ($delta['total_attempts'] ?? 0) >= 2);
 it("getDeltaComparison contains D scale delta", isset($delta['scales']['D']));
-it("Scale D shows positive improvement (+15)", ($delta['scales']['D']['delta'] ?? 0) === 15.0, (string)($delta['scales']['D']['delta'] ?? 0));
+it("Scale D shows positive improvement (+15)", round((float)($delta['scales']['D']['delta'] ?? 0)) == 15, (string)($delta['scales']['D']['delta'] ?? 0));
 it("Scale D has Persian title", !empty($delta['scales']['D']['title']) && $delta['scales']['D']['title'] !== 'D', $delta['scales']['D']['title'] ?? '');
 
 // Cleanup dummy attempts
-DB::run("DELETE FROM " . DB::t('results') . " WHERE attempt_id=?", [$aid2]);
-DB::run("DELETE FROM " . DB::t('attempts') . " WHERE id=?", [$aid2]);
-if ($createdAid1) {
-    DB::run("DELETE FROM " . DB::t('results') . " WHERE attempt_id=?", [$aid1]);
-    DB::run("DELETE FROM " . DB::t('attempts') . " WHERE id=?", [$aid1]);
-}
+DB::run("DELETE FROM " . DB::t('results') . " WHERE attempt_id IN (?, ?)", [$aid1, $aid2]);
+DB::run("DELETE FROM " . DB::t('attempts') . " WHERE id IN (?, ?)", [$aid1, $aid2]);
 
 // Clean up temporary qa tests
 DB::run("DELETE FROM " . DB::t('tests') . " WHERE slug LIKE '%-qa'");

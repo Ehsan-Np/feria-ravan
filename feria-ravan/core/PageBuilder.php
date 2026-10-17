@@ -9,6 +9,11 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/MenuBuilder.php';
+
 class PageBuilder
 {
     /**
@@ -32,6 +37,8 @@ class PageBuilder
         static $ensured = false;
         if ($ensured) return;
 
+        MenuBuilder::ensureSchema();
+
         // ۱. ایجاد جدول در صورت عدم وجود
         DB::run("CREATE TABLE IF NOT EXISTS " . self::table() . " (
             `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -39,10 +46,12 @@ class PageBuilder
             `title` VARCHAR(190) NOT NULL,
             `slug` VARCHAR(190) NOT NULL UNIQUE,
             `layout` VARCHAR(50) NOT NULL DEFAULT 'default',
+            `page_type` VARCHAR(20) NOT NULL DEFAULT 'page',
             `seo_title` VARCHAR(190) NULL,
             `meta_desc` VARCHAR(300) NULL,
             `noindex` TINYINT(1) NOT NULL DEFAULT 0,
             `is_home` TINYINT(1) NOT NULL DEFAULT 0,
+            `is_default` TINYINT(1) NOT NULL DEFAULT 0,
             `active` TINYINT(1) NOT NULL DEFAULT 1,
             `content_html` LONGTEXT NULL,
             `content_css` MEDIUMTEXT NULL,
@@ -52,13 +61,17 @@ class PageBuilder
             `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX `idx_slug` (`slug`),
             INDEX `idx_home` (`is_home`),
-            INDEX `idx_active` (`active`)
+            INDEX `idx_active` (`active`),
+            INDEX `idx_page_type` (`page_type`),
+            INDEX `idx_is_default` (`is_default`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         // ۲. اطمینان از وجود ستون‌های مورد نیاز صفحه‌ساز
         $cols = [
             'name'         => "VARCHAR(190) NULL AFTER `id`",
             'layout'       => "VARCHAR(50) NOT NULL DEFAULT 'default' AFTER `slug`",
+            'page_type'    => "VARCHAR(20) NOT NULL DEFAULT 'page' AFTER `layout`",
+            'is_default'   => "TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_home`",
             'content_html' => "LONGTEXT NULL AFTER `active`",
             'content_css'  => "MEDIUMTEXT NULL AFTER `content_html`",
             'builder_json' => "LONGTEXT NULL AFTER `content_css`",
@@ -162,6 +175,57 @@ class PageBuilder
     }
 
     /**
+     * دریافت سربرگ (Header) سفارشی پیش‌فرض و فعال سایت
+     */
+    public static function getActiveHeader(): ?array
+    {
+        self::ensureSchema();
+        $h = DB::one("SELECT * FROM " . self::table() . " WHERE page_type='header' AND is_default=1 AND active=1 ORDER BY id DESC LIMIT 1");
+        return $h ?: null;
+    }
+
+    /**
+     * دریافت پاورقی (Footer) سفارشی پیش‌فرض و فعال سایت
+     */
+    public static function getActiveFooter(): ?array
+    {
+        self::ensureSchema();
+        $f = DB::one("SELECT * FROM " . self::table() . " WHERE page_type='footer' AND is_default=1 AND active=1 ORDER BY id DESC LIMIT 1");
+        return $f ?: null;
+    }
+
+    /**
+     * تنظیم یک قالب سربرگ یا پاورقی به عنوان پیش‌فرض فعال سایت
+     */
+    public static function setActiveTemplate(int $id, string $type): bool
+    {
+        self::ensureSchema();
+        if (!in_array($type, ['header', 'footer'], true)) return false;
+        DB::run("UPDATE " . self::table() . " SET is_default=0 WHERE page_type=?", [$type]);
+        DB::run("UPDATE " . self::table() . " SET is_default=1, active=1 WHERE id=? AND page_type=?", [$id, $type]);
+        return true;
+    }
+
+    /**
+     * غیرفعال‌سازی قالب پیش‌فرض سربرگ یا پاورقی (بازگشت به قالب کلاسیک)
+     */
+    public static function unsetActiveTemplate(int $id): bool
+    {
+        self::ensureSchema();
+        DB::run("UPDATE " . self::table() . " SET is_default=0 WHERE id=?", [$id]);
+        return true;
+    }
+
+    /**
+     * واکشی قالب‌های طراحی‌شده بر اساس نوع (page / header / footer)
+     */
+    public static function getTemplates(string $type = 'header'): array
+    {
+        self::ensureSchema();
+        return DB::all("SELECT * FROM " . self::table() . " WHERE page_type=? ORDER BY is_default DESC, updated_at DESC", [$type]);
+    }
+
+    /**
      * ذخیره یا به‌روزرسانی متادیتا و تنظیمات برگه
      */
     public static function savePage(array $data, ?int $id = null): int
@@ -178,16 +242,23 @@ class PageBuilder
         }
 
         $isHome = !empty($data['is_home']) ? 1 : 0;
+        $pageType = trim((string)($data['page_type'] ?? 'page'));
+        if (!in_array($pageType, ['page', 'header', 'footer'], true)) {
+            $pageType = 'page';
+        }
+        $isDefault = !empty($data['is_default']) ? 1 : 0;
 
         $record = [
             'name'        => $name,
             'title'       => $title,
             'slug'        => $slug,
             'layout'      => (string)($data['layout'] ?? 'default'),
+            'page_type'   => $pageType,
             'seo_title'   => trim((string)($data['seo_title'] ?? '')) ?: null,
             'meta_desc'   => trim((string)($data['meta_desc'] ?? '')) ?: null,
             'noindex'     => !empty($data['noindex']) ? 1 : 0,
             'is_home'     => $isHome,
+            'is_default'  => $isDefault,
             'active'      => !empty($data['active']) ? 1 : 0,
         ];
 
@@ -276,10 +347,12 @@ class PageBuilder
             'title'        => $newTitle,
             'slug'         => $newSlug,
             'layout'       => $p['layout'] ?? 'default',
+            'page_type'    => $p['page_type'] ?? 'page',
             'seo_title'    => $p['seo_title'] ?? null,
             'meta_desc'    => $p['meta_desc'] ?? null,
             'noindex'      => (int)($p['noindex'] ?? 0),
             'is_home'      => 0, // کپی هیچگاه پیش‌فرض صفحه اصلی نمی‌شود
+            'is_default'   => 0, // کپی هیچگاه سربرگ/پاورقی پیش‌فرض نمی‌شود
             'active'       => 0, // کپی به‌صورت پیش‌نویس ذخیره می‌شود
             'content_html' => $p['content_html'] ?? null,
             'content_css'  => $p['content_css'] ?? null,
@@ -487,6 +560,62 @@ class PageBuilder
             case 'contact_box':
             case 'contact-box':
                 self::renderWidgetContactBox($params, $isEditor);
+                break;
+
+            // ویجت‌های اختصاصی سربرگ (Header)
+            case 'site_logo':
+            case 'logo':
+                self::renderWidgetSiteLogo($params, $isEditor);
+                break;
+
+            case 'menu':
+            case 'nav_menu':
+                self::renderWidgetMenu($params, $isEditor);
+                break;
+
+            case 'user_auth':
+            case 'auth_buttons':
+                self::renderWidgetUserAuth($params, $isEditor);
+                break;
+
+            case 'header_cta':
+            case 'cta_btn':
+                self::renderWidgetHeaderCta($params, $isEditor);
+                break;
+
+            case 'search_bar':
+            case 'search':
+                self::renderWidgetSearchBar($params, $isEditor);
+                break;
+
+            case 'topbar_contact':
+                self::renderWidgetTopbarContact($params, $isEditor);
+                break;
+
+            // ویجت‌های اختصاصی پاورقی (Footer)
+            case 'footer_brand':
+                self::renderWidgetFooterBrand($params, $isEditor);
+                break;
+
+            case 'footer_menu':
+                self::renderWidgetFooterMenu($params, $isEditor);
+                break;
+
+            case 'footer_contact':
+                self::renderWidgetFooterContact($params, $isEditor);
+                break;
+
+            case 'social_icons':
+            case 'social_links':
+                self::renderWidgetSocialIcons($params, $isEditor);
+                break;
+
+            case 'footer_badges':
+                self::renderWidgetFooterBadges($params, $isEditor);
+                break;
+
+            case 'copyright':
+                self::renderWidgetCopyright($params, $isEditor);
                 break;
 
             default:
@@ -1045,6 +1174,208 @@ class PageBuilder
     }
 
     /**
+     * ویجت سربرگ ۱: لوگو و نشان رسمی سایت
+     */
+    public static function renderWidgetSiteLogo(array $params, bool $isEditor): void
+    {
+        $site   = (string)DB::setting('site_title', 'فریا روان');
+        $slogan = (string)DB::setting('site_slogan', 'مرکز تخصصی روان‌شناسی و ارزیابی');
+        ?>
+        <div class="fr-widget-logo" style="display:inline-flex;align-items:center;gap:10px">
+          <a href="<?= SITE_URL ?>/" style="display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:inherit">
+            <?= fr_logo_html('fr-logo-mark') ?>
+            <div>
+              <b style="font-size:16px;color:#0f172a;display:block;line-height:1.3"><?= e($site) ?></b>
+              <?php if (!empty($slogan)): ?>
+                <small style="font-size:11px;color:#64748b;display:block"><?= e($slogan) ?></small>
+              <?php endif; ?>
+            </div>
+          </a>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت سربرگ ۲: منوی ناوبری داینامیک از فهرست‌ساز
+     */
+    public static function renderWidgetMenu(array $params, bool $isEditor): void
+    {
+        $loc = $params['location'] ?? ($params['menu_id'] ?? 'primary');
+        echo MenuBuilder::renderMenu($loc, [
+            'class' => (string)($params['class'] ?? 'fr-nav-menu'),
+        ]);
+    }
+
+    /**
+     * ویجت سربرگ ۳: دکمه‌های ورود و پنل کاربری مراجع
+     */
+    public static function renderWidgetUserAuth(array $params, bool $isEditor): void
+    {
+        $u = function_exists('current_user') ? current_user() : null;
+        ?>
+        <div class="fr-widget-auth-box" style="display:inline-flex;align-items:center;gap:8px">
+          <?php if ($u): ?>
+            <a href="<?= function_exists('fr_panel_url') ? fr_panel_url() : (SITE_URL . '/panel/') ?>" class="fr-btn sm" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;font-weight:700;display:inline-flex;align-items:center;gap:6px;text-decoration:none">
+              <span>👤</span>
+              <span><?= e(function_exists('user_fullname') ? user_fullname($u) : ($u['display_name'] ?? 'پنل کاربری')) ?></span>
+            </a>
+          <?php else: ?>
+            <a href="<?= SITE_URL ?>/auth.php" class="fr-btn sm ghost" style="text-decoration:none;font-weight:700">ورود</a>
+            <a href="<?= SITE_URL ?>/auth.php?action=register" class="fr-btn sm primary" style="text-decoration:none;font-weight:700">ثبت‌نام</a>
+          <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت سربرگ ۴: دکمه فراخوان به اقدام (Header CTA)
+     */
+    public static function renderWidgetHeaderCta(array $params, bool $isEditor): void
+    {
+        $text = (string)($params['text'] ?? 'رزرو وقت مشاوره 🛋');
+        $url  = (string)($params['url'] ?? (SITE_URL . '/consult.php'));
+        ?>
+        <a href="<?= e($url) ?>" class="fr-btn sm primary" style="font-weight:700;padding:8px 18px;border-radius:10px;text-decoration:none;box-shadow:0 4px 12px rgba(59,130,246,0.25)">
+          <?= e($text) ?>
+        </a>
+        <?php
+    }
+
+    /**
+     * ویجت سربرگ ۵: نوار جستجوی سریع آزمون‌ها
+     */
+    public static function renderWidgetSearchBar(array $params, bool $isEditor): void
+    {
+        $placeholder = (string)($params['placeholder'] ?? 'جستجوی تست روانشناسی یا دوره...');
+        ?>
+        <form action="<?= SITE_URL ?>/tests.php" method="get" class="fr-widget-search-bar" style="display:inline-flex;align-items:center;position:relative;max-width:320px;width:100%">
+          <input type="text" name="q" placeholder="<?= e($placeholder) ?>" class="fr-input sm" style="width:100%;padding-right:34px;height:38px;border-radius:10px;font-size:12.5px">
+          <button type="submit" style="position:absolute;right:8px;background:transparent;border:none;cursor:pointer;font-size:14px;color:#64748b" aria-label="جستجو">🔍</button>
+        </form>
+        <?php
+    }
+
+    /**
+     * ویجت سربرگ ۶: اطلاعات تماس نوار بالای سایت
+     */
+    public static function renderWidgetTopbarContact(array $params, bool $isEditor): void
+    {
+        $phone = (string)DB::setting('contact_phone', '۰۲۱-۸۸۸۸۸۸۸۸');
+        $hours = (string)DB::setting('work_hours', 'شنبه تا چهارشنبه: ۸ الی ۲۰');
+        ?>
+        <div class="fr-widget-topbar-contact" style="display:flex;align-items:center;gap:16px;font-size:12px;color:#64748b">
+          <div>📞 پشتیبانی: <a href="tel:<?= e(preg_replace('/[^\d\+]/', '', $phone)) ?>" style="color:#0284c7;text-decoration:none;direction:ltr"><?= e($phone) ?></a></div>
+          <div style="opacity:0.8">⏰ <?= e($hours) ?></div>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت پاورقی ۷: ستون برند و بیوگرافی کلینیک
+     */
+    public static function renderWidgetFooterBrand(array $params, bool $isEditor): void
+    {
+        $site = (string)DB::setting('site_title', 'فریا روان');
+        $bio  = (string)DB::setting('logo_desc', 'مرکز خدمات روان‌شناسی و مشاوره فریا روان با کادری مجرب از متخصصان بالینی، آماده ارائه خدمات ارزیابی روان‌سنجی و مشاوره‌های فردی، زوجین و شغلی است.');
+        ?>
+        <div class="fr-widget-footer-brand" style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <?= fr_logo_html('fr-footer-logo-mark') ?>
+            <b style="font-size:18px;color:#fff"><?= e($site) ?></b>
+          </div>
+          <p style="font-size:13px;color:#94a3b8;line-height:1.9;margin:0"><?= e($bio) ?></p>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت پاورقی ۸: منوی پیوندهای پاورقی
+     */
+    public static function renderWidgetFooterMenu(array $params, bool $isEditor): void
+    {
+        $loc = $params['location'] ?? ($params['menu_id'] ?? 'footer');
+        echo MenuBuilder::renderMenu($loc, [
+            'class' => 'fr-footer-nav-menu',
+        ]);
+    }
+
+    /**
+     * ویجت پاورقی ۹: نشانی، تلفن و ساعات کاری
+     */
+    public static function renderWidgetFooterContact(array $params, bool $isEditor): void
+    {
+        $phone = (string)DB::setting('contact_phone', '۰۲۱-۸۸۸۸۸۸۸۸');
+        $addr  = (string)DB::setting('contact_address', 'تهران، میدان ونک، خیابان ملاصدرا');
+        $email = (string)DB::setting('contact_email', 'info@feria-ravan.ir');
+        ?>
+        <div class="fr-widget-footer-contact" style="font-size:13px;line-height:2.2;color:#94a3b8">
+          <h3 style="font-size:15px;font-weight:700;color:#38bdf8;margin:0 0 12px">راه‌های ارتباطی</h3>
+          <div>📍 نشانی: <?= e($addr) ?></div>
+          <div>☎️ تلفن: <a href="tel:<?= e(preg_replace('/[^\d\+]/', '', $phone)) ?>" style="color:#e2e8f0;text-decoration:none"><?= e($phone) ?></a></div>
+          <div>✉️ ایمیل: <a href="mailto:<?= e($email) ?>" style="color:#e2e8f0;text-decoration:none"><?= e($email) ?></a></div>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت پاورقی ۱۰: آیکون‌های شبکه‌های اجتماعی
+     */
+    public static function renderWidgetSocialIcons(array $params, bool $isEditor): void
+    {
+        $tg = (string)DB::setting('social_telegram', 'https://t.me/feriaravan');
+        $ig = (string)DB::setting('social_instagram', 'https://instagram.com/feriaravan');
+        $wa = (string)DB::setting('social_whatsapp', '');
+        $ba = (string)DB::setting('social_bale', '');
+        ?>
+        <div class="fr-widget-socials" style="display:inline-flex;align-items:center;gap:10px">
+          <?php if ($tg): ?><a href="<?= e($tg) ?>" target="_blank" rel="noopener" style="width:34px;height:34px;border-radius:10px;background:#1e293b;display:inline-flex;align-items:center;justify-content:center;color:#38bdf8;text-decoration:none" title="تلگرام">✈️</a><?php endif; ?>
+          <?php if ($ig): ?><a href="<?= e($ig) ?>" target="_blank" rel="noopener" style="width:34px;height:34px;border-radius:10px;background:#1e293b;display:inline-flex;align-items:center;justify-content:center;color:#f43f5e;text-decoration:none" title="اینستاگرام">📷</a><?php endif; ?>
+          <?php if ($wa): ?><a href="<?= e($wa) ?>" target="_blank" rel="noopener" style="width:34px;height:34px;border-radius:10px;background:#1e293b;display:inline-flex;align-items:center;justify-content:center;color:#10b981;text-decoration:none" title="واتساپ">💬</a><?php endif; ?>
+          <?php if ($ba): ?><a href="<?= e($ba) ?>" target="_blank" rel="noopener" style="width:34px;height:34px;border-radius:10px;background:#1e293b;display:inline-flex;align-items:center;justify-content:center;color:#10b981;text-decoration:none" title="بله">🍃</a><?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت پاورقی ۱۱: نمادهای رسمی اعتماد الکترونیکی
+     */
+    public static function renderWidgetFooterBadges(array $params, bool $isEditor): void
+    {
+        ?>
+        <div class="fr-widget-footer-badges">
+          <h3 style="font-size:15px;font-weight:700;color:#38bdf8;margin:0 0 12px">نمادهای اعتماد</h3>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="width:75px;height:75px;background:#1e293b;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#cbd5e1;font-size:11px;text-align:center;padding:6px;border:1px solid #334155">
+              <span style="font-size:22px">🛡</span>
+              <span style="margin-top:2px">اینماد</span>
+            </div>
+            <div style="width:75px;height:75px;background:#1e293b;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#cbd5e1;font-size:11px;text-align:center;padding:6px;border:1px solid #334155">
+              <span style="font-size:22px">🏛</span>
+              <span style="margin-top:2px">ساماندهی</span>
+            </div>
+            <div style="width:75px;height:75px;background:#1e293b;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#cbd5e1;font-size:11px;text-align:center;padding:6px;border:1px solid #334155">
+              <span style="font-size:22px">💳</span>
+              <span style="margin-top:2px">زرین‌پال</span>
+            </div>
+          </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت پاورقی ۱۲: متن کپی‌رایت و حقوق نشر
+     */
+    public static function renderWidgetCopyright(array $params, bool $isEditor): void
+    {
+        $site = (string)DB::setting('site_title', 'فریا روان');
+        ?>
+        <div class="fr-widget-copyright" style="font-size:12px;color:#94a3b8">
+          <span>© <?= fa_num(jdate('Y')) ?> تمامی حقوق مادی و معنوی متعلق به <?= e($site) ?> می‌باشد.</span>
+        </div>
+        <?php
+    }
+
+    /**
      * دریافت کاتالوگ تمام ویجت‌ها جهت معرفی در نوار ابزار بلوک‌های GrapesJS
      */
     public static function getAvailableWidgets(): array
@@ -1157,6 +1488,118 @@ class PageBuilder
                 'icon'        => '📍',
                 'description' => 'نشانی، تلفن، ساعات پاسخگویی و شبکه‌های اجتماعی',
                 'content'     => '<div data-widget="contact_box" class="fr-pb-block fr-pb-widget-contact"><div class="fr-widget-placeholder" style="padding:24px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>📍 ویجت اطلاعات تماس، آدرس و شبکه‌ها</b></div></div>'
+            ],
+
+            // ویجت‌های اختصاصی سربرگ (Header Widgets)
+            [
+                'id'          => 'site_logo',
+                'name'        => 'site_logo',
+                'title'       => 'لوگوی سایت و عنوان',
+                'category'    => 'ویجت‌های سربرگ (Header)',
+                'icon'        => '🏷️',
+                'description' => 'نشان رسمی کلینیک فریا روان به همراه نام و شعار سازمانی',
+                'content'     => '<div data-widget="site_logo" class="fr-pb-block fr-pb-widget-logo"><div class="fr-widget-placeholder" style="padding:16px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:10px;color:#1e40af"><b>🏷️ ویجت لوگو و برند سایت</b></div></div>'
+            ],
+            [
+                'id'          => 'menu',
+                'name'        => 'menu',
+                'title'       => 'منوی ناوبری اصلی',
+                'category'    => 'ویجت‌های سربرگ (Header)',
+                'icon'        => '📋',
+                'description' => 'منوی آبشاری و ریسپانسیو ایجادشده با فهرست‌ساز',
+                'content'     => '<div data-widget="menu" data-location="primary" class="fr-pb-block fr-pb-widget-menu"><div class="fr-widget-placeholder" style="padding:16px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:10px;color:#1e40af"><b>📋 ویجت منوی ناوبری سربرگ</b><p style="margin:4px 0 0;font-size:11px;color:#64748b">نمایش خودکار گزینه‌های منوی فعال سربرگ همراه با زیرمنوهای آبشاری</p></div></div>'
+            ],
+            [
+                'id'          => 'user_auth',
+                'name'        => 'user_auth',
+                'title'       => 'ورود و حساب کاربری',
+                'category'    => 'ویجت‌های سربرگ (Header)',
+                'icon'        => '👤',
+                'description' => 'دکمه‌های ورود/ثبت‌نام یا پروفایل و پنل مراجع',
+                'content'     => '<div data-widget="user_auth" class="fr-pb-block fr-pb-widget-auth"><div class="fr-widget-placeholder" style="padding:14px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:10px;color:#1e40af"><b>👤 ویجت دکمه‌های حساب کاربری و ورود</b></div></div>'
+            ],
+            [
+                'id'          => 'header_cta',
+                'name'        => 'header_cta',
+                'title'       => 'دکمه فراخوان سربرگ (CTA)',
+                'category'    => 'ویجت‌های سربرگ (Header)',
+                'icon'        => '🔘',
+                'description' => 'دکمه برجسته رزرو نوبت مشاوره یا شروع آزمون',
+                'content'     => '<div data-widget="header_cta" data-text="رزرو وقت مشاوره 🛋" class="fr-pb-block fr-pb-widget-cta"><div class="fr-widget-placeholder" style="padding:14px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:10px;color:#1e40af"><b>🔘 ویجت دکمه فراخوان به اقدام (رزرو مشاوره)</b></div></div>'
+            ],
+            [
+                'id'          => 'search_bar',
+                'name'        => 'search_bar',
+                'title'       => 'نوار جستجوی سریع',
+                'category'    => 'ویجت‌های سربرگ (Header)',
+                'icon'        => '🔍',
+                'description' => 'کادر جستجوی بلادرنگ تست‌های روان‌شناسی و مقالات',
+                'content'     => '<div data-widget="search_bar" class="fr-pb-block fr-pb-widget-search"><div class="fr-widget-placeholder" style="padding:14px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:10px;color:#1e40af"><b>🔍 ویجت نوار جستجوی سریع تست‌ها</b></div></div>'
+            ],
+            [
+                'id'          => 'topbar_contact',
+                'name'        => 'topbar_contact',
+                'title'       => 'اطلاعات نوار بالا (تاپ‌بار)',
+                'category'    => 'ویجت‌های سربرگ (Header)',
+                'icon'        => '📞',
+                'description' => 'شماره تماس کلینیک و ساعات پاسخگویی',
+                'content'     => '<div data-widget="topbar_contact" class="fr-pb-block fr-pb-widget-topbar"><div class="fr-widget-placeholder" style="padding:12px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:10px;color:#1e40af"><b>📞 ویجت اطلاعات تماس تاپ‌بار</b></div></div>'
+            ],
+
+            // ویجت‌های اختصاصی پاورقی (Footer Widgets)
+            [
+                'id'          => 'footer_brand',
+                'name'        => 'footer_brand',
+                'title'       => 'معرفی و بیوگرافی کلینیک',
+                'category'    => 'ویجت‌های پاورقی (Footer)',
+                'icon'        => '🏢',
+                'description' => 'ستون معرفی مرکز، بیوگرافی و مجوزها',
+                'content'     => '<div data-widget="footer_brand" class="fr-pb-block fr-pb-widget-footer-brand"><div class="fr-widget-placeholder" style="padding:20px;text-align:center;background:#0f172a;color:#38bdf8;border:2px dashed #334155;border-radius:10px"><b>🏢 ویجت معرفی و برند کلینیک در فوتر</b></div></div>'
+            ],
+            [
+                'id'          => 'footer_menu',
+                'name'        => 'footer_menu',
+                'title'       => 'منوی پیوندهای فوتر',
+                'category'    => 'ویجت‌های پاورقی (Footer)',
+                'icon'        => '🔗',
+                'description' => 'فهرست پیوندهای دسترسی سریع ایجادشده در فهرست‌ساز',
+                'content'     => '<div data-widget="footer_menu" data-location="footer" class="fr-pb-block fr-pb-widget-footer-menu"><div class="fr-widget-placeholder" style="padding:16px;text-align:center;background:#0f172a;color:#38bdf8;border:2px dashed #334155;border-radius:10px"><b>🔗 ویجت منوی دسترسی سریع فوتر</b></div></div>'
+            ],
+            [
+                'id'          => 'footer_contact',
+                'name'        => 'footer_contact',
+                'title'       => 'راه‌های ارتباطی فوتر',
+                'category'    => 'ویجت‌های پاورقی (Footer)',
+                'icon'        => '📍',
+                'description' => 'نشانی، تلفن، ایمیل و ساعات کاری در پاورقی',
+                'content'     => '<div data-widget="footer_contact" class="fr-pb-block fr-pb-widget-footer-contact"><div class="fr-widget-placeholder" style="padding:16px;text-align:center;background:#0f172a;color:#38bdf8;border:2px dashed #334155;border-radius:10px"><b>📍 ویجت اطلاعات تماس و نشانی در فوتر</b></div></div>'
+            ],
+            [
+                'id'          => 'social_icons',
+                'name'        => 'social_icons',
+                'title'       => 'شبکه‌های اجتماعی',
+                'category'    => 'ویجت‌های پاورقی (Footer)',
+                'icon'        => '🌐',
+                'description' => 'آیکون‌های تلگرام، اینستاگرام، بله، ایتا و واتساپ',
+                'content'     => '<div data-widget="social_icons" class="fr-pb-block fr-pb-widget-socials"><div class="fr-widget-placeholder" style="padding:14px;text-align:center;background:#0f172a;color:#38bdf8;border:2px dashed #334155;border-radius:10px"><b>🌐 ویجت آیکون‌های شبکه‌های اجتماعی</b></div></div>'
+            ],
+            [
+                'id'          => 'footer_badges',
+                'name'        => 'footer_badges',
+                'title'       => 'نمادهای اعتماد فوتر',
+                'category'    => 'ویجت‌های پاورقی (Footer)',
+                'icon'        => '🛡️',
+                'description' => 'باکس نمادهای اعتماد الکترونیکی مخصوص تم فوتر',
+                'content'     => '<div data-widget="footer_badges" class="fr-pb-block fr-pb-widget-footer-badges"><div class="fr-widget-placeholder" style="padding:16px;text-align:center;background:#0f172a;color:#38bdf8;border:2px dashed #334155;border-radius:10px"><b>🛡️ ویجت نمادهای اعتماد الکترونیکی (فوتر)</b></div></div>'
+            ],
+            [
+                'id'          => 'copyright',
+                'name'        => 'copyright',
+                'title'       => 'کپی‌رایت و حقوق نشر',
+                'category'    => 'ویجت‌های پاورقی (Footer)',
+                'icon'        => '©️',
+                'description' => 'متن رسمی حقوق مالکیت با سال شمسی جاری',
+                'content'     => '<div data-widget="copyright" class="fr-pb-block fr-pb-widget-copyright"><div class="fr-widget-placeholder" style="padding:12px;text-align:center;background:#0f172a;color:#38bdf8;border:2px dashed #334155;border-radius:10px"><b>©️ ویجت کپی‌رایت و سال جاری</b></div></div>'
             ],
         ];
     }

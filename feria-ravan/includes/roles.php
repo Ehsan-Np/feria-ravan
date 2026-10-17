@@ -46,7 +46,7 @@ function fr_page_cap_map(): array
         'orders.php' => 'orders', 'refunds.php' => 'orders', 'discounts.php' => 'discounts',
         'users.php' => 'users', 'user-view.php' => 'users', 'tickets.php' => 'users',
         'reviews.php' => 'reviews', 'banners.php' => 'banners', 'permalinks.php' => 'pages',
-        'pages.php' => 'pages', 'page-builder.php' => 'pages',
+        'pages.php' => 'pages', 'page-builder.php' => 'pages', 'menus.php' => 'pages',
         'fields.php' => 'fields', 'newsletter.php' => 'newsletter',
         'sms.php' => 'sms', 'monitor.php' => 'reports', 'planner.php' => 'reports',
         'notifications.php' => 'newsletter',

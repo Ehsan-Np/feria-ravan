@@ -1102,6 +1102,14 @@ function fr_update_pipeline(bool $force = false): void
             PageBuilder::ensureSchema();
         } catch (Throwable $e) { error_log('feria: 3.6.0 page builder migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۷٫۰: فهرست‌ساز وردپرسی، مدیریت سربرگ و پاورقی اختصاصی با صفحه‌ساز دیداری ---- */
+        try {
+            require_once FR_ROOT . '/core/MenuBuilder.php';
+            MenuBuilder::ensureSchema();
+            require_once FR_ROOT . '/core/PageBuilder.php';
+            PageBuilder::ensureSchema();
+        } catch (Throwable $e) { error_log('feria: 3.7.0 menu builder and header/footer migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
