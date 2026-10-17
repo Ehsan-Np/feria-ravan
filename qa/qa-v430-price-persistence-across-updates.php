@@ -57,14 +57,15 @@ echo "  🧪 آزمون‌های جامع نگارش ۴٫۳٫۰: پایداری 
 echo "====================================================================\n";
 
 // ۱. بررسی نسخه‌های نگارش در فایل‌های اصلی
-it('1. نگارش FR_RELEASE در includes/version.php برابر 4.3.0 است', function() {
-    return defined('FR_RELEASE') && FR_RELEASE === '4.3.0';
+it('1. نگارش FR_RELEASE در includes/version.php حداقل 4.3.0 است', function() {
+    return defined('FR_RELEASE') && version_compare(FR_RELEASE, '4.3.0', '>=');
 });
 
-it('2. نگارش فال‌بک در config.php و sample برابر 4.3.0 است', function() {
+it('2. نگارش فال‌بک در config.php و sample حداقل 4.3.0 است', function() {
     $cfg = file_get_contents(FR_ROOT . '/config.php');
     $sample = file_get_contents(FR_ROOT . '/includes/config.sample.php');
-    return str_contains($cfg, "'4.3.0'") && str_contains($sample, "'4.3.0'");
+    return (str_contains($cfg, "'4.3.0'") || str_contains($cfg, "'4.4.0'")) &&
+           (str_contains($sample, "'4.3.0'") || str_contains($sample, "'4.4.0'"));
 });
 
 it('3. فایل مایگریشن v430_price_persistence_on_update.sql موجود و معتبر است', function() {
@@ -250,8 +251,8 @@ it('11. مارکر سیستمی price_persistence_enabled در جدول تنظی
     return DB::setting('price_persistence_enabled') === '1';
 });
 
-it('12. نسخه fr_version در جدول تنظیمات به 4.3.0 ارتقا یافت', function() {
-    return DB::setting('fr_version') === '4.3.0';
+it('12. نسخه fr_version در جدول تنظیمات حداقل به 4.3.0 ارتقا یافت', function() {
+    return version_compare((string)DB::setting('fr_version'), '4.3.0', '>=');
 });
 
 echo "====================================================================\n";

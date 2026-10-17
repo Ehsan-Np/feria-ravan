@@ -445,11 +445,74 @@ function fr_username_taken(string $uname, int $exceptUserId = 0): bool
     return $id > 0 && $id !== $exceptUserId;
 }
 
-/** فیلدهای ثبت‌نام فعال و مرتب */
+/**
+ * تضمین ساختار جدول profile_fields و بذربندی فیلدهای استاندارد سامانه (۴٫۴٫۰)
+ */
+function fr_ensure_profile_fields_schema(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+
+    $p = DB_PREFIX;
+    try {
+        DB::run("CREATE TABLE IF NOT EXISTS `{$p}profile_fields` (
+            `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            `name` VARCHAR(60) NOT NULL UNIQUE,
+            `label` VARCHAR(150) NOT NULL,
+            `type` VARCHAR(30) NOT NULL DEFAULT 'text',
+            `options` TEXT NULL,
+            `required` TINYINT(1) NOT NULL DEFAULT 0,
+            `active` TINYINT(1) NOT NULL DEFAULT 1,
+            `show_in_register` TINYINT(1) NOT NULL DEFAULT 1,
+            `show_in_profile` TINYINT(1) NOT NULL DEFAULT 1,
+            `placeholder` VARCHAR(255) NULL,
+            `validation` VARCHAR(255) NULL,
+            `sort_order` INT NOT NULL DEFAULT 0,
+            `is_system` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY `ix_active_reg` (`active`, `show_in_register`, `sort_order`),
+            KEY `ix_active_prof` (`active`, `show_in_profile`, `sort_order`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (Throwable $e) {}
+
+    // بذر اولیه فیلدهای استاندارد در صورت خالی بودن جدول
+    try {
+        $count = (int)DB::val("SELECT COUNT(*) FROM `{$p}profile_fields`");
+        if ($count === 0) {
+            $defaultFields = [
+                ['name'=>'full_name',     'label'=>'نام و نام خانوادگی',    'type'=>'text',         'options'=>null, 'required'=>1, 'active'=>1, 'show_in_register'=>1, 'show_in_profile'=>1, 'placeholder'=>'مثل: سارا محمدی',         'sort_order'=>10, 'is_system'=>1],
+                ['name'=>'mobile',        'label'=>'شماره تلفن همراه',     'type'=>'mobile',       'options'=>null, 'required'=>1, 'active'=>1, 'show_in_register'=>1, 'show_in_profile'=>1, 'placeholder'=>'۰۹۱۲۳۴۵۶۷۸۹',            'sort_order'=>20, 'is_system'=>1],
+                ['name'=>'username',      'label'=>'آیدی / نام کاربری دلخواه', 'type'=>'text',     'options'=>null, 'required'=>0, 'active'=>1, 'show_in_register'=>1, 'show_in_profile'=>1, 'placeholder'=>'حروف لاتین مثلاً sara_m',   'sort_order'=>30, 'is_system'=>1],
+                ['name'=>'password',      'label'=>'رمز عبور',             'type'=>'text',         'options'=>null, 'required'=>1, 'active'=>1, 'show_in_register'=>1, 'show_in_profile'=>0, 'placeholder'=>'حداقل ۶ نویسه',          'sort_order'=>40, 'is_system'=>1],
+                ['name'=>'national_code', 'label'=>'کد ملی ۱۰ رقمی',       'type'=>'nationalcode', 'options'=>null, 'required'=>0, 'active'=>1, 'show_in_register'=>1, 'show_in_profile'=>1, 'placeholder'=>'– – – – – – – – – –',      'sort_order'=>50, 'is_system'=>1],
+                ['name'=>'email',         'label'=>'ایمیل',                'type'=>'text',         'options'=>null, 'required'=>0, 'active'=>1, 'show_in_register'=>0, 'show_in_profile'=>1, 'placeholder'=>'info@example.com',        'sort_order'=>60, 'is_system'=>0],
+                ['name'=>'gender',        'label'=>'جنسیت',                'type'=>'select',       'options'=>json_encode(['زن','مرد'], JSON_UNESCAPED_UNICODE), 'required'=>0, 'active'=>1, 'show_in_register'=>0, 'show_in_profile'=>1, 'placeholder'=>'', 'sort_order'=>70, 'is_system'=>0],
+                ['name'=>'birth_date',    'label'=>'تاریخ تولد',           'type'=>'date',         'options'=>null, 'required'=>0, 'active'=>1, 'show_in_register'=>0, 'show_in_profile'=>1, 'placeholder'=>'مثلاً ۱۳۷۰/۰۵/۱۶',        'sort_order'=>80, 'is_system'=>0],
+                ['name'=>'job_title',     'label'=>'عنوان شغلی / رشته',    'type'=>'text',         'options'=>null, 'required'=>0, 'active'=>1, 'show_in_register'=>0, 'show_in_profile'=>1, 'placeholder'=>'مثلاً کارشناس روانشناسی',  'sort_order'=>90, 'is_system'=>0],
+                ['name'=>'education',     'label'=>'تحصیلات',              'type'=>'select',       'options'=>json_encode(['زیر دیپلم','دیپلم','کاردانی','کارشناسی','کارشناسی ارشد','دکتری و بالاتر'], JSON_UNESCAPED_UNICODE), 'required'=>0, 'active'=>1, 'show_in_register'=>0, 'show_in_profile'=>1, 'placeholder'=>'', 'sort_order'=>100, 'is_system'=>0],
+            ];
+            foreach ($defaultFields as $df) {
+                DB::insert('profile_fields', $df);
+            }
+        }
+    } catch (Throwable $e) {}
+}
+
+/** فیلدهای ثبت‌نام فعال و مرتب (۴٫۴٫۰) */
 function register_fields(): array
 {
+    fr_ensure_profile_fields_schema();
     return DB::all('SELECT * FROM ' . DB::t('profile_fields') .
-                   ' WHERE active=1 AND show_in_register=1 ORDER BY sort_order');
+                   ' WHERE active=1 AND show_in_register=1 ORDER BY sort_order, id');
+}
+
+/** فیلدهای پروفایل فعال و مرتب (۴٫۴٫۰) */
+function profile_fields(): array
+{
+    fr_ensure_profile_fields_schema();
+    return DB::all('SELECT * FROM ' . DB::t('profile_fields') .
+                   ' WHERE active=1 AND show_in_profile=1 ORDER BY sort_order, id');
 }
 
 /** اعتبارسنجی و ساخت آرایهٔ save برای ثبت/ویرایش پروفایل */
@@ -459,9 +522,9 @@ function validate_profile_input(array $fields, array $input, array &$errors): ar
     foreach ($fields as $f) {
         $val = trim((string)($input[$f['name']] ?? ''));
         $val = en_num($val) ? (in_array($f['type'], ['number','mobile','nationalcode']) ? en_num($val) : $val) : $val;
-        if ($f['required'] && $val === '') { $errors[$f['name']] = $f['label'] . ' الزامی است.'; continue; }
+        if (!empty($f['required']) && $val === '') { $errors[$f['name']] = $f['label'] . ' الزامی است.'; continue; }
         if ($val !== '') {
-            if ($f['validation'] && !preg_match('/' . $f['validation'] . '/', $val)) {
+            if (!empty($f['validation']) && !preg_match('/' . $f['validation'] . '/', $val)) {
                 $errors[$f['name']] = $f['label'] . ' معتبر نیست.'; continue;
             }
             if ($f['type'] === 'mobile' && !valid_mobile($val)) { $errors[$f['name']] = 'موبایل معتبر نیست.'; continue; }

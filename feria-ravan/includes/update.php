@@ -1156,6 +1156,15 @@ function fr_update_pipeline(bool $force = false): void
             DB::setSetting('price_persistence_enabled', '1');
         } catch (Throwable $e) { error_log('feria: 4.3.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۸. نگارش ۴٫۴٫۰: اعمال داینامیک و آنی تنظیمات فیلدهای ثبت‌نام و پروفایل
+        // ---------------------------------------------------------------------
+        try {
+            require_once __DIR__ . '/auth.php';
+            fr_ensure_profile_fields_schema();
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}users` MODIFY COLUMN `gender` VARCHAR(30) NULL DEFAULT NULL");
+        } catch (Throwable $e) { error_log('feria: 4.4.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

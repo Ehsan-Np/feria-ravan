@@ -130,52 +130,145 @@ try {
                 ]);
             }
 
-            // بررسی نام و نام خانوادگی
-            $fullName = trim((string)($in['full_name'] ?? ''));
-            $fullName = trim(preg_replace('/\s+/u', ' ', $fullName));
-            if (mb_strlen($fullName) < 3 || mb_strlen($fullName) > 160) {
-                json_out(['ok' => false, 'message' => 'نام و نام خانوادگی را کامل بنویسید (حداقل ۳ حرف).']);
-            }
-            if (!preg_match('/\s/u', $fullName)) {
-                json_out(['ok' => false, 'message' => 'لطفاً نام خانوادگی را نیز وارد کنید (نام و نام خانوادگی با فاصله).']);
-            }
-            [$fn, $ln] = fr_split_fullname($fullName);
-
-            // بررسی آیدی / نام کاربری (اختیاری یا اجباری)
-            $username = trim(en_num((string)($in['username'] ?? '')));
-            if ($username !== '') {
-                if (!valid_fr_username($username)) {
-                    json_out(['ok' => false, 'message' => 'آیدی باید با حرف انگلیسی شروع شده و بین ۴ تا ۳۰ کاراکتر (شامل حروف، ارقام، نقطه یا زیرخط) باشد (مثال: sara_m).']);
-                }
-                if (fr_username_taken($username)) {
-                    json_out(['ok' => false, 'message' => 'این آیدی (نام کاربری) قبلاً انتخاب شده است؛ لطفاً آیدی دیگری برگزینید.']);
-                }
-            } else {
-                $username = null;
+            // دریافت فیلدهای فعال ثبت‌نام بر مبنای جدول profile_fields
+            $regFields = register_fields();
+            $fieldsByName = [];
+            foreach ($regFields as $rf) {
+                $fieldsByName[$rf['name']] = $rf;
             }
 
-            // بررسی رمز عبور و تکرار آن
-            $password = (string)($in['password'] ?? '');
-            $passwordConfirm = (string)($in['password_confirm'] ?? '');
-            if (mb_strlen($password) < 6) {
-                json_out(['ok' => false, 'message' => 'رمز عبور باید حداقل ۶ نویسه (کاراکتر) باشد.']);
-            }
-            if ($password !== $passwordConfirm) {
-                json_out(['ok' => false, 'message' => 'رمز عبور با تکرار آن یکسان نیست.']);
+            $userData = [
+                'mobile'        => $mobile,
+                'first_name'    => 'کاربر',
+                'last_name'     => '',
+                'full_name'     => '',
+                'username'      => null,
+                'password_hash' => null,
+                'national_code' => null,
+                'extra'         => [],
+            ];
+
+            // ۱. نام و نام خانوادگی
+            if (isset($fieldsByName['full_name'])) {
+                $f = $fieldsByName['full_name'];
+                $isReq = (int)($f['required'] ?? 0) === 1;
+                $fullName = trim((string)($in['full_name'] ?? ''));
+                $fullName = trim(preg_replace('/\s+/u', ' ', $fullName));
+
+                if ($isReq && $fullName === '') {
+                    json_out(['ok' => false, 'message' => 'نام و نام خانوادگی الزامی است.']);
+                }
+                if ($fullName !== '') {
+                    if ($isReq && (mb_strlen($fullName) < 3 || !preg_match('/\s/u', $fullName))) {
+                        json_out(['ok' => false, 'message' => 'لطفاً نام و نام خانوادگی را کامل و با فاصله وارد نمایید.']);
+                    }
+                    [$fn, $ln] = fr_split_fullname($fullName);
+                    $userData['first_name'] = $fn;
+                    $userData['last_name']  = $ln;
+                    $userData['full_name']  = $fullName;
+                }
             }
 
-            // بررسی کد ملی (اختیاری)
-            $nationalCode = trim(en_num((string)($in['national_code'] ?? '')));
-            if ($nationalCode !== '') {
-                if (!valid_national_code($nationalCode)) {
-                    json_out(['ok' => false, 'message' => 'کد ملی ۱۰ رقمی واردشده معتبر نیست.']);
+            // ۲. نام کاربری / آیدی
+            if (isset($fieldsByName['username'])) {
+                $f = $fieldsByName['username'];
+                $isReq = (int)($f['required'] ?? 0) === 1;
+                $username = trim(en_num((string)($in['username'] ?? '')));
+
+                if ($isReq && $username === '') {
+                    json_out(['ok' => false, 'message' => 'نام کاربری (آیدی) الزامی است.']);
                 }
-                $ncExists = DB::val('SELECT id FROM ' . DB::t('users') . " WHERE national_code=? AND status!='deleted'", [$nationalCode]);
-                if ($ncExists) {
-                    json_out(['ok' => false, 'message' => 'این کد ملی قبلاً برای حساب دیگری ثبت شده است.']);
+                if ($username !== '') {
+                    if (!valid_fr_username($username)) {
+                        json_out(['ok' => false, 'message' => 'آیدی باید با حرف انگلیسی شروع شده و بین ۴ تا ۳۰ کاراکتر (حروف، ارقام، نقطه یا زیرخط) باشد (مثال: sara_m).']);
+                    }
+                    if (fr_username_taken($username)) {
+                        json_out(['ok' => false, 'message' => 'این آیدی (نام کاربری) قبلاً انتخاب شده است؛ لطفاً آیدی دیگری برگزینید.']);
+                    }
+                    $userData['username'] = $username;
                 }
-            } else {
-                $nationalCode = null;
+            }
+
+            // ۳. بررسی رمز عبور و تکرار آن
+            if (isset($fieldsByName['password'])) {
+                $f = $fieldsByName['password'];
+                $isReq = (int)($f['required'] ?? 0) === 1;
+                $password = (string)($in['password'] ?? '');
+                $passwordConfirm = (string)($in['password_confirm'] ?? '');
+
+                if ($isReq && $password === '') {
+                    json_out(['ok' => false, 'message' => 'رمز عبور الزامی است.']);
+                }
+                if ($password !== '') {
+                    if (mb_strlen($password) < 6) {
+                        json_out(['ok' => false, 'message' => 'رمز عبور باید حداقل ۶ نویسه (کاراکتر) باشد.']);
+                    }
+                    if ($password !== $passwordConfirm) {
+                        json_out(['ok' => false, 'message' => 'رمز عبور با تکرار آن یکسان نیست.']);
+                    }
+                    $userData['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
+                }
+            }
+
+            // ۴. بررسی کد ملی
+            if (isset($fieldsByName['national_code'])) {
+                $f = $fieldsByName['national_code'];
+                $isReq = (int)($f['required'] ?? 0) === 1;
+                $nationalCode = trim(en_num((string)($in['national_code'] ?? '')));
+
+                if ($isReq && $nationalCode === '') {
+                    json_out(['ok' => false, 'message' => 'کد ملی ۱۰ رقمی الزامی است.']);
+                }
+                if ($nationalCode !== '') {
+                    if (!valid_national_code($nationalCode)) {
+                        json_out(['ok' => false, 'message' => 'کد ملی ۱۰ رقمی واردشده معتبر نیست.']);
+                    }
+                    $ncExists = DB::val('SELECT id FROM ' . DB::t('users') . " WHERE national_code=? AND status!='deleted'", [$nationalCode]);
+                    if ($ncExists) {
+                        json_out(['ok' => false, 'message' => 'این کد ملی قبلاً برای حساب دیگری ثبت شده است.']);
+                    }
+                    $userData['national_code'] = $nationalCode;
+                }
+            }
+
+            // ۵. اعتبارسنجی سایر فیلدهای سفارشی یا مستقیم
+            $standardCore = ['full_name', 'mobile', 'username', 'password', 'national_code'];
+            $directUserCols = ['email', 'gender', 'education', 'birth_date', 'job_title', 'marital'];
+
+            foreach ($regFields as $f) {
+                $fn = $f['name'];
+                if (in_array($fn, $standardCore, true)) continue;
+
+                $isReq = (int)($f['required'] ?? 0) === 1;
+                $val = trim((string)($in[$fn] ?? ''));
+
+                if ($isReq && $val === '') {
+                    json_out(['ok' => false, 'message' => "تکمیل فیلد «{$f['label']}» الزامی است."]);
+                }
+
+                if ($val !== '') {
+                    if ($f['type'] === 'nationalcode' && !valid_national_code(en_num($val))) {
+                        json_out(['ok' => false, 'message' => "کد ملی در فیلد «{$f['label']}» نامعتبر است."]);
+                    }
+                    if ($f['type'] === 'date') {
+                        $mysqlDate = jalali_to_mysql($val);
+                        if (!$mysqlDate) {
+                            json_out(['ok' => false, 'message' => "فرمت تاریخ در «{$f['label']}» نامعتبر است (مثال: ۱۳۷۰/۰۵/۱۶)."]);
+                        }
+                        $val = $mysqlDate;
+                    }
+                    if ($fn === 'gender') {
+                        if ($val === 'زن' || $val === 'female') $val = 'female';
+                        elseif ($val === 'مرد' || $val === 'male') $val = 'male';
+                        else $val = 'other';
+                    }
+
+                    if (in_array($fn, $directUserCols, true)) {
+                        $userData[$fn] = $val;
+                    } else {
+                        $userData['extra'][$fn] = $val;
+                    }
+                }
             }
 
             // ارسال پیامک کد تأیید OTP
@@ -185,16 +278,8 @@ try {
             }
 
             // نگهداری موقت اطلاعات در سشن امن تا مرحلهٔ بعد
-            $_SESSION['pending_full_register'] = [
-                'full_name'     => $fullName,
-                'first_name'    => $fn,
-                'last_name'     => $ln,
-                'mobile'        => $mobile,
-                'username'      => $username,
-                'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-                'national_code' => $nationalCode,
-                'exp'           => time() + 600,
-            ];
+            $userData['exp'] = time() + 600;
+            $_SESSION['pending_full_register'] = $userData;
 
             json_out([
                 'ok'         => true,
@@ -228,16 +313,29 @@ try {
                 json_out(['ok' => true, 'message' => 'خوش آمدید 🦢', 'redirect' => fr_panel_url()]);
             }
 
-            $id = DB::insert('users', [
-                'first_name'      => mb_substr($pend['first_name'], 0, 80),
-                'last_name'       => mb_substr($pend['last_name'], 0, 80),
+            $insertData = [
+                'first_name'      => mb_substr((string)($pend['first_name'] ?? 'کاربر'), 0, 80),
+                'last_name'       => mb_substr((string)($pend['last_name'] ?? ''), 0, 80),
                 'mobile'          => $mobile,
-                'username'        => $pend['username'],
-                'password_hash'   => $pend['password_hash'],
-                'national_code'   => $pend['national_code'],
+                'username'        => $pend['username'] ?? null,
+                'password_hash'   => $pend['password_hash'] ?? null,
+                'national_code'   => $pend['national_code'] ?? null,
                 'mobile_verified' => 1,
                 'status'          => 'active',
-            ]);
+            ];
+
+            $directUserCols = ['email', 'gender', 'education', 'birth_date', 'job_title', 'marital'];
+            foreach ($directUserCols as $col) {
+                if (isset($pend[$col]) && $pend[$col] !== null && $pend[$col] !== '') {
+                    $insertData[$col] = $pend[$col];
+                }
+            }
+
+            if (!empty($pend['extra']) && is_array($pend['extra'])) {
+                $insertData['extra'] = json_encode($pend['extra'], JSON_UNESCAPED_UNICODE);
+            }
+
+            $id = DB::insert('users', $insertData);
             unset($_SESSION['pending_full_register']);
 
             $user = DB::one('SELECT * FROM ' . DB::t('users') . ' WHERE id=?', [$id]);
@@ -245,11 +343,11 @@ try {
 
             try {
                 require_once __DIR__ . '/../includes/contacts.php';
-                fr_contact_sync_user(['id' => $id, 'mobile' => $mobile, 'first_name' => $pend['first_name'], 'last_name' => $pend['last_name']]);
+                fr_contact_sync_user(['id' => $id, 'mobile' => $mobile, 'first_name' => $insertData['first_name'], 'last_name' => $insertData['last_name']]);
             } catch (Throwable $e) {}
 
             try {
-                (new Kavenegar())->sendEvent('register', $mobile, ['name' => $pend['first_name']]);
+                (new Kavenegar())->sendEvent('register', $mobile, ['name' => $insertData['first_name']]);
             } catch (Throwable $e) {}
 
             log_activity('register', 'user', $id, ['method' => 'full_with_credentials']);
@@ -257,7 +355,7 @@ try {
             $back = fr_safe_back((string)($in['back'] ?? ''));
             json_out([
                 'ok'       => true,
-                'message'  => $pend['first_name'] . ' عزیز، حساب شما با موفقیت ساخته شد 🎉',
+                'message'  => $insertData['first_name'] . ' عزیز، حساب شما با موفقیت ساخته شد 🎉',
                 'redirect' => $back !== '' ? $back : fr_panel_url('?welcome=1'),
             ]);
         }

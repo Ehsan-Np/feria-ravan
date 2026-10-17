@@ -52,14 +52,14 @@ echo "======================================================================\n\n
 
 echo "--- بخش اول: بررسی نگارش و پایداری متغیرهای نسخه ---\n";
 
-it('نسخه سیستم در FR_RELEASE و FR_VERSION دقیقاً 4.0.0 است', function() {
-    return FR_RELEASE === '4.0.0' && FR_VERSION === '4.0.0';
+it('نسخه سیستم در FR_RELEASE و FR_VERSION حداقل 4.0.0 است', function() {
+    return version_compare(FR_RELEASE, '4.0.0', '>=') && version_compare(FR_VERSION, '4.0.0', '>=');
 });
 
 it('پایپ‌لاین به‌روزرسانی سیستم بدون خطا اجرا می‌شود و نسخه را همگام می‌سازد', function() {
     fr_update_pipeline(true);
     $ver = DB::setting('fr_version');
-    return $ver === '4.0.0';
+    return version_compare((string)$ver, '4.0.0', '>=');
 });
 
 echo "\n--- بخش دوم: راستی‌آزمایی موتور تقویم شمسی (Jalali / Shamsi Engine) ---\n";

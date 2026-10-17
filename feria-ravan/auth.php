@@ -30,6 +30,32 @@ $siteTitle = (string)DB::setting('site_title', 'فریا روان');
 $slogan    = (string)DB::setting('site_slogan', 'مسیر رشد فردی شما از اینجا آغاز می‌شود!');
 $otpLen    = (int)DB::setting('otp_length', 5);
 
+// بارگذاری فیلدهای داینامیک ثبت‌نام بر اساس تنظیمات مدیریت (profile_fields)
+fr_ensure_profile_fields_schema();
+$regFields = register_fields();
+$fieldsByName = [];
+foreach ($regFields as $rf) {
+    $fieldsByName[$rf['name']] = $rf;
+}
+
+// اطمینان از قرار داشتن فیلد شماره همراه جهت دریافت پیامک فعال‌سازی
+$renderFields = $regFields;
+if (!isset($fieldsByName['mobile'])) {
+    $renderFields[] = [
+        'name'             => 'mobile',
+        'label'            => 'شماره تلفن همراه',
+        'type'             => 'mobile',
+        'options'          => null,
+        'required'         => 1,
+        'active'           => 1,
+        'show_in_register' => 1,
+        'placeholder'      => 'مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱...',
+        'sort_order'       => 20,
+        'is_system'        => 1,
+    ];
+}
+usort($renderFields, fn($a, $b) => ((int)($a['sort_order'] ?? 0)) <=> ((int)($b['sort_order'] ?? 0)));
+
 render_header('ورود / ثبت‌نام / بازیابی رمز');
 ?>
 <style>
@@ -203,45 +229,83 @@ input.au-code{letter-spacing:10px;font-size:21px;text-align:center;direction:ltr
       </div>
 
       <!-- ================================================================== -->
-      <!-- ویو ۲: ثبت‌نام مجزا و کامل -->
+      <!-- ویو ۲: ثبت‌نام مجزا و کامل (پویا و مبتنی بر profile_fields) -->
       <!-- ================================================================== -->
       <div class="au-view <?= $initialTab === 'register' ? 'on' : '' ?>" id="viewRegister">
         <!-- گام ۱: تکمیل اطلاعات عضویت -->
         <div id="regStep1">
-          <div class="fr-field">
-            <label>نام و نام خانوادگی <span class="req">*</span></label>
-            <input class="fr-input" id="regFullName" maxlength="150" placeholder="مثل: سارا محمدی" autocomplete="name" style="text-align:center">
-            <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">نام و نام خانوادگی را با فاصله وارد نمایید.</small>
-          </div>
+          <?php foreach ($renderFields as $f):
+            $fn = $f['name'];
+            $isReq = (int)($f['required'] ?? 0) === 1;
+            $reqMark = $isReq ? ' <span class="req">*</span>' : ' <small style="color:var(--muted);font-weight:normal">(اختیاری)</small>';
+            $ph = (string)($f['placeholder'] ?? '');
+          ?>
+            <?php if ($fn === 'mobile'): ?>
+              <div class="fr-field">
+                <label><?= e($f['label']) ?><?= $reqMark ?></label>
+                <input class="fr-input" id="regMobile" name="mobile" inputmode="tel" maxlength="20"
+                       placeholder="<?= e($ph ?: 'مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱...') ?>" autocomplete="tel" style="direction:ltr;text-align:center">
+                <div id="regOpBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
+              </div>
 
-          <div class="fr-field">
-            <label>شماره تلفن همراه <span class="req">*</span></label>
-            <input class="fr-input" id="regMobile" inputmode="tel" maxlength="20"
-                   placeholder="مثلاً ۰۹۱۲۳۴۵۶۷۸۹ یا ۰۹۹۹۱..." autocomplete="tel" style="direction:ltr;text-align:center">
-            <div id="regOpBadge" style="display:none;font-size:12px;margin-top:6px;text-align:center;color:#475569"></div>
-          </div>
+            <?php elseif ($fn === 'full_name'): ?>
+              <div class="fr-field">
+                <label><?= e($f['label']) ?><?= $reqMark ?></label>
+                <input class="fr-input" id="regFullName" name="full_name" maxlength="150" placeholder="<?= e($ph ?: 'مثل: سارا محمدی') ?>" autocomplete="name" style="text-align:center">
+                <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">نام و نام خانوادگی را با فاصله وارد نمایید.</small>
+              </div>
 
-          <div class="fr-field">
-            <label>آیدی / نام کاربری دلخواه <small style="color:var(--muted);font-weight:normal">(اختیاری — جهت ورود آسان)</small></label>
-            <input class="fr-input" id="regUsername" maxlength="30" placeholder="حروف لاتین مثلاً sara_m" autocomplete="username" style="direction:ltr;text-align:center">
-            <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">حروف انگلیسی، عدد یا نقطه (حداقل ۴ کاراکتر)</small>
-          </div>
+            <?php elseif ($fn === 'username'): ?>
+              <div class="fr-field">
+                <label><?= e($f['label']) ?><?= $isReq ? ' <span class="req">*</span>' : ' <small style="color:var(--muted);font-weight:normal">(اختیاری — جهت ورود آسان)</small>' ?></label>
+                <input class="fr-input" id="regUsername" name="username" maxlength="30" placeholder="<?= e($ph ?: 'حروف لاتین مثلاً sara_m') ?>" autocomplete="username" style="direction:ltr;text-align:center">
+                <small style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">حروف انگلیسی، عدد یا نقطه (حداقل ۴ کاراکتر)</small>
+              </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div class="fr-field">
-              <label>رمز عبور <span class="req">*</span></label>
-              <input class="fr-input" id="regPassword" type="password" maxlength="60" placeholder="حداقل ۶ نویسه" autocomplete="new-password" style="direction:ltr">
-            </div>
-            <div class="fr-field">
-              <label>تکرار رمز عبور <span class="req">*</span></label>
-              <input class="fr-input" id="regPasswordConfirm" type="password" maxlength="60" placeholder="تکرار رمز" autocomplete="new-password" style="direction:ltr">
-            </div>
-          </div>
+            <?php elseif ($fn === 'password'): ?>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div class="fr-field">
+                  <label><?= e($f['label']) ?><?= $reqMark ?></label>
+                  <input class="fr-input" id="regPassword" name="password" type="password" maxlength="60" placeholder="<?= e($ph ?: 'حداقل ۶ نویسه') ?>" autocomplete="new-password" style="direction:ltr">
+                </div>
+                <div class="fr-field">
+                  <label>تکرار رمز عبور<?= $reqMark ?></label>
+                  <input class="fr-input" id="regPasswordConfirm" name="password_confirm" type="password" maxlength="60" placeholder="تکرار رمز" autocomplete="new-password" style="direction:ltr">
+                </div>
+              </div>
 
-          <div class="fr-field">
-            <label>کد ملی ۱۰ رقمی <small style="color:var(--muted);font-weight:normal">(اختیاری — جهت صدور دقیق گواهی و آزمون‌ها)</small></label>
-            <input class="fr-input" id="regNationalCode" inputmode="numeric" maxlength="10" placeholder="– – – – – – – – – –" autocomplete="off" style="direction:ltr;text-align:center">
-          </div>
+            <?php elseif ($fn === 'national_code'): ?>
+              <div class="fr-field">
+                <label><?= e($f['label']) ?><?= $isReq ? ' <span class="req">*</span>' : ' <small style="color:var(--muted);font-weight:normal">(اختیاری — جهت صدور دقیق گواهی و آزمون‌ها)</small>' ?></label>
+                <input class="fr-input" id="regNationalCode" name="national_code" inputmode="numeric" maxlength="10" placeholder="<?= e($ph ?: '– – – – – – – – – –') ?>" autocomplete="off" style="direction:ltr;text-align:center">
+              </div>
+
+            <?php else:
+              $opts = json_decode($f['options'] ?? '[]', true) ?: [];
+              $elemId = 'reg_' . e($fn);
+            ?>
+              <div class="fr-field">
+                <label><?= e($f['label']) ?><?= $reqMark ?></label>
+                <?php if ($f['type'] === 'textarea'): ?>
+                  <textarea class="fr-textarea" id="<?= $elemId ?>" name="<?= e($fn) ?>" placeholder="<?= e($ph) ?>" <?= $isReq ? 'required' : '' ?>></textarea>
+                <?php elseif ($f['type'] === 'select'): ?>
+                  <select class="fr-select" id="<?= $elemId ?>" name="<?= e($fn) ?>" style="text-align:center" <?= $isReq ? 'required' : '' ?>>
+                    <option value="">انتخاب کنید...</option>
+                    <?php foreach ($opts as $opt): ?>
+                      <option value="<?= e($opt) ?>"><?= e($opt) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                <?php elseif ($f['type'] === 'checkbox'): ?>
+                  <label class="tog"><input type="checkbox" id="<?= $elemId ?>" name="<?= e($fn) ?>" value="1"> <?= e($f['label']) ?></label>
+                <?php else: ?>
+                  <input class="fr-input" id="<?= $elemId ?>" name="<?= e($fn) ?>"
+                         placeholder="<?= e($ph) ?>"
+                         <?= in_array($f['type'], ['mobile','nationalcode','number']) ? 'inputmode="numeric" style="direction:ltr;text-align:center"' : '' ?>
+                         <?= $isReq ? 'required' : '' ?>>
+                <?php endif; ?>
+              </div>
+            <?php endif; ?>
+          <?php endforeach; ?>
 
           <button class="fr-btn au-btn" id="btnRegStart">ثبت‌نام و دریافت کد تأیید 📩</button>
         </div>
@@ -585,10 +649,24 @@ $('pwdIdentity').addEventListener('keydown', e => { if (e.key === 'Enter') $('pw
 /* ==========================================================================
    ۳. بخش ثبت‌نام کامل و مجزا (Full Registration)
    ========================================================================== */
+const REG_FIELDS = <?= json_encode(array_values(array_map(function($f) {
+    return [
+        'name'     => $f['name'],
+        'label'    => $f['label'],
+        'type'     => $f['type'],
+        'required' => (int)($f['required'] ?? 0) === 1,
+    ];
+}, $renderFields)), JSON_UNESCAPED_UNICODE) ?>;
+
 function setRegStep(step){
   $('regStep1').style.display = step === 1 ? 'block' : 'none';
   $('regStep2').style.display = step === 2 ? 'block' : 'none';
-  if (step === 1) $('regFullName').focus(); else $('regOtpCode').focus();
+  if (step === 1) {
+    if ($('regFullName')) $('regFullName').focus();
+    else if ($('regMobile')) $('regMobile').focus();
+  } else {
+    $('regOtpCode').focus();
+  }
 }
 
 let regTimer = null;
@@ -609,31 +687,105 @@ function startRegTimer(sec){
 }
 
 async function doRegStart(){
-  const full_name = $('regFullName').value.trim();
-  const mobile = $('regMobile').value.trim();
-  const username = $('regUsername').value.trim();
-  const password = $('regPassword').value;
-  const password_confirm = $('regPasswordConfirm').value;
-  const national_code = $('regNationalCode').value.trim();
+  const mobileInput = $('regMobile');
+  const mobile = mobileInput ? mobileInput.value.trim() : '';
+  if (!mobile) {
+    toast('شماره تلفن همراه الزامی است.', 'err');
+    if (mobileInput) mobileInput.focus();
+    return;
+  }
 
-  if (!full_name) { toast('لطفاً نام و نام خانوادگی را وارد کنید.', 'err'); $('regFullName').focus(); return; }
-  if (!mobile) { toast('شماره تلفن همراه الزامی است.', 'err'); $('regMobile').focus(); return; }
-  if (!password) { toast('رمز عبور الزامی است.', 'err'); $('regPassword').focus(); return; }
-  if (password.length < 6) { toast('رمز عبور باید حداقل ۶ کاراکتر باشد.', 'err'); $('regPassword').focus(); return; }
-  if (password !== password_confirm) { toast('رمز عبور و تکرار آن یکسان نیستند.', 'err'); $('regPasswordConfirm').focus(); return; }
+  const payload = {
+    action: 'register_start',
+    mobile: mobile,
+  };
+
+  for (const f of REG_FIELDS) {
+    if (f.name === 'mobile') continue;
+
+    if (f.name === 'password') {
+      const pwdEl = $('regPassword');
+      const pwdConfirmEl = $('regPasswordConfirm');
+      const pwd = pwdEl ? pwdEl.value : '';
+      const pwdConfirm = pwdConfirmEl ? pwdConfirmEl.value : '';
+
+      if (f.required && !pwd) {
+        toast('رمز عبور الزامی است.', 'err');
+        if (pwdEl) pwdEl.focus();
+        return;
+      }
+      if (pwd !== '') {
+        if (pwd.length < 6) {
+          toast('رمز عبور باید حداقل ۶ نویسه باشد.', 'err');
+          if (pwdEl) pwdEl.focus();
+          return;
+        }
+        if (pwd !== pwdConfirm) {
+          toast('رمز عبور با تکرار آن یکسان نیست.', 'err');
+          if (pwdConfirmEl) pwdConfirmEl.focus();
+          return;
+        }
+      }
+      payload.password = pwd;
+      payload.password_confirm = pwdConfirm;
+      continue;
+    }
+
+    const el = $('reg_' + f.name) ||
+               $('reg' + f.name.replace(/_([a-z])/g, (_, l) => l.toUpperCase()).replace(/^[a-z]/, l => l.toUpperCase())) ||
+               document.querySelector('[name="' + f.name + '"]');
+
+    if (!el) continue;
+
+    let val = '';
+    if (el.type === 'checkbox') {
+      val = el.checked ? '1' : '0';
+    } else {
+      val = el.value.trim();
+    }
+
+    if (f.required && val === '') {
+      toast('لطفاً «' + f.label + '» را وارد نمایید.', 'err');
+      el.focus();
+      return;
+    }
+
+    if (f.name === 'full_name' && val !== '') {
+      if (f.required && (!val.includes(' ') || val.length < 3)) {
+        toast('نام و نام خانوادگی را با فاصله وارد نمایید.', 'err');
+        el.focus();
+        return;
+      }
+    }
+
+    if (f.name === 'username' && val !== '') {
+      if (!/^[A-Za-z][A-Za-z0-9._]{3,29}$/.test(val)) {
+        toast('آیدی باید انگلیسی و بین ۴ تا ۳۰ کاراکتر باشد.', 'err');
+        el.focus();
+        return;
+      }
+    }
+
+    if (f.name === 'national_code' && val !== '') {
+      if (!/^\d{10}$/.test(val)) {
+        toast('کد ملی باید دقیقاً ۱۰ رقم باشد.', 'err');
+        el.focus();
+        return;
+      }
+    }
+
+    payload[f.name] = val;
+  }
 
   const btn = $('btnRegStart');
   btn.disabled = true;
   try {
-    const r = await api(FR_AUTH_API, {
-      action: 'register_start',
-      full_name, mobile, username, password, password_confirm, national_code
-    });
+    const r = await api(FR_AUTH_API, payload);
     if (!r.ok) {
       if (r.already_registered) {
         toast(r.message, 'warn');
         switchMainTab('login');
-        $('loginMobile').value = mobile;
+        if ($('loginMobile')) $('loginMobile').value = mobile;
         selectLoginSubTab('otp');
         doSendLoginOtp();
         return;
@@ -665,6 +817,10 @@ async function doRegStart(){
 }
 $('btnRegStart').onclick = doRegStart;
 $('btnRegResend').onclick = doRegStart;
+const regInputs = $('regStep1') ? $('regStep1').querySelectorAll('input, select') : [];
+regInputs.forEach(inp => {
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') doRegStart(); });
+});
 
 async function doRegComplete(){
   const mobile = $('regMobile').value.trim();

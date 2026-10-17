@@ -24,7 +24,7 @@ $infoMsg = '';
 
 /* فیلدهای داینامیک فعال — موبایل از این حلقه مستثنی می‌شود (فقط با OTP تغییر می‌کند) */
 $fields = array_values(array_filter(
-    DB::all('SELECT * FROM ' . DB::t('profile_fields') . ' WHERE active=1 AND show_in_profile=1 ORDER BY sort_order'),
+    profile_fields(),
     fn($f) => $f['name'] !== 'mobile'
 ));
 
@@ -47,11 +47,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($dup) $errors['national_code'] = 'این کد ملی قبلاً برای حساب دیگری ثبت شده است.';
         }
         if (!$errors) {
-            DB::update('users', $data, 'id=?', [$u['id']]);
+            if (array_key_exists('full_name', $data)) {
+                [$fn, $ln] = fr_split_fullname((string)$data['full_name']);
+                $data['first_name'] = $fn;
+                $data['last_name']  = $ln;
+                unset($data['full_name']);
+            }
+            $directCols = ['first_name','last_name','email','gender','education','birth_date','job_title','marital','national_code','username'];
+            $save = [];
+            $extraData = json_decode((string)($u['extra'] ?? '[]'), true) ?: [];
+            foreach ($data as $k => $v) {
+                if (in_array($k, $directCols, true)) {
+                    $save[$k] = $v;
+                } else {
+                    $extraData[$k] = $v;
+                }
+            }
+            $save['extra'] = json_encode($extraData, JSON_UNESCAPED_UNICODE);
+            DB::update('users', $save, 'id=?', [$u['id']]);
             $okMsg = 'اطلاعات حساب با موفقیت به‌روزرسانی شد ✨';
             log_activity('profile_update', 'user', (int)$u['id']);
             $u = current_user() ?: $u;
-            if (isset($_GET['welcome']) && !empty($data['first_name'])) redirect(fr_panel_url());
+            if (isset($_GET['welcome']) && !empty($save['first_name'])) redirect(fr_panel_url());
         }
     }
 
@@ -258,8 +275,12 @@ if ($infoMsg) echo '<div class="fr-alert info">' . e($infoMsg) . '</div>';
       $hasFn = (bool)array_filter($fields, fn($x) => $x['name'] === 'first_name');
       $hasLn = (bool)array_filter($fields, fn($x) => $x['name'] === 'last_name');
       $mergedRendered = false;
+      $extraData = json_decode((string)($u['extra'] ?? '[]'), true) ?: [];
       foreach ($fields as $f):
-        $val = $u[$f['name']] ?? '';
+        $val = $u[$f['name']] ?? ($extraData[$f['name']] ?? '');
+        if ($f['name'] === 'full_name') {
+            $val = trim((string)($u['first_name'] ?? '') . ' ' . (string)($u['last_name'] ?? ''));
+        }
         if ($f['type'] === 'date' && $val) {
             [$y,$m,$d] = explode('-', $val); $j = g2j((int)$y,(int)$m,(int)$d);
             $val = fa_num(sprintf('%d/%02d/%02d', $j[0], $j[1], $j[2]));
