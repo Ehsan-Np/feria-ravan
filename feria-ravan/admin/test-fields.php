@@ -3,6 +3,7 @@
  * ============================================================================
  *  مدیریت فیلدهای سفارشی و منطق شرطی تست‌های روان‌شناسی (نسخهٔ ۳٫۵٫۲)
  *  ─ امکان تعریف انواع فیلد (متنی، عددی، چک‌باکس، لیست کشویی، رادیویی، تلفن و...)
+ *  ─ تعیین صریح وضعیت الزام: اجباری (الزامی) یا غیر اجباری (اختیاری)
  *  ─ منطق شرطی پیشرفته: نمایش وابسته به پاسخ فیلدهای والد
  * ============================================================================
  */
@@ -58,6 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $condOp    = $hasCond ? trim((string)post('condition_operator', 'equals')) : 'equals';
         $condVal   = $hasCond ? trim((string)post('condition_value')) : null;
 
+        // وضعیت الزام (اجباری یا غیر اجباری)
+        $isRequired = (!empty(post('required')) && (string)post('required') !== '0') ? 1 : 0;
+
         $data = [
             'test_id'            => $testId,
             'label'              => $label,
@@ -66,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'options'            => $optsJson,
             'placeholder'        => trim((string)post('placeholder')) ?: null,
             'help_text'          => trim((string)post('help_text')) ?: null,
-            'required'           => !empty(post('required')) ? 1 : 0,
+            'required'           => $isRequired,
             'condition_field'    => $condField ?: null,
             'condition_operator' => $condOp ?: 'equals',
             'condition_value'    => $condVal ?: null,
@@ -118,15 +122,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $retTestId = (int)post('test_id', '0');
         redirect(SITE_URL . '/admin/test-fields.php' . ($retTestId ? '?test_id=' . $retTestId : ''));
     }
+
+    if ($act === 'toggle_required') {
+        $toggleId = (int)post('id');
+        $f = DB::one('SELECT required, label FROM ' . DB::t('test_fields') . ' WHERE id=?', [$toggleId]);
+        if ($f) {
+            $newReq = (int)$f['required'] === 1 ? 0 : 1;
+            DB::update('test_fields', ['required' => $newReq], 'id=?', [$toggleId]);
+            $stText = $newReq ? '🔴 اجباری (الزامی)' : '⚪ غیر اجباری (اختیاری)';
+            flash("وضعیت الزام فیلد «{$f['label']}» به {$stText} تغییر یافت ✅", 'ok');
+        }
+        $retTestId = (int)post('test_id', '0');
+        $retReq = (string)post('filter_req', '');
+        $query = [];
+        if ($retTestId) $query['test_id'] = $retTestId;
+        if ($retReq !== '') $query['req'] = $retReq;
+        redirect(SITE_URL . '/admin/test-fields.php' . (!empty($query) ? '?' . http_build_query($query) : ''));
+    }
 }
 
-// فیلتر تست
+// فیلترها
 $filterTestId = (int)($_GET['test_id'] ?? 0);
+$filterReq    = (isset($_GET['req']) && $_GET['req'] !== '') ? (int)$_GET['req'] : null;
+
 $where = '1=1';
 $params = [];
 if ($filterTestId > 0) {
     $where .= ' AND (tf.test_id=0 OR tf.test_id=?)';
     $params[] = $filterTestId;
+}
+if ($filterReq !== null) {
+    $where .= ' AND tf.required=?';
+    $params[] = $filterReq;
 }
 
 $fields = DB::all("SELECT tf.*, t.title AS test_title
@@ -167,7 +194,7 @@ echo flash();
   <div>
     <h2 style="margin:0;font-size:20px;color:#1e293b">📋 مدیریت فیلدهای سفارشی و منطق شرطی تست‌ها</h2>
     <p style="margin:4px 0 0;font-size:13px;color:#64748b">
-      امکان افزودن فیلدهای متنی، کشویی، انتخابی و شرطی پیش از پرداخت و شروع آزمون (مانند درخواست مشاوره رایگان، ثبت اطلاعات همراه و...).
+      امکان افزودن فیلدهای متنی، کشویی، انتخابی و شرطی پیش از پرداخت و شروع آزمون همراه با قابلیت تعیین اجباری یا اختیاری بودن پاسخ‌دهی.
     </p>
   </div>
   <div style="display:flex;gap:10px">
@@ -178,20 +205,32 @@ echo flash();
   </div>
 </div>
 
-<!-- نوار فیلتر آزمون -->
+<!-- نوار فیلتر آزمون و وضعیت الزام -->
 <div class="fr-card" style="margin-bottom:20px;padding:14px 18px;background:#f8fafc">
   <form method="get" action="test-fields.php" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-    <label style="font-size:13.5px;font-weight:700;color:#334155">فیلتر بر اساس آزمون:</label>
-    <select name="test_id" class="fr-input fr-select" style="max-width:320px" onchange="this.form.submit()">
-      <option value="0">همه آزمون‌ها (نمایش فیلدهای سراسری و اختصاصی)</option>
-      <?php foreach ($allTests as $t): ?>
-        <option value="<?= (int)$t['id'] ?>" <?= $filterTestId === (int)$t['id'] ? 'selected' : '' ?>>
-          <?= e($t['title']) ?>
-        </option>
-      <?php endforeach; ?>
-    </select>
-    <?php if ($filterTestId > 0): ?>
-      <a class="fr-btn ghost sm" href="test-fields.php">پاک‌سازی فیلتر</a>
+    <div style="display:flex;align-items:center;gap:8px">
+      <label style="font-size:13px;font-weight:700;color:#334155">آزمون:</label>
+      <select name="test_id" class="fr-input fr-select" style="max-width:280px" onchange="this.form.submit()">
+        <option value="0">همه آزمون‌ها (سراسری و اختصاصی)</option>
+        <?php foreach ($allTests as $t): ?>
+          <option value="<?= (int)$t['id'] ?>" <?= $filterTestId === (int)$t['id'] ? 'selected' : '' ?>>
+            <?= e($t['title']) ?>
+          </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px">
+      <label style="font-size:13px;font-weight:700;color:#334155">وضعیت الزام:</label>
+      <select name="req" class="fr-input fr-select" style="max-width:190px" onchange="this.form.submit()">
+        <option value="" <?= $filterReq === null ? 'selected' : '' ?>>همه وضعیت‌ها</option>
+        <option value="1" <?= $filterReq === 1 ? 'selected' : '' ?>>🔴 فقط اجباری‌ها</option>
+        <option value="0" <?= $filterReq === 0 ? 'selected' : '' ?>>⚪ فقط غیر اجباری‌ها (اختیاری)</option>
+      </select>
+    </div>
+
+    <?php if ($filterTestId > 0 || $filterReq !== null): ?>
+      <a class="fr-btn ghost sm" href="test-fields.php">پاک‌سازی فیلترها</a>
     <?php endif; ?>
   </form>
 </div>
@@ -217,10 +256,10 @@ echo flash();
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px">دامنه آزمون:</label>
         <select name="test_id" class="fr-input fr-select" style="width:100%">
-          <option value="0" <?= (isset($editField['test_id']) && (int)$editField['test_id'] === 0) ? 'selected' : '' ?>>🌐 همه آزمون‌ها (سراسری)</option>
+          <option value="0" <?= (isset($editField['test_id']) && (int)$editField['test_id'] === 0) ? 'selected' : '' ?>>🌐 همه آزمون‌ها (سراسری / Global)</option>
           <?php foreach ($allTests as $t): ?>
             <option value="<?= (int)$t['id'] ?>" <?= ((int)($editField['test_id'] ?? $filterTestId) === (int)$t['id']) ? 'selected' : '' ?>>
-              <?= e($t['title']) ?>
+              🎯 <?= e($t['title']) ?>
             </option>
           <?php endforeach; ?>
         </select>
@@ -285,6 +324,37 @@ yes: بله، تمایل به دریافت مشاوره دارم"><?= e($rawOpts
         <div style="font-size:11.5px;color:#64748b;margin-top:4px">می‌توانید به فرمت «کلید: عنوان» بنویسید (مثال: yes: بله) یا فقط عنوان هر گزینه را در یک سطر وارد نمایید.</div>
       </div>
 
+      <!-- تنظیم الزامی / اختیاری بودن فیلد (Required or Optional) -->
+      <?php
+        $currRequired = isset($editField['required']) ? (int)$editField['required'] : 1;
+      ?>
+      <div style="background:#fff7ed;border:1.5px solid #fdba74;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+        <label style="display:block;font-size:13.5px;font-weight:700;margin-bottom:10px;color:#9a3412">
+          📌 وضعیت الزام پاسخ‌دهی (اجباری یا غیر اجباری):
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:#fff;border:2px solid <?= ($currRequired === 1) ? '#ea580c' : '#e2e8f0' ?>;border-radius:10px;cursor:pointer">
+            <input type="radio" name="required" value="1" <?= ($currRequired === 1) ? 'checked' : '' ?> style="margin-top:3px;accent-color:#ea580c">
+            <div>
+              <b style="color:#c2410c;font-size:13px;display:block">🔴 اجباری (الزامی)</b>
+              <div style="font-size:11.5px;color:#64748b;margin-top:3px;line-height:1.5">
+                کاربر باید حتماً این فیلد را انتخاب یا تکمیل کند؛ در صورت خالی ماندن، فرم اجازه ادامه نمی‌دهد.
+              </div>
+            </div>
+          </label>
+
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:#fff;border:2px solid ($currRequired === 0) ? '#0284c7' : '#e2e8f0' ?>;border-radius:10px;cursor:pointer">
+            <input type="radio" name="required" value="0" <?= ($currRequired === 0) ? 'checked' : '' ?> style="margin-top:3px;accent-color:#0284c7">
+            <div>
+              <b style="color:#0369a1;font-size:13px;display:block">⚪ غیر اجباری (اختیاری)</b>
+              <div style="font-size:11.5px;color:#64748b;margin-top:3px;line-height:1.5">
+                کاربر در تکمیل این فیلد مختار است و می‌تواند بدون وارد کردن مقدار، آزمون را آغاز کند.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <!-- راهنما و پلیس‌هولدر -->
       <div class="fr-grid cols-2" style="margin-bottom:14px">
         <div>
@@ -299,14 +369,10 @@ yes: بله، تمایل به دریافت مشاوره دارم"><?= e($rawOpts
         </div>
       </div>
 
-      <!-- تنظیمات الزامی و نمایش -->
+      <!-- تنظیمات نمایش و فعال‌بودن -->
       <div style="background:#f8fafc;padding:12px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#1e293b">⚙️ گزینه‌های اعتبارسنجی و نمایش:</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:#1e293b">⚙️ گزینه‌های نمایش و انتشار:</div>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
-          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" name="required" value="1" <?= (!empty($editField['required']) || !$editField) ? 'checked' : '' ?> style="width:16px;height:16px">
-            <span><b>اجباری بودن فیلد:</b> کاربر ملزم به تکمیل این مورد باشد</span>
-          </label>
           <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" name="show_in_free" value="1" <?= (!isset($editField['show_in_free']) || !empty($editField['show_in_free'])) ? 'checked' : '' ?> style="width:16px;height:16px">
             <span>نمایش در نسخهٔ رایگان آزمون</span>
@@ -389,8 +455,8 @@ yes: بله، تمایل به دریافت مشاوره دارم"><?= e($rawOpts
   <div>
     <div class="fr-card" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:space-between;align-items:center">
-        <b style="font-size:15px;color:#1e293b">📋 فیلدهای فعال آزمون‌ها (<?= fa_num(count($fields)) ?> فیلد)</b>
-        <span class="fr-chip info sm">اجرای بلادرنگ منطق شرطی</span>
+        <b style="font-size:15px;color:#1e293b">📋 فیلدهای تعریف‌شده (<?= fa_num(count($fields)) ?> فیلد)</b>
+        <span class="fr-chip info sm">پشتیبانی از اجباری / اختیاری و شروط پویا</span>
       </div>
 
       <?php if (empty($fields)): ?>
@@ -407,13 +473,15 @@ yes: بله، تمایل به دریافت مشاوره دارم"><?= e($rawOpts
                 <th>نوع ورودی</th>
                 <th>دامنه تست</th>
                 <th>منطق شرطی</th>
-                <th>وضعیت</th>
-                <th style="text-align:left;width:120px">عملیات</th>
+                <th style="text-align:center">الزام پاسخ‌دهی</th>
+                <th style="text-align:center">وضعیت</th>
+                <th style="text-align:left;width:110px">عملیات</th>
               </tr>
             </thead>
             <tbody>
               <?php foreach ($fields as $idx => $f):
                   $isCond = !empty($f['condition_field']);
+                  $isReq = !empty($f['required']);
               ?>
               <tr style="<?= empty($f['active']) ? 'opacity:0.6;background:#fcfcfc' : '' ?>">
                 <td><?= fa_num($f['sort_order']) ?></td>
@@ -421,9 +489,6 @@ yes: بله، تمایل به دریافت مشاوره دارم"><?= e($rawOpts
                   <div style="font-weight:700;color:#0f172a"><?= e($f['label']) ?></div>
                   <div style="font-size:11.5px;color:#64748b;font-family:monospace;direction:ltr;text-align:right">
                     <?= e($f['name']) ?>
-                    <?php if (!empty($f['required'])): ?>
-                      <span style="color:#ef4444;font-family:inherit;font-weight:700"> (الزامی)</span>
-                    <?php endif; ?>
                   </div>
                 </td>
                 <td>
@@ -450,7 +515,25 @@ yes: بله، تمایل به دریافت مشاوره دارم"><?= e($rawOpts
                     <span style="font-size:12px;color:#94a3b8">— بدون شرط</span>
                   <?php endif; ?>
                 </td>
-                <td>
+                <td style="text-align:center">
+                  <form method="post" style="display:inline">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="act" value="toggle_required">
+                    <input type="hidden" name="id" value="<?= (int)$f['id'] ?>">
+                    <input type="hidden" name="test_id" value="<?= (int)$filterTestId ?>">
+                    <input type="hidden" name="filter_req" value="<?= $filterReq !== null ? (int)$filterReq : '' ?>">
+                    <?php if ($isReq): ?>
+                      <button type="submit" class="fr-chip sm danger" style="border:none;cursor:pointer;font-size:11px;font-weight:700" title="کلیک کنید تا به اختیاری (غیر اجباری) تغییر کند">
+                        🔴 اجباری (الزامی)
+                      </button>
+                    <?php else: ?>
+                      <button type="submit" class="fr-chip sm" style="border:none;cursor:pointer;font-size:11px;background:#f1f5f9;color:#475569" title="کلیک کنید تا به اجباری تغییر کند">
+                        ⚪ غیر اجباری (اختیاری)
+                      </button>
+                    <?php endif; ?>
+                  </form>
+                </td>
+                <td style="text-align:center">
                   <form method="post" style="display:inline">
                     <?= csrf_field() ?>
                     <input type="hidden" name="act" value="toggle_active">
@@ -495,3 +578,5 @@ function toggleConditionBox() {
     box.style.display = chk ? 'block' : 'none';
 }
 </script>
+
+<?php admin_layout_end(); ?>

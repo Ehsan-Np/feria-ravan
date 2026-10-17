@@ -278,6 +278,92 @@ $updateContent = file_get_contents(FR_ROOT . '/includes/update.php');
 assert_test(str_contains($updateContent, '۳٫۵٫۲'), "includes/update.php contains 3.5.2 migration hook");
 
 
+// =========================================================================
+// 9. REQUIRED VS OPTIONAL (اجباری / غیر اجباری) FIELDS SPECIFICATION
+// =========================================================================
+echo "\n9. Testing Required vs Optional (اجباری / غیر اجباری) Fields Behavior:\n";
+
+// ایجاد یک فیلد اختیاری و یک فیلد اجباری در تست شماره ۱
+DB::run("DELETE FROM " . DB::t('test_fields') . " WHERE name IN ('qa_opt_field', 'qa_req_field')");
+$optFieldId = DB::insert('test_fields', [
+    'test_id'     => 1,
+    'label'       => 'توضیحات اختیاری مراجع',
+    'name'        => 'qa_opt_field',
+    'type'        => 'text',
+    'required'    => 0, // اختیاری (غیر اجباری)
+    'sort_order'  => 50,
+    'active'      => 1
+]);
+$reqFieldId = DB::insert('test_fields', [
+    'test_id'     => 1,
+    'label'       => 'کد پرونده اجباری',
+    'name'        => 'qa_req_field',
+    'type'        => 'text',
+    'required'    => 1, // اجباری
+    'sort_order'  => 51,
+    'active'      => 1
+]);
+assert_test($optFieldId > 0 && $reqFieldId > 0, "Created test fixtures for optional and required fields");
+
+// سناریوی الف: ارسال فیلد اختیاری به صورت خالی بدون خطا باید عبور کند
+$subOptional = [
+    'test_custom_fields' => [
+        'free_consultation' => 'no',
+        'has_companion'     => 'no',
+        'qa_opt_field'      => '', // خالی به عنوان اختیاری
+        'qa_req_field'      => 'FILE-9988', // پر شده برای جلوگیری از خطای فیلد اجباری
+    ]
+];
+$resOpt = TestFields::validateAndProcess(1, 'all', $subOptional);
+assert_test($resOpt['ok'] === true, "Optional field left empty passes validation cleanly with ok=true");
+assert_test(empty($resOpt['errors']), "No errors generated for empty optional field");
+
+// سناریوی ب: خالی گذاشتن فیلد اجباری باید منجر به خطای صریح شود
+$subReqMissing = [
+    'test_custom_fields' => [
+        'free_consultation' => 'no',
+        'has_companion'     => 'no',
+        'qa_opt_field'      => '',
+        'qa_req_field'      => '', // خالی ماندن فیلد اجباری
+    ]
+];
+$resReq = TestFields::validateAndProcess(1, 'all', $subReqMissing);
+assert_test($resReq['ok'] === false, "Missing required field produces validation failure");
+assert_test(str_contains(implode(' ', $resReq['errors']), 'کد پرونده اجباری'), "Error message explicitly references required field label");
+
+// سناریوی ج: تست جابجایی وضعیت الزام (toggle_required)
+DB::run("UPDATE " . DB::t('test_fields') . " SET required = 1 - required WHERE id=?", [$optFieldId]);
+$updatedOptField = DB::one("SELECT required FROM " . DB::t('test_fields') . " WHERE id=?", [$optFieldId]);
+assert_test((int)$updatedOptField['required'] === 1, "Field toggled from optional (0) to required (1)");
+
+DB::run("UPDATE " . DB::t('test_fields') . " SET required = 1 - required WHERE id=?", [$optFieldId]);
+$restoredOptField = DB::one("SELECT required FROM " . DB::t('test_fields') . " WHERE id=?", [$optFieldId]);
+assert_test((int)$restoredOptField['required'] === 0, "Field toggled back from required (1) to optional (0)");
+
+// سناریوی د: بررسی رندر نشان‌های «الزامی» و «اختیاری» در فرم کاربری
+$renderedHtml = TestFields::renderFormFields([
+    ['id' => 101, 'name' => 'req_demo', 'label' => 'فیلد اجباری دمو', 'type' => 'text', 'required' => 1, 'active' => 1],
+    ['id' => 102, 'name' => 'opt_demo', 'label' => 'فیلد اختیاری دمو', 'type' => 'text', 'required' => 0, 'active' => 1],
+]);
+assert_test(str_contains($renderedHtml, 'tf-badge-req'), "renderFormFields renders 'tf-badge-req' badge for required field");
+assert_test(str_contains($renderedHtml, 'tf-badge-opt'), "renderFormFields renders 'tf-badge-opt' badge for optional field");
+assert_test(str_contains($renderedHtml, 'الزامی'), "renderFormFields includes Persian 'الزامی' indicator");
+assert_test(str_contains($renderedHtml, 'اختیاری'), "renderFormFields includes Persian 'اختیاری' indicator");
+
+// سناریوی هـ: اعتبارسنجی کدهای مدیریت پنل
+$adminTestFieldsCode = file_get_contents(FR_ROOT . '/admin/test-fields.php');
+assert_test(str_contains($adminTestFieldsCode, 'toggle_required'), "admin/test-fields.php contains toggle_required POST handler");
+assert_test(str_contains($adminTestFieldsCode, 'غیر اجباری (اختیاری)'), "admin/test-fields.php includes Persian 'غیر اجباری (اختیاری)' option");
+assert_test(str_contains($adminTestFieldsCode, 'اجباری (الزامی)'), "admin/test-fields.php includes Persian 'اجباری (الزامی)' option");
+
+$adminProfileFieldsCode = file_get_contents(FR_ROOT . '/admin/fields.php');
+assert_test(str_contains($adminProfileFieldsCode, 'toggle_required'), "admin/fields.php contains toggle_required POST handler");
+assert_test(str_contains($adminProfileFieldsCode, 'غیر اجباری (اختیاری)'), "admin/fields.php includes Persian 'غیر اجباری (اختیاری)' option");
+
+// پاکسازی فیلدهای تستی
+DB::run("DELETE FROM " . DB::t('test_fields') . " WHERE name IN ('qa_opt_field', 'qa_req_field')");
+
+
 // Summary
 echo "\n==========================================\n";
 echo "QA SUITE COMPLETED: {$passed} PASSED, {$failed} FAILED\n";

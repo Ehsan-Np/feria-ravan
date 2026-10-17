@@ -230,7 +230,10 @@ class TestFields
               <label for="tf_<?= e($fieldName) ?>" style="display:block;font-size:13.5px;font-weight:700;color:#1e293b;margin-bottom:6px">
                 <?= e($f['label']) ?>
                 <?php if ($req): ?>
-                  <span class="req-star" style="color:#ef4444;margin-right:2px">*</span>
+                  <span class="req-star" style="color:#ef4444;font-weight:700;margin-right:2px" title="تکمیل این فیلد اجباری است">*</span>
+                  <span class="tf-badge-req" style="display:inline-block;background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:4px">الزامی</span>
+                <?php else: ?>
+                  <span class="tf-badge-opt" style="display:inline-block;background:#f1f5f9;color:#64748b;font-size:10px;font-weight:500;padding:1px 6px;border-radius:4px;margin-right:4px">اختیاری</span>
                 <?php endif; ?>
               </label>
 
@@ -465,7 +468,13 @@ class TestFields
                                     wrap.classList.add('has-error');
                                     if (inp.style) inp.style.borderColor = '#ef4444';
                                     if (errEl) {
-                                        errEl.innerText = 'تکمیل این فیلد الزامی است.';
+                                        if (inp.type === 'checkbox') {
+                                            errEl.innerText = 'تأیید و انتخاب این مورد الزامی است.';
+                                        } else if (inp.type === 'radio' || inp.tagName === 'SELECT') {
+                                            errEl.innerText = 'انتخاب یکی از گزینه‌ها الزامی است.';
+                                        } else {
+                                            errEl.innerText = 'تکمیل این فیلد الزامی است.';
+                                        }
                                         errEl.style.display = 'block';
                                     }
                                     if (!firstErrorInput) firstErrorInput = inp;
@@ -591,7 +600,18 @@ class TestFields
 
             // ۲. بررسی الزامی بودن (Required check)
             if ($isReq && $rawVal === '') {
-                $errors[] = "تکمیل فیلد «{$label}» الزامی است.";
+                if ($type === 'checkbox') {
+                    $errors[] = "تأیید و انتخاب گزینه «{$label}» الزامی است.";
+                } elseif ($type === 'radio' || $type === 'select') {
+                    $errors[] = "انتخاب گزینه‌ای برای فیلد «{$label}» الزامی است.";
+                } else {
+                    $errors[] = "تکمیل فیلد «{$label}» الزامی است.";
+                }
+                continue;
+            }
+
+            // اگر فیلد غیر اجباری (اختیاری) باشد و مقداری وارد نشده باشد، بدون خطا عبور می‌کند
+            if (!$isReq && $rawVal === '') {
                 continue;
             }
 

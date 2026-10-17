@@ -33,6 +33,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         log_activity('admin_field_save', 'field', $id ?: null);
         flash('فیلد ذخیره شد ✅');
     }
+    if ($act === 'toggle_required') {
+        $id = (int)post('id');
+        $f = DB::one('SELECT required, label FROM ' . DB::t('profile_fields') . ' WHERE id=?', [$id]);
+        if ($f) {
+            $newReq = (int)$f['required'] === 1 ? 0 : 1;
+            DB::update('profile_fields', ['required' => $newReq], 'id=?', [$id]);
+            $stText = $newReq ? '🔴 اجباری (الزامی)' : '⚪ غیر اجباری (اختیاری)';
+            flash("وضعیت الزام فیلد «{$f['label']}» به {$stText} تغییر یافت ✅", 'ok');
+        }
+        redirect(SITE_URL . '/admin/fields.php');
+    }
     if ($act === 'delete') {
         $f = DB::one('SELECT is_system FROM ' . DB::t('profile_fields') . ' WHERE id=?', [(int)post('id')]);
         if ($f && !$f['is_system']) {
@@ -77,8 +88,20 @@ echo flash();
         <textarea class="fr-textarea" name="options" rows="3"><?= e(implode("\n", (array)(json_decode($editF['options'] ?? '[]', true) ?: []))) ?></textarea></div>
       <div class="fr-field"><label>متن راهنما (placeholder)</label>
         <input class="fr-input" name="placeholder" value="<?= e($editF['placeholder'] ?? '') ?>"></div>
+      <div style="background:#fff7ed;border:1.5px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;color:#9a3412">📌 وضعیت الزام پاسخ‌دهی (اجباری یا غیر اجباری):</label>
+        <div style="display:flex;gap:20px">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="required" value="1" <?= (!empty($editF['required'])) ? 'checked' : '' ?> style="accent-color:#ea580c">
+            <b style="color:#c2410c">🔴 اجباری (الزامی)</b>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="required" value="0" <?= (empty($editF['required'])) ? 'checked' : '' ?> style="accent-color:#0284c7">
+            <b style="color:#0369a1">⚪ غیر اجباری (اختیاری)</b>
+          </label>
+        </div>
+      </div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px">
-        <label class="tog"><input type="checkbox" name="required" <?= ($editF['required'] ?? 0)?'checked':'' ?>> اجباری</label>
         <label class="tog"><input type="checkbox" name="active" <?= ($editF['active'] ?? 1)?'checked':'' ?>> فعال</label>
         <label class="tog"><input type="checkbox" name="show_in_register" <?= ($editF['show_in_register'] ?? 1)?'checked':'' ?>> در ثبت‌نام</label>
         <label class="tog"><input type="checkbox" name="show_in_profile" <?= ($editF['show_in_profile'] ?? 1)?'checked':'' ?>> در پروفایل</label>
@@ -119,8 +142,20 @@ endif;
         <textarea class="fr-textarea" name="options" rows="3"></textarea></div>
       <div class="fr-field"><label>متن راهنما (placeholder)</label>
         <input class="fr-input" name="placeholder" value=""></div>
+      <div style="background:#fff7ed;border:1.5px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;color:#9a3412">📌 وضعیت الزام پاسخ‌دهی (اجباری یا غیر اجباری):</label>
+        <div style="display:flex;gap:20px">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="required" value="1" style="accent-color:#ea580c">
+            <b style="color:#c2410c">🔴 اجباری (الزامی)</b>
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="required" value="0" checked style="accent-color:#0284c7">
+            <b style="color:#0369a1">⚪ غیر اجباری (اختیاری)</b>
+          </label>
+        </div>
+      </div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px">
-        <label class="tog"><input type="checkbox" name="required"> اجباری</label>
         <label class="tog"><input type="checkbox" name="active" checked> فعال</label>
         <label class="tog"><input type="checkbox" name="show_in_register" checked> در ثبت‌نام</label>
         <label class="tog"><input type="checkbox" name="show_in_profile" checked> در پروفایل</label>
@@ -132,14 +167,29 @@ endif;
   <div class="fr-card" style="margin:0">
     <h3>فیلدهای موجود (<?= fa_num(count($rows)) ?>)</h3>
     <table class="fr-table">
-      <thead><tr><th>عنوان</th><th>نوع</th><th>اجباری</th><th>وضعیت</th><th></th></tr></thead>
+      <thead><tr><th>عنوان</th><th>نوع</th><th style="text-align:center">الزام پاسخ‌دهی</th><th style="text-align:center">وضعیت</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rows as $f): ?>
       <tr style="<?= $f['active']?'':'opacity:.45' ?>">
         <td><b><?= e($f['label']) ?></b><br><small style="color:var(--muted);direction:ltr"><?= e($f['name']) ?><?= $f['is_system'] ? ' 🔒' : '' ?></small></td>
         <td style="font-size:12px"><?= e($types[$f['type']] ?? $f['type']) ?></td>
-        <td><?= $f['required'] ? '<span class="fr-chip warn">اجباری</span>' : '—' ?></td>
-        <td><?= $f['active'] ? '<span class="fr-chip ok">فعال</span>' : '<span class="fr-chip err">غیرفعال</span>' ?></td>
+        <td style="text-align:center">
+          <form method="post" style="display:inline">
+            <?= csrf_field() ?>
+            <input type="hidden" name="act" value="toggle_required">
+            <input type="hidden" name="id" value="<?= (int)$f['id'] ?>">
+            <?php if (!empty($f['required'])): ?>
+              <button type="submit" class="fr-chip sm warn" style="border:none;cursor:pointer;font-size:11px" title="کلیک برای تغییر به اختیاری">
+                🔴 اجباری
+              </button>
+            <?php else: ?>
+              <button type="submit" class="fr-chip sm" style="border:none;cursor:pointer;font-size:11px;background:#f1f5f9;color:#64748b" title="کلیک برای تغییر به اجباری">
+                ⚪ اختیاری
+              </button>
+            <?php endif; ?>
+          </form>
+        </td>
+        <td style="text-align:center"><?= $f['active'] ? '<span class="fr-chip ok">فعال</span>' : '<span class="fr-chip err">غیرفعال</span>' ?></td>
         <td class="actions">
           <a class="fr-btn sm ghost" href="?edit_f=<?= $f['id'] ?>">ویرایش</a>
           <?php if (!$f['is_system']): ?>
