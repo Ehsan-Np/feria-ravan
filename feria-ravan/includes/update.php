@@ -389,51 +389,10 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 2.2 badges: ' . $e->getMessage()); }
 
-        /* بازقیمت‌گذاری تست‌ها/کارگاه‌ها/دوره‌ها/مشاوره بر اساس نرخ بازار روانشناسی ایران (تابستان ۱۴۰۵)
-           ─ فقط اقلام شناخته‌شدهٔ سیدشده با slug؛ اقلام ساختهٔ دست مدیر دست‌نخورده می‌مانند */
-        try {
-            $p = DB_PREFIX;
-            $prices = [
-                'tests' => ['disc-family'=>390000,'disc-business'=>550000,'ysq-long'=>590000,'ysq-short'=>350000,
-                            'neo'=>320000,'gardner-mi'=>350000,'eq-shutte'=>290000,
-                            'anxiety'=>150000,'anxiety-manager'=>190000,'depression'=>150000,'depression-manager'=>190000,
-                            'jobsat'=>240000,'jobsat-manager'=>290000,
-                            'neo-manager'=>380000,'ysq-short-manager'=>390000,'ysq-long-manager'=>640000],
-                'events' => ['ehmal-kari'=>450000,'shekast-eshghi'=>390000,'az-fekr-ta-sokut'=>420000,'zir-avar-dalkhori'=>410000,
-                             'modiriat-khashm'=>460000,'nashkhar-fekri'=>430000,'etemad-be-nafs'=>480000,
-                             'farzandparvari-moasser'=>520000,'hoosh-eqteyayi'=>490000,
-                             'doreh-tarazehe'=>4200000,'doreh-disc-modiran'=>3400000,'doreh-disc-khanevade'=>2900000,
-                             'doreh-ertebat'=>1900000,'doreh-stress'=>1800000,'doreh-tabavari'=>1900000,
-                             'doreh-khodshenakht'=>2100000,'doreh-zouj-darmani'=>2400000,
-                             'doreh-farzand-mosbat'=>1900000,'doreh-hoosh-eqteyayi'=>2500000,
-                             'stress-burnout-workshop'=>590000,'family-communication-workshop'=>450000,
-                             'leadership-psychology-workshop'=>1280000,'disc-at-work-workshop'=>540000,
-                             'anxiety-relief-workshop'=>490000,'schema-selfawareness-workshop'=>560000,
-                             'marriage-readiness-workshop'=>640000,'anger-regulation-workshop'=>480000,
-                             'career-design-workshop'=>750000,'assertiveness-workshop'=>520000,
-                             'schema-therapy-course'=>4200000,'parenting-course'=>2900000,
-                             'disc-business-course'=>3400000,'depression-ba-course'=>2600000,
-                             'ocd-erp-course'=>3200000,'gottman-couples-course'=>3800000,
-                             'executive-coaching-course'=>6900000,'mbsr-course'=>2800000,
-                             'play-therapy-course'=>2400000,'neo-hr-course'=>1900000],
-            ];
-            foreach ($prices['tests'] as $slug => $price) {
-                DB::run("UPDATE `{$p}tests` SET price_full=? WHERE slug=?", [$price, $slug]);
-            }
-            foreach ($prices['events'] as $slug => $price) {
-                DB::run("UPDATE `{$p}events` SET price=? WHERE slug=?", [$price, $slug]);
-            }
-            /* قیمت همراهِ مبلغ‌ثابت هم با نرخ جدید هم‌تراز می‌شود (۲٫۲) */
-            foreach (['shekast-eshghi'=>150000,'zir-avar-dalkhori'=>140000,'nashkhar-fekri'=>150000,
-                             'farzandparvari-moasser'=>200000,'doreh-tarazehe'=>1200000,'doreh-disc-modiran'=>1000000,
-                             'doreh-disc-khanevade'=>900000,'doreh-ertebat'=>600000,'doreh-khodshenakht'=>650000,
-                             'doreh-zouj-darmani'=>800000,'doreh-farzand-mosbat'=>600000,'doreh-hoosh-eqteyayi'=>800000] as $slug => $cprice) {
-                DB::run("UPDATE `{$p}events` SET companion_price=? WHERE slug=? AND companion_price_mode='fixed'", [$cprice, $slug]);
-            }
-            foreach (['individual-counseling'=>750000,'couples-family-counseling'=>1050000,'executive-coaching-session'=>1350000] as $slug => $price) {
-                DB::run("UPDATE `{$p}consult_services` SET price=? WHERE slug=?", [$price, $slug]);
-            }
-        } catch (Throwable $e) { error_log('feria: 2.2 prices: ' . $e->getMessage()); }
+        /* ─── ۲٫۲: بازقیمت‌گذاری بازار روانشناسی ایران (منسوخ و غیرفعال در نسخهٔ ۴٫۳٫۰+) ───
+           جهت تضمین پایداری و عدم بازنویسی قیمت‌های سفارشی‌سازی‌شده توسط مدیر سامانه،
+           کوئری‌های بازقیمت‌گذاری انبوه در خط‌لوله به‌روزرسانی به‌طور کامل غیرفعال شده‌اند
+           تا هرگونه قیمت تعیین‌شده برای آزمون‌ها، کارگاه‌ها، دوره‌ها و خدمات مشاوره حفظ شود. */
 
         /* ─── ۲٫۲: عادی‌سازی متن‌های قدیمی پایگاه‌داده — هر «آزمون» → «تست روانشناسی» و 🌱 → 🦢 ───
            (idempotent: پس از یک اجرا هیچ «آزمون»ی باقی نمی‌ماند؛ جایگذاری ترتیبی تا دو بار ترکیب نشود) */
@@ -734,63 +693,8 @@ function fr_update_pipeline(bool $force = false): void
                 try { DB::run($q); } catch (Throwable $e) { error_log('feria: 2.8 ddl: ' . $e->getMessage()); }
             }
 
-            /* بازقیمت‌گذاری — فقط اقلام سیدشدهٔ رسمی و فقط وقتی قیمت فعلی هنوز
-               یکی از نرخ‌های پیش‌فرض قدیمی است (قیمت سفارشی مدیر حفظ می‌شود).
-               قالب هر ردیف: [قیمت‌های پیش‌فرضِ قابل‌جایگزین, قیمت اصلی جدید, قیمت تخفیفی جدید] */
-            $repriceTests = [
-                'disc-family'       => [[320000, 390000], 249000, 189000],
-                'disc-business'     => [[550000],           449000, 379000],
-                'ysq-long'          => [[590000],           389000, 319000],
-                'ysq-short'         => [[350000],           219000, 179000],
-                'neo'               => [[320000],           219000, 169000],
-                'gardner-mi'        => [[350000],           219000, 179000],
-                'eq-shutte'         => [[290000],           189000, 149000],
-                'anxiety'           => [[150000],           119000,  89000],
-                'depression'        => [[150000],           119000,  89000],
-                'jobsat'            => [[240000],           149000, 119000],
-                /* نسخه‌های مدیران — همیشه بالاتر از نسخهٔ عمومی همان ابزار */
-                'anxiety-manager'   => [[190000],           349000, 279000],
-                'depression-manager'=> [[190000],           349000, 279000],
-                'jobsat-manager'    => [[290000],           379000, 299000],
-                'neo-manager'       => [[380000],           419000, 339000],
-                'ysq-short-manager' => [[390000],           429000, 349000],
-                'ysq-long-manager'  => [[640000],           589000, 479000],
-            ];
-            foreach ($repriceTests as $slug => [$olds, $list, $sale]) {
-                $in = implode(',', array_fill(0, count($olds), '?'));
-                DB::run("UPDATE `{$p}tests` SET price_full=?, price_sale=? WHERE slug=? AND price_full IN ($in)",
-                        array_merge([$list, $sale, $slug], $olds));
-            }
-
-            $repriceEvents = [
-                /* کارگاه‌های عمومی (۳ تا ۶ ساعت) — لنگر: کارگاه‌های آنلاین روانشناسی ۳۵۰–۵۹۰هزار */
-                'ehmal-kari'         => [[450000], 390000, 340000],
-                'shekast-eshghi'     => [[390000], 340000, 290000],
-                'az-fekr-ta-sokut'   => [[420000], 360000, 310000],
-                'zir-avar-dalkhori'  => [[410000], 350000, 299000],
-                'modiriat-khashm'    => [[460000], 390000, 340000],
-                'nashkhar-fekri'     => [[430000], 370000, 319000],
-                'etemad-be-nafs'     => [[480000], 420000, 360000],
-                'farzandparvari-moasser' => [[520000], 449000, 389000],
-                'hoosh-eqteyayi'     => [[490000], 420000, 360000],
-                /* دوره‌های عمومی چندجلسه‌ای — لنگر: دوره MBTI حضوری ۲٫۵م / دوره هفت‌روزهٔ آنلاین ~۳–۷م */
-                'doreh-tarazehe'     => [[4200000], 3900000, 3450000],
-                'doreh-disc-khanevade'=> [[2900000], 2700000, 2350000],
-                'doreh-ertebat'      => [[1900000], 1850000, 1590000],
-                'doreh-stress'       => [[1800000], 1750000, 1490000],
-                'doreh-tabavari'     => [[1900000], 1850000, 1590000],
-                'doreh-khodshenakht' => [[2100000], 1950000, 1690000],
-                'doreh-zouj-darmani' => [[2400000], 2350000, 1990000],
-                'doreh-farzand-mosbat'=> [[1900000], 1850000, 1590000],
-                'doreh-hoosh-eqteyayi'=> [[2500000], 2450000, 2090000],
-                /* دوره‌های مدیریتی/اجرایی — همیشه بالاتر از عمومی (لنگر: اجرایی شریف ۸-۱۰م، رهبری سازمانی ۲٫۳م) */
-                'doreh-disc-modiran' => [[3400000], 4900000, 4390000],
-            ];
-            foreach ($repriceEvents as $slug => [$olds, $list, $sale]) {
-                $in = implode(',', array_fill(0, count($olds), '?'));
-                DB::run("UPDATE `{$p}events` SET price=?, sale_price=? WHERE slug=? AND price IN ($in)",
-                        array_merge([$list, $sale, $slug], $olds));
-            }
+            /* ─── بازقیمت‌گذاری منصفانه با مارکت روانشناسی (منسوخ و غیرفعال در نسخهٔ ۴٫۳٫۰+) ───
+               جهت تضمین پایداری قیمت‌های سفارشی مدیر، بازقیمت‌گذاری خودکار در ارتقای سیستم حذف شد. */
 
             /* تنظیمات پیش‌فرض ۲٫۸ — صفحهٔ عمومی خبرنامه */
             foreach ([
@@ -799,7 +703,7 @@ function fr_update_pipeline(bool $force = false): void
             ] as $k => $v) {
                 if (DB::setting($k, null) === null) DB::setSetting($k, $v);
             }
-        } catch (Throwable $e) { error_log('feria: 2.8 pricing-suite: ' . $e->getMessage()); }
+        } catch (Throwable $e) { error_log('feria: 2.8 newsletter: ' . $e->getMessage()); }
 
         /* ─── بذر محتوای جدید نسخه‌ها — خودکار و idempotent ─── */
         try {
@@ -1244,6 +1148,13 @@ function fr_update_pipeline(bool $force = false): void
                 TestFields::ensureSchema();
             }
         } catch (Throwable $e) { error_log('feria: 4.2.0 migration: ' . $e->getMessage()); }
+
+        // ---------------------------------------------------------------------
+        // ۷. نگارش ۴٫۳٫۰: پایداری دائمی و قطعی قیمت‌های سفارشی‌سازی‌شده توسط مدیر در تمامی به‌روزرسانی‌ها
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('price_persistence_enabled', '1');
+        } catch (Throwable $e) { error_log('feria: 4.3.0 migration: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);

@@ -86,7 +86,8 @@ if (!$t) {
 }
 
 // ایجاد یک کد تخفیف معتبر
-$testCode = 'QA410_' . mt_rand(100, 999);
+$testCode = 'QA410_' . bin2hex(random_bytes(4));
+DB::run("DELETE FROM " . DB::t('discounts') . " WHERE code LIKE 'QA410_%'");
 DB::insert('discounts', [
     'code'        => $testCode,
     'type'        => 'percent',

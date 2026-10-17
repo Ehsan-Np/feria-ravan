@@ -602,7 +602,8 @@ function fr_seed_events_v5(): void
             DB::insert('events', $data + ['status'=>'active','reg_open'=>1]);
         } else {
             $patch = [];
-            foreach (['short_desc','image','location','schedule_text','description','companion_enabled','companion_max','companion_price','companion_price_mode','ws_discount_type','ws_discount_value','ws_discount_tiers','ws_discount_scope'] as $col) {
+            // پایداری قیمت‌ها و تنظیمات تجاری: فیلدهای قیمت، همراه و تخفیف هرگز بازنویسی نمی‌شوند
+            foreach (['short_desc','image','location','schedule_text','description'] as $col) {
                 $empty = !isset($old[$col]) || $old[$col] === '' || $old[$col] === null;
                 /* کاور: اگر خالی است ولی کوئری قبلی دارد نباید خنثی شود */
                 if ($empty && array_key_exists($col, $data) && $data[$col] !== null) $patch[$col] = $data[$col];

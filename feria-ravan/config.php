@@ -60,7 +60,7 @@ if (!defined('FR_ENV')) define('FR_ENV', 'production');
 
 if (!defined('FR_ROOT')) define('FR_ROOT', dirname(__FILE__));
 /* نسخهٔ ۲٫۵: نگارش واقعی کد در includes/version.php (FR_RELEASE) است؛ این‌جا فقط Fallback */
-if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.2.0');
+if (!defined('FR_VERSION')) define('FR_VERSION', defined('FR_RELEASE') ? FR_RELEASE : '4.3.0');
 
 /* ---------------------------------------------------------------------------
  | اگر این فایل هنوز «قالب خام» است (مقادیر جایگزین نشده‌اند)، نصب انجام نشده

@@ -45,10 +45,10 @@ function fr_update_test_categories(): void
 
 function fr_upsert_test_def(array $def): int
 {
-    $row = DB::one("SELECT id FROM " . DB::t('tests') . " WHERE slug=?", [$def['slug']]);
+    $row = DB::one("SELECT id, price_full, price_sale FROM " . DB::t('tests') . " WHERE slug=?", [$def['slug']]);
     if ($row) {
         $id = (int)$row['id'];
-        DB::update('tests', [
+        $updateData = [
             'title'          => $def['title'],
             'short_desc'     => $def['short_desc'],
             'description'    => $def['description'],
@@ -57,12 +57,16 @@ function fr_upsert_test_def(array $def): int
             'audience'       => $def['audience'] ?? 'general',
             'question_count' => $def['question_count'] ?? 0,
             'est_minutes'    => $def['est_minutes'] ?? 15,
-            'price_full'     => $def['price_full'] ?? 0,
-            'price_sale'     => $def['price_sale'] ?? null,
             'free_enabled'   => $def['free_enabled'] ?? 1,
             'sort_order'     => $def['sort_order'] ?? 10,
             'status'         => 'active',
-        ], 'id=?', [$id]);
+        ];
+        // پایداری قیمت سفارشی مدیر: فقط در صورتی که قیمت در دیتابیس null باشد مقدار پیش‌فرض ست می‌شود
+        if ($row['price_full'] === null) {
+            $updateData['price_full'] = $def['price_full'] ?? 0;
+            $updateData['price_sale'] = $def['price_sale'] ?? null;
+        }
+        DB::update('tests', $updateData, 'id=?', [$id]);
         return $id;
     }
     return (int)DB::insert('tests', $def + ['status'=>'active','created_at'=>date('Y-m-d H:i:s')]);

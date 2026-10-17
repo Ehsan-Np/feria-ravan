@@ -546,45 +546,8 @@ try {
     echo "✓ اسکیمای نسخهٔ ۲٫۳ آماده است (اطلاع‌رسانی اجتماعی + تکرارشوندهٔ پلنر)\n";
 } catch (Throwable $e) { echo "- اسکیمای ۲٫۳: " . $e->getMessage() . "\n"; }
 
-try {
-    $p = DB_PREFIX;
-    foreach (['disc-family'=>390000,'disc-business'=>550000,'ysq-long'=>590000,'ysq-short'=>350000,
-              'neo'=>320000,'gardner-mi'=>350000,'eq-shutte'=>290000,
-              'anxiety'=>150000,'anxiety-manager'=>190000,'depression'=>150000,'depression-manager'=>190000,
-              'jobsat'=>240000,'jobsat-manager'=>290000,
-              'neo-manager'=>380000,'ysq-short-manager'=>390000,'ysq-long-manager'=>640000] as $slug => $price) {
-        DB::run("UPDATE `{$p}tests` SET price_full=? WHERE slug=?", [$price, $slug]);
-    }
-    foreach (['ehmal-kari'=>450000,'shekast-eshghi'=>390000,'az-fekr-ta-sokut'=>420000,'zir-avar-dalkhori'=>410000,
-              'modiriat-khashm'=>460000,'nashkhar-fekri'=>430000,'etemad-be-nafs'=>480000,
-              'farzandparvari-moasser'=>520000,'hoosh-eqteyayi'=>490000,
-              'doreh-tarazehe'=>4200000,'doreh-disc-modiran'=>3400000,'doreh-disc-khanevade'=>2900000,
-              'doreh-ertebat'=>1900000,'doreh-stress'=>1800000,'doreh-tabavari'=>1900000,
-              'doreh-khodshenakht'=>2100000,'doreh-zouj-darmani'=>2400000,
-              'doreh-farzand-mosbat'=>1900000,'doreh-hoosh-eqteyayi'=>2500000,
-              'stress-burnout-workshop'=>590000,'family-communication-workshop'=>450000,
-              'leadership-psychology-workshop'=>1280000,'disc-at-work-workshop'=>540000,
-              'anxiety-relief-workshop'=>490000,'schema-selfawareness-workshop'=>560000,
-              'marriage-readiness-workshop'=>640000,'anger-regulation-workshop'=>480000,
-              'career-design-workshop'=>750000,'assertiveness-workshop'=>520000,
-              'schema-therapy-course'=>4200000,'parenting-course'=>2900000,
-              'disc-business-course'=>3400000,'depression-ba-course'=>2600000,
-              'ocd-erp-course'=>3200000,'gottman-couples-course'=>3800000,
-              'executive-coaching-course'=>6900000,'mbsr-course'=>2800000,
-              'play-therapy-course'=>2400000,'neo-hr-course'=>1900000] as $slug => $price) {
-        DB::run("UPDATE `{$p}events` SET price=? WHERE slug=?", [$price, $slug]);
-    }
-    foreach (['shekast-eshghi'=>150000,'zir-avar-dalkhori'=>140000,'nashkhar-fekri'=>150000,
-              'farzandparvari-moasser'=>200000,'doreh-tarazehe'=>1200000,'doreh-disc-modiran'=>1000000,
-              'doreh-disc-khanevade'=>900000,'doreh-ertebat'=>600000,'doreh-khodshenakht'=>650000,
-              'doreh-zouj-darmani'=>800000,'doreh-farzand-mosbat'=>600000,'doreh-hoosh-eqteyayi'=>800000] as $slug => $cprice) {
-        DB::run("UPDATE `{$p}events` SET companion_price=? WHERE slug=? AND companion_price_mode='fixed'", [$cprice, $slug]);
-    }
-    foreach (['individual-counseling'=>750000,'couples-family-counseling'=>1050000,'executive-coaching-session'=>1350000] as $slug => $price) {
-        DB::run("UPDATE `{$p}consult_services` SET price=? WHERE slug=?", [$price, $slug]);
-    }
-    echo "✓ بازقیمت‌گذاری بازار روانشناسی ایران اعمال شد — ۲٫۲ (۱۶ تست + ۲۰ رویداد + ۳ خدمت مشاوره)\n";
-} catch (Throwable $e) { echo "- بازقیمت‌گذاری ۲٫۲: " . $e->getMessage() . "\n"; }
+/* ─── بازقیمت‌گذاری انبوه ۲٫۲ (منسوخ در ۴٫۳٫۰+ جهت پایداری قیمت‌های سفارشی مدیر) ─── */
+echo "✓ پایداری قیمت‌های سفارشی مدیر فعال است (عدم بازنویسی نرخ‌ها)\n";
 
 DB::setSetting('fr_version', $frRel);
 echo "✓ نگارش دیتابیس ثبت شد: " . $frRel . "\n";
