@@ -76,7 +76,7 @@ if ($assocDyad): ?>
 <?php endif; ?>
 <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
   <a class="fr-btn ghost sm" href="history.php">→ بازگشت</a>
-  <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId)) ?>" target="_blank">📄 دریافت / چاپ PDF کارنامه</a>
+  <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&auto=1')) ?>" target="_blank">📄 دریافت / چاپ PDF کارنامه</a>
   <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="dyad.php?action=new&attempt=<?= $attemptId ?>">👥 سنجش تطابق دونفره / زوجین</a>
   <a class="fr-btn ghost sm" href="barcode.php?attempt=<?= $attemptId ?>" target="_blank">▮▮▮ بارکد گزارش</a>
   <?php if ($at['mode'] === 'free'): ?>
@@ -121,6 +121,6 @@ if (!empty($at['custom_fields_json'])) {
 <?php
 // در پنل کاربری، پروتکل‌های بالینی مداخله همواره از دسترس کاربران عادی پنهان می‌مانند
 $isViewerAdmin = (bool)(function_exists('current_admin') && current_admin());
-echo ReportBuilder::build($at, $u, $at['mode'], ['isAdmin' => $isViewerAdmin]);
+echo ReportBuilder::build($at, $u, (string)($at['mode'] ?? 'full'), ['isAdmin' => $isViewerAdmin]);
 panel_layout_end();
 render_footer();

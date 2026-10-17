@@ -180,14 +180,21 @@ final class ReportBuilder
      * ساخت HTML گزارش
      * @param array $opts نسخهٔ ۲٫۰: ['print'=>true] → نمودار مخصوص چاپ + بدون کنواس‌های نمایشی
      */
-    public static function build(array $attempt, array $user, string $level, array $opts = []): string
+    public static function build(array $attempt, array $user, ?string $level = 'full', array $opts = []): string
     {
+        $level = ($level === 'free') ? 'free' : 'full';
+        $attempt['mode'] = $level;
         self::$printMode = !empty($opts['print']);
         self::$isAdmin   = isset($opts['isAdmin']) ? (bool)$opts['isAdmin'] : (bool)(function_exists('current_admin') && current_admin());
         $results = Analyzer::getResults((int)$attempt['id']);
+        if (!$results && ($attempt['status'] ?? '') === 'completed') {
+            Analyzer::scoreAttempt((int)$attempt['id']);
+            $results = Analyzer::getResults((int)$attempt['id']);
+        }
         if (!$results) return '<div class="fr-alert err">نتایج یافت نشد.</div>';
 
-        $test  = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$attempt['test_id']]);
+        $test  = DB::one('SELECT * FROM ' . DB::t('tests') . ' WHERE id=?', [$attempt['test_id']])
+               ?: ['id' => (int)($attempt['test_id'] ?? 0), 'title' => 'آزمون روان‌شناختی', 'engine' => 'disc', 'slug' => '', 'audience' => 'general'];
         $site  = fr_brand_title();
         $isFull = $level === 'full';
         $engine = (string)($test['engine'] ?? '');
@@ -219,8 +226,8 @@ final class ReportBuilder
       <h3 style="margin-bottom:6px"><?= e($test['title']) ?>
         <span class="fr-chip <?= $isFull?'purple':'info' ?>"><?= $isFull?'تحلیل ویژه و کامل':'تحلیل رایگان' ?></span></h3>
       <div style="font-size:13px;color:var(--muted)">
-        تست‌دهنده: <b><?= e(user_fullname($user)) ?></b> · موبایل: <?= fa_num($user['mobile']) ?><br>
-        تاریخ تست روانشناسی: <?= fa_num(jdate('l j F Y ساعت H:i', strtotime($attempt['completed_at'] ?: $attempt['started_at']))) ?><br>
+        تست‌دهنده: <b><?= e(user_fullname($user)) ?></b> · موبایل: <?= fa_num((string)($user['mobile'] ?? '')) ?><br>
+        تاریخ تست روانشناسی: <?= fa_num(jdate('l j F Y ساعت H:i', strtotime($attempt['completed_at'] ?: ($attempt['started_at'] ?? '')) ?: time())) ?><br>
         کد پیگیری گزارش: <b style="direction:ltr"><?= e($attempt['rep_code'] ?? ('FR-' . $attempt['id'])) ?></b>
       </div>
     </div>

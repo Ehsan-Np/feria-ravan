@@ -109,8 +109,9 @@ if (($view = (int)($_GET['report'] ?? 0))) {
             }
         }
         admin_layout($adm, 'users', 'مشاهده تحلیل — ' . user_fullname($u));
-        echo '<a class="fr-btn ghost sm" href="user-view.php?id='.$id.'">→ بازگشت به پرونده</a><br><br>';
-        echo ReportBuilder::build($at, $u, $at['mode']);
+        echo '<a class="fr-btn ghost sm" href="user-view.php?id='.$id.'">→ بازگشت به پرونده</a> ';
+        echo '<a class="fr-btn sm" href="' . e(fr_panel_url('report-pdf.php?attempt=' . $at['id'] . '&auto=1')) . '" target="_blank">📄 دریافت / چاپ PDF کارنامه</a><br><br>';
+        echo ReportBuilder::build($at, $u, (string)($at['mode'] ?? 'full'), ['isAdmin' => true]);
         admin_layout_end(); exit;
     }
 }

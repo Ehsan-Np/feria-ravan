@@ -100,7 +100,7 @@ $disclaimer       = fr_report_disclaimer();
 $showQr           = fr_report_show_qr();
 
 $repCode = (string)($at['rep_code'] ?? ('FR-' . $at['id']));
-$completedTs = strtotime((string)($at['completed_at'] ?: $at['started_at']));
+$completedTs = strtotime((string)($at['completed_at'] ?: ($at['started_at'] ?? ''))) ?: time();
 $completedFa = fa_num(jdate('l j F Y — ساعت H:i', $completedTs));
 $issueDateFa = fa_num(jdate('j F Y', $completedTs));
 
@@ -434,7 +434,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 </head>
 <body>
 
-<!-- ── نوار ابزار دریافت و ذخیره فایل PDF A4 ── -->
+  <!-- نوار ابزار دریافت و ذخیره فایل PDF A4 -->
 <div class="pr-toolbar">
   <div class="pr-toolbar-info">
     <span style="font-size:20px">📄</span>
@@ -468,6 +468,11 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
       ← بازگشت
     </a>
   </div>
+</div>
+
+<!-- نوار راهنمای ذخیره فایل PDF برای کاربر -->
+<div id="prDownloadHint" style="display:none;background:#065f46;color:#fff;padding:12px 24px;font-size:13px;line-height:1.8;text-align:center;box-shadow:0 4px 14px rgba(6,95,70,.25);border-bottom:1px solid #047857">
+  💡 <b>راهنمای دانلود PDF:</b> در پنجره چاپ، مقصد چاپ (Destination / Printer) را روی <b>«Save as PDF» (ذخیره به صورت PDF)</b> تنظیم فرمایید تا فایل با کیفیت برداری استاندارد در پوشه دانلودهای شما ذخیره شود.
 </div>
 
 <!-- ── برگه رسمی A4 ── -->
@@ -531,7 +536,14 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
       </div>
       <div class="item">
         <span class="label">سطح ارزیابی:</span>
-        <span class="val"><?= $at['mode'] === 'full' ? 'گزارش تفصیلی و تخصصی' : 'گزارش غربالگری اولیه' ?></span>
+        <?php
+        $atMode = (string)($at['mode'] ?? 'full');
+        if ($atMode !== 'free' && $atMode !== 'full') {
+            $atMode = 'full';
+        }
+        $at['mode'] = $atMode;
+        ?>
+        <span class="val"><?= $atMode === 'full' ? 'گزارش تفصیلی و تخصصی' : 'گزارش غربالگری اولیه' ?></span>
       </div>
       <div class="item">
         <span class="label">روانشناس / مسئول فنی:</span>
@@ -543,6 +555,10 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
   <!-- ۳. جدول خلاصه نمرات تراز و وضعیت مقیاس‌ها -->
   <?php
   $results = Analyzer::getResults((int)$at['id']);
+  if (empty($results) && ($at['status'] ?? '') === 'completed') {
+      Analyzer::scoreAttempt((int)$at['id']);
+      $results = Analyzer::getResults((int)$at['id']);
+  }
   if (!empty($results)):
   ?>
   <div class="avoid-break" style="margin-bottom:18px">
@@ -572,12 +588,12 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
           'very_high' => ['خیلی بالا', '#e0393f', '#fef2f2'],
         ];
         foreach ($results as $res):
-            $bInfo = $bandFaMap[$res['band']] ?? [$res['band'], '#64748b', '#f8fafc'];
+            $bInfo = $bandFaMap[$res['band'] ?? ''] ?? ['متعادل', '#64748b', '#f8fafc'];
         ?>
         <tr>
           <td><?= fa_num($idx++) ?></td>
           <td style="text-align:right;font-weight:600"><?= e($res['title_fa'] ?? $res['scale_code']) ?></td>
-          <td><b><?= fa_num($res['percent']) ?>٪</b></td>
+          <td><b><?= fa_num($res['percent'] ?? 0) ?>٪</b></td>
           <td dir="ltr"><?= !empty($res['t_score']) ? fa_num($res['t_score']) : '—' ?></td>
           <td><?= !empty($res['sten_score']) ? (fa_num($res['sten_score']) . '/۱۰') : '—' ?></td>
           <td><?= !empty($res['percentile']) ? (fa_num($res['percentile']) . '٪') : '—' ?></td>
@@ -595,14 +611,23 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 
   <!-- ۴. بدنه تحلیلی کارنامه روان‌سنجی (نمودارهای وکتور + تحلیل تخصصی) -->
   <div class="pr-content">
-    <?= ReportBuilder::build($at, $targetUser ?: [
-        'first_name' => $at['first_name'] ?? '',
-        'last_name' => $at['last_name'] ?? '',
-        'mobile' => $at['mobile'] ?? '',
-    ], $at['mode'], [
-        'print'   => true,
-        'isAdmin' => $isAdmin,
-    ]) ?>
+    <?php
+    try {
+        echo ReportBuilder::build($at, $targetUser ?: [
+            'first_name' => $at['first_name'] ?? '',
+            'last_name'  => $at['last_name'] ?? '',
+            'mobile'     => $at['mobile'] ?? '',
+        ], $atMode, [
+            'print'   => true,
+            'isAdmin' => $isAdmin,
+        ]);
+    } catch (\Throwable $e) {
+        error_log('ReportBuilder PDF Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        echo '<div class="fr-alert err" style="margin:20px 0;padding:16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b">'
+           . '⚠️ کارنامه روان‌سنجی تولید شد اما بخشی از تحلیل نیازمند بازبینی است.'
+           . '</div>';
+    }
+    ?>
   </div>
 
   <!-- ۵. کادر اعتبارسنجی QR و امضا و مهر رسمی مرکز -->
@@ -760,6 +785,10 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 
   // متد ذخیره و دریافت مستقیم PDF استاندارد ISO A4
   window.frSavePdf = function () {
+    var hint = document.getElementById('prDownloadHint');
+    if (hint) {
+      hint.style.display = 'block';
+    }
     // باز کردن پنجره چاپ مرورگر که خروجی برداری ۱۰۰٪ دقیق A4 تولید می‌کند
     window.print();
   };

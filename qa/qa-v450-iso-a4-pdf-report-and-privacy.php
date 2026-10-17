@@ -219,12 +219,23 @@ it('کنترلر panel/report-pdf.php وجود دارد و نحو PHP آن کا�
         && str_contains($code, '$isAdmin');
 });
 
-it('پراکسی مدیر در admin/report-pdf.php مستقر و فعال است', function() {
+it('پراکسی مدیر در admin/report-pdf.php مستقر و فعال است و بدون خطا اجرا می‌شود', function() use ($attemptId) {
     $file = FR_ROOT . '/admin/report-pdf.php';
     if (!is_file($file)) return false;
     $content = file_get_contents($file);
-    return str_contains($content, 'require_admin()')
-        && str_contains($content, 'report-pdf.php');
+    if (!str_contains($content, 'require_admin()') || !str_contains($content, 'report-pdf.php')) {
+        return false;
+    }
+    // تست اجرای واقعی کنترلر admin/report-pdf.php تحت نشست ادمین
+    $_SESSION['admin_id'] = 1;
+    unset($_SESSION['user_id']);
+    $_GET['attempt'] = (string)$attemptId;
+    ob_start();
+    include $file;
+    $admOut = ob_get_clean();
+    unset($_SESSION['admin_id']);
+    return str_contains($admOut, 'کارنامه رسمی ارزیابی روان‌شناختی')
+        && str_contains($admOut, 'دسترسی مدیر / مشاور فعال است');
 });
 
 it('پشتیبانی از دسترسی مدیر برای آزمون سایر مراجعین در panel/report-pdf.php', function() use ($attemptId, $testUser1) {
@@ -298,6 +309,36 @@ it('دکمه PDF در panel/report.php آدرس صریح و معتبر بدون 
 it('دکمه‌های PDF در admin/attempts.php از آدرس استاندارد fr_panel_url استفاده می‌کنند', function() {
     $attemptsPhp = file_get_contents(FR_ROOT . '/admin/attempts.php');
     return str_contains($attemptsPhp, 'fr_panel_url(\'report-pdf.php?attempt=\'');
+});
+
+it('پایداری ReportBuilder در برابر مقادیر null یا خالی برای سطح گزارش ($level)', function() use ($attemptRow, $testUser1) {
+    // نباید TypeError پرتاب شود اگر mode یا level مقدار null باشد
+    try {
+        $nullModeReport = ReportBuilder::build($attemptRow, $testUser1, null, ['isAdmin' => false]);
+        return str_contains($nullModeReport, 'تحلیل')
+            && !str_contains($nullModeReport, 'TypeError');
+    } catch (\Throwable $e) {
+        return false;
+    }
+});
+
+it('کنترلر panel/report-pdf.php دارای راهنمای دانلود، سازوکار ذخیره و چاپ خودکار است', function() use ($attemptId, $testUser1) {
+    $_SESSION['user_id'] = $testUser1['id'];
+    unset($_SESSION['admin_id']);
+    $_GET['attempt'] = (string)$attemptId;
+    $_GET['auto'] = '1';
+
+    ob_start();
+    include FR_ROOT . '/panel/report-pdf.php';
+    $output = ob_get_clean();
+
+    unset($_SESSION['user_id']);
+    unset($_GET['auto']);
+
+    return str_contains($output, 'prDownloadHint')
+        && str_contains($output, 'window.frSavePdf')
+        && str_contains($output, 'Save as PDF')
+        && str_contains($output, 'auto=1');
 });
 
 // -----------------------------------------------------------------------------
