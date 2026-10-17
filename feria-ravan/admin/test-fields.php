@@ -159,6 +159,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($retReq !== '') $query['req'] = $retReq;
         redirect(SITE_URL . '/admin/test-fields.php' . (!empty($query) ? '?' . http_build_query($query) : ''));
     }
+
+    if ($act === 'toggle_stage' || $act === 'change_stage') {
+        $toggleId = (int)post('id');
+        $f = DB::one('SELECT id, display_stage, label FROM ' . DB::t('test_fields') . ' WHERE id=?', [$toggleId]);
+        if ($f) {
+            $newStage = (string)post('new_stage', '');
+            if (!in_array($newStage, ['post_test', 'pre_test', 'both'], true)) {
+                $cycle = ['post_test' => 'pre_test', 'pre_test' => 'both', 'both' => 'post_test'];
+                $newStage = $cycle[$f['display_stage']] ?? 'post_test';
+            }
+            DB::update('test_fields', ['display_stage' => $newStage], 'id=?', [$toggleId]);
+            $stageNames = [
+                'post_test' => '🏁 پایان آزمون (Post-Test)',
+                'pre_test'  => '🚀 آغاز آزمون (Pre-Test)',
+                'both'      => '🔄 هر دو مرحله (Both)',
+            ];
+            flash("گام اجرای فیلد «{$f['label']}» به «{$stageNames[$newStage]}» تغییر یافت ✅", 'ok');
+        }
+        $retTestId = (int)post('test_id', '0');
+        $retReq    = (string)post('filter_req', '');
+        $retStage  = (string)post('filter_stage', '');
+        $query = [];
+        if ($retTestId) $query['test_id'] = $retTestId;
+        if ($retReq !== '') $query['req'] = $retReq;
+        if ($retStage !== '') $query['stage'] = $retStage;
+        redirect(SITE_URL . '/admin/test-fields.php' . (!empty($query) ? '?' . http_build_query($query) : ''));
+    }
 }
 
 // فیلترها
@@ -177,8 +204,12 @@ if ($filterReq !== null) {
     $params[] = $filterReq;
 }
 if ($filterStage !== '') {
-    $where .= ' AND (tf.display_stage=? OR tf.display_stage="both")';
-    $params[] = $filterStage;
+    if ($filterStage === 'both') {
+        $where .= ' AND tf.display_stage="both"';
+    } else {
+        $where .= ' AND (tf.display_stage=? OR tf.display_stage="both")';
+        $params[] = $filterStage;
+    }
 }
 
 $fields = DB::all("SELECT tf.*, t.title AS test_title
@@ -254,6 +285,7 @@ echo flash();
         <option value="" <?= $filterStage === '' ? 'selected' : '' ?>>همه گام‌ها</option>
         <option value="post_test" <?= $filterStage === 'post_test' ? 'selected' : '' ?>>🏁 پایان آزمون (Post-Test)</option>
         <option value="pre_test" <?= $filterStage === 'pre_test' ? 'selected' : '' ?>>🚀 آغاز آزمون (Pre-Test)</option>
+        <option value="both" <?= $filterStage === 'both' ? 'selected' : '' ?>>🔄 هر دو مرحله (Both)</option>
       </select>
     </div>
 
@@ -603,14 +635,28 @@ no: خیر، نیازی ندارم"><?= e($rawOpts) ?></textarea>
                     </div>
                   <?php endif; ?>
                 </td>
-                <td>
-                  <?php if ($f['display_stage'] === 'post_test'): ?>
-                    <span class="fr-chip sm" style="background:#f3e8ff;color:#7e22ce;font-size:11px;font-weight:700">🏁 پایان آزمون</span>
-                  <?php elseif ($f['display_stage'] === 'pre_test'): ?>
-                    <span class="fr-chip sm" style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700">🚀 آغاز آزمون</span>
-                  <?php else: ?>
-                    <span class="fr-chip sm info" style="font-size:11px">🔄 هر دو مرحله</span>
-                  <?php endif; ?>
+                <td style="text-align:center">
+                  <form method="post" style="display:inline">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="act" value="toggle_stage">
+                    <input type="hidden" name="id" value="<?= (int)$f['id'] ?>">
+                    <input type="hidden" name="test_id" value="<?= (int)$filterTestId ?>">
+                    <input type="hidden" name="filter_req" value="<?= $filterReq !== null ? (int)$filterReq : '' ?>">
+                    <input type="hidden" name="filter_stage" value="<?= e($filterStage) ?>">
+                    <?php if ($f['display_stage'] === 'post_test'): ?>
+                      <button type="submit" class="fr-chip sm" style="border:none;cursor:pointer;background:#f3e8ff;color:#7e22ce;font-size:11.5px;font-weight:700;transition:all .15s" title="گام فعلی: پایان آزمون — کلیک برای تغییر به: آغاز آزمون">
+                        🏁 پایان آزمون ⟳
+                      </button>
+                    <?php elseif ($f['display_stage'] === 'pre_test'): ?>
+                      <button type="submit" class="fr-chip sm" style="border:none;cursor:pointer;background:#dcfce7;color:#15803d;font-size:11.5px;font-weight:700;transition:all .15s" title="گام فعلی: آغاز آزمون — کلیک برای تغییر به: هر دو مرحله">
+                        🚀 آغاز آزمون ⟳
+                      </button>
+                    <?php else: ?>
+                      <button type="submit" class="fr-chip sm info" style="border:none;cursor:pointer;font-size:11.5px;font-weight:700;transition:all .15s" title="گام فعلی: هر دو مرحله — کلیک برای تغییر به: پایان آزمون">
+                        🔄 هر دو مرحله ⟳
+                      </button>
+                    <?php endif; ?>
+                  </form>
                 </td>
                 <td>
                   <?php if ((int)$f['test_id'] === 0): ?>

@@ -363,5 +363,24 @@ document.getElementById('btnDc').onclick = async () => {
       '<s style="color:#a49ec7;font-size:15px">' + r.amount_f + '</s> &nbsp; <span>' + r.payable_f + '</span>';
   }
 };
+
+// همگام‌سازی و تزریق داده‌های فیلدهای پیش از آزمون در هنگام ثبت هر یک از فرم‌ها (رایگان / ویژه / هدیه)
+document.querySelectorAll('form').forEach(f => {
+  f.addEventListener('submit', function() {
+    const box = document.getElementById('testCustomFieldsBox');
+    if (!box || f.contains(box)) return;
+    f.querySelectorAll('.tf-injected-field').forEach(el => el.remove());
+    box.querySelectorAll('input, select, textarea').forEach(inp => {
+      if (inp.disabled) return;
+      if ((inp.type === 'checkbox' || inp.type === 'radio') && !inp.checked) return;
+      const h = document.createElement('input');
+      h.type = 'hidden';
+      h.className = 'tf-injected-field';
+      h.name = inp.name;
+      h.value = inp.value;
+      f.appendChild(h);
+    });
+  });
+});
 </script>
 <?php panel_layout_end(); render_footer(); ?>

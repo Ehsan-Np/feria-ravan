@@ -85,13 +85,7 @@ class TestFields
             }
         }
 
-        // ۵. تنظیم گام‌های اجرای فیلدهای از پیش موجود
-        try {
-            DB::run("UPDATE " . self::table() . " SET display_stage='post_test' WHERE name='free_consultation' AND display_stage='pre_test'");
-            DB::run("UPDATE " . self::table() . " SET display_stage='pre_test' WHERE name IN ('has_companion','companion_name','companion_phone')");
-        } catch (Throwable $e) {}
-
-        // ۶. کاشت بذر پیش‌فرض (مشاوره رایگان و همراه) در صورت خالی بودن جدول
+        // ۵. کاشت بذر پیش‌فرض (مشاوره رایگان و همراه) فقط در صورت خالی بودن جدول
         $count = (int)DB::val("SELECT COUNT(*) FROM " . self::table());
         if ($count === 0) {
             self::seedDefaultFields();
@@ -756,6 +750,22 @@ class TestFields
                                 firstErrorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }
                             return false;
+                        }
+
+                        // اگر فیلدها خارج از این فرم قرار دارند، آن‌ها را به عنوان فیلدهای مخفی داخل فرم تزریق کن
+                        if (!form.contains(box)) {
+                            form.querySelectorAll('.tf-injected-field').forEach(el => el.remove());
+                            const validInputs = box.querySelectorAll('input, select, textarea');
+                            validInputs.forEach(inp => {
+                                if (inp.disabled) return;
+                                if ((inp.type === 'checkbox' || inp.type === 'radio') && !inp.checked) return;
+                                const h = document.createElement('input');
+                                h.type = 'hidden';
+                                h.className = 'tf-injected-field';
+                                h.name = inp.name;
+                                h.value = inp.value;
+                                form.appendChild(h);
+                            });
                         }
                     });
                 }
