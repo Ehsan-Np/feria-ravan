@@ -1130,6 +1130,17 @@ function fr_update_pipeline(bool $force = false): void
             PageBuilder::seedDefaultPages();
         } catch (Throwable $e) { error_log('feria: 3.8.0 page builder and section catalog migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۹٫۰: لینک‌های کوتاه تست‌ها و فیلدهای سفارشی به سبک گرویتی فرمز و مشاوره پایان آزمون ---- */
+        try {
+            require_once FR_ROOT . '/core/TestFields.php';
+            TestFields::ensureSchema();
+            fr_db_run_safe_ddl("ALTER TABLE " . DB::t('test_fields') . " ADD COLUMN `display_stage` VARCHAR(20) NOT NULL DEFAULT 'post_test' AFTER `show_in_full`");
+            fr_db_run_safe_ddl("ALTER TABLE " . DB::t('test_fields') . " ADD INDEX `ix_test_stage` (`test_id`, `display_stage`, `active`)");
+            if (function_exists('fr_permalinks_flush')) {
+                fr_permalinks_flush();
+            }
+        } catch (Throwable $e) { error_log('feria: 3.9.0 short links and gravity fields migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

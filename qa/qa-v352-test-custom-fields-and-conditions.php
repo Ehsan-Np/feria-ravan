@@ -153,6 +153,7 @@ assert_test(str_contains(implode(' ', $resC['errors']), 'شماره تماس'), 
 $resD = TestFields::validateAndProcess(1, 'all', [
     'test_custom_fields' => [
         'free_consultation' => 'yes',
+        'consultation_time' => 'morning',
         'has_companion'     => 'yes',
         'companion_name'    => 'سارا حسینی',
         'companion_phone'   => '09121112233',

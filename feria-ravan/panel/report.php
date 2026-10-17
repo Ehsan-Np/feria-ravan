@@ -84,6 +84,41 @@ if ($assocDyad): ?>
   <?php endif; ?>
 </div>
 <?php
+if (!empty($at['custom_fields_json'])) {
+    require_once FR_ROOT . '/core/TestFields.php';
+    $cfData = json_decode((string)$at['custom_fields_json'], true);
+    if (is_array($cfData)) {
+        $hasConsultation = false;
+        if (isset($cfData['free_consultation'])) {
+            $cVal = $cfData['free_consultation']['value'] ?? '';
+            $cRaw = $cfData['free_consultation']['raw'] ?? '';
+            if (is_array($cRaw)) {
+                foreach ($cRaw as $crItem) {
+                    if (str_contains(mb_strtolower((string)$crItem), 'yes')) {
+                        $hasConsultation = true;
+                        break;
+                    }
+                }
+            } else {
+                $hasConsultation = str_contains((string)$cVal, 'بله') || str_contains(mb_strtolower((string)$cRaw), 'yes');
+            }
+        }
+        if ($hasConsultation): ?>
+          <div class="fr-alert ok" style="margin-bottom:18px;background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:14px;padding:14px 18px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:24px">🎉</span>
+              <div>
+                <b style="color:#065f46;font-size:14px">درخواست جلسه مشاوره رایگان تخصصی شما با موفقیت ثبت شد!</b>
+                <div style="font-size:12.5px;color:#047857;margin-top:3px">کارشناسان روان‌شناسی فریا روان بر اساس نتایج این آزمون و ترجیح زمانی ثبت‌شده، به‌زودی جهت هماهنگی جلسه با شما تماس خواهند گرفت.</div>
+              </div>
+            </div>
+          </div>
+        <?php endif;
+        echo TestFields::renderDisplayCard($at['custom_fields_json'], '📋 پاسخ‌ها و درخواست‌های ثبت‌شده شما (مشاوره رایگان و گزینه‌ها)');
+    }
+}
+?>
+<?php
 echo ReportBuilder::build($at, $u, $at['mode']);
 panel_layout_end();
 render_footer();

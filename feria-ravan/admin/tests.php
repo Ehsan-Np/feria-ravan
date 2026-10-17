@@ -213,7 +213,13 @@ echo flash();
       <div class="fr-field"><label>اسلاگ صفحهٔ عمومی (بدون تغییر بمانید = خودکار)</label>
         <input class="fr-input" name="slug" id="tSlug" dir="ltr" style="text-align:left" value="<?= e($t['slug'] ?? '') ?>" placeholder="mbti-test">
         <?php if (!empty($t['slug'])): ?>
-        <small class="hint">نشانی زیبا: <a href="<?= SITE_URL ?>/t/<?= urlencode($t['slug']) ?>" target="_blank" rel="noopener" dir="ltr">/t/<?= e($t['slug']) ?> ↗</a></small>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap">
+          <small class="hint">نشانی زیبا: <a href="<?= SITE_URL ?>/t/<?= urlencode($t['slug']) ?>" target="_blank" rel="noopener" dir="ltr">/t/<?= e($t['slug']) ?> ↗</a></small>
+          <span style="font-size:11.5px;color:#cbd5e1">|</span>
+          <small class="hint">لینک کوتاه: <code style="font-family:monospace;direction:ltr"><?= fr_test_short_url($t) ?></code>
+            <button type="button" class="fr-btn sm ghost" style="padding:1px 8px;font-size:11px" onclick="navigator.clipboard.writeText('<?= fr_test_short_url($t) ?>');this.innerText='کپی شد';setTimeout(()=>this.innerText='کپی',2000)">کپی</button>
+          </small>
+        </div>
         <?php endif; ?>
       </div>
       <div class="fr-field"><label>توضیحات کامل (HTML)</label>
@@ -354,7 +360,12 @@ endif;
             <?php endif; ?>
             <div>
               <b><?= e($t['title']) ?></b><br>
-              <small style="color:var(--muted)"><?= ($t['audience'] ?? 'general')==='manager' ? '💼 مدیران' : '👥 عمومی' ?></small>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">
+                <small style="color:var(--muted)"><?= ($t['audience'] ?? 'general')==='manager' ? '💼 مدیران' : '👥 عمومی' ?></small>
+                <button type="button" class="fr-chip info sm" style="border:none;cursor:pointer;font-family:monospace;direction:ltr;font-size:10.5px;padding:2px 6px" onclick="navigator.clipboard.writeText('<?= fr_test_short_url($t) ?>');alert('لینک کوتاه تست کپی شد:\n<?= fr_test_short_url($t) ?>')" title="کلیک برای کپی ۱-کلیکی لینک کوتاه">
+                  🔗 /t/<?= (int)$t['id'] ?>
+                </button>
+              </div>
             </div>
           </div>
         </td>

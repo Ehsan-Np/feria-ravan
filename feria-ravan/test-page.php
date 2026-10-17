@@ -19,17 +19,28 @@ require_once __DIR__ . '/includes/seo.php';
 require_once __DIR__ . '/includes/reviews-ui.php';
 fr_bootstrap();
 
-$slug = trim((string)($_GET['s'] ?? ($_GET['slug'] ?? '')));
-$t    = $slug !== ''
-      ? DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE slug=? AND status='active'", [$slug])
-      : DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [(int)($_GET['id'] ?? 0)]);
+$s  = trim((string)($_GET['s'] ?? ($_GET['slug'] ?? '')));
+$id = (int)($_GET['id'] ?? 0);
+
+if ($id > 0) {
+    $t = DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [$id]);
+} elseif ($s !== '') {
+    $t = DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE slug=? AND status='active'", [$s]);
+    // اگر با اسلاگ متنی یافت نشد ولی ورودی عددی بود، جستجو بر اساس ID
+    if (!$t && ctype_digit($s)) {
+        $t = DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [(int)$s]);
+    }
+} else {
+    $t = null;
+}
+
 if (!$t) { http_response_code(404); public_header(['desc'=>'تست روانشناسی یافت نشد'],'خطا'); echo '<div class="pb-wrap"><div class="pb-empty"><span class="ic">🧠</span>این تست روانشناسی یافت نشد یا غیرفعال شده است.</div></div>'; public_footer(); exit; }
 
-/* قانون کانونیکال: فقط نشانی قدیمی ?id= به نشانی زیبا ریدایرکت ۳۰۱ می‌شود.
-   خود نشانی زیبا /t/اسلاگ توسط .htaccess به همین فایل با ?s= بازنویسی می‌شود؛
-   ریدایرکتِ ?s= به /t/ حلقهٔ بی‌نهایت می‌سازد، پس هرگز انجام نمی‌شود. */
+/* قانون کانونیکال: فقط درخواست مستقیم به فایل test-page.php با پارامتر id به نشانی کانونیکال ۳۰۱ می‌شود.
+   مسیرهای بازنویسی‌شده /t/اسلاگ یا /t/شناسه یا /s/شناسه مستقیماً بدون ریدایرکت سرو می‌شوند. */
 $pretty = fr_test_url($t);
-if ($t['slug'] && !isset($_GET['s']) && isset($_GET['id'])) {
+$reqUri = (string)($_SERVER['REQUEST_URI'] ?? '');
+if (!empty($t['slug']) && !isset($_GET['s']) && isset($_GET['id']) && str_contains($reqUri, 'test-page.php')) {
     header('Location: ' . $pretty, true, 301);
     exit;
 }
@@ -94,6 +105,15 @@ public_header([
     <?php if ($t['free_teaser']): ?>
     <p style="font-size:13px;color:var(--muted);margin-top:12px;line-height:1.9"><?= e(strip_tags((string)$t['free_teaser'])) ?></p>
     <?php endif; ?>
+
+    <!-- پیوند کوتاه اختصاصی و فوق‌کوتاه تست با امکان کپی ۱-کلیکی -->
+    <div style="margin-top:16px;padding-top:14px;border-top:1px dashed #d8b4fe;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:12.5px;color:#6b21a8;font-weight:700">🔗 لینک کوتاه تست:</span>
+      <code id="testShortUrlCode" style="direction:ltr;background:#fff;padding:4px 10px;border-radius:8px;border:1px solid #d8b4fe;font-family:monospace;font-size:12px;color:#4c1d95;font-weight:700"><?= e(fr_test_short_url($t)) ?></code>
+      <button type="button" class="fr-btn sm ghost" onclick="navigator.clipboard.writeText('<?= e(fr_test_short_url($t)) ?>');this.innerText='✓ کپی شد';setTimeout(()=>this.innerText='کپی لینک',2000)" style="font-size:11.5px;padding:3px 12px;border-color:#a855f7;color:#6b21a8">
+        کپی لینک
+      </button>
+    </div>
   </div>
 
   <?php fr_reviews_section('test', (int)$t['id']); ?>

@@ -6,9 +6,10 @@ Allow: /consult.php
 Allow: /w/
 Allow: /c/
 Allow: /t/
+Allow: /s/
 Disallow: /panel/
 Disallow: /admin/
 Disallow: /api/
 Disallow: /install/
 
-Sitemap: http://127.0.0.1:8000/sitemap.xml
+Sitemap: http://localhost/sitemap.xml

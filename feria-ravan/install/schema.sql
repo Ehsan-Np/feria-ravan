@@ -139,10 +139,12 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}test_fields` (
   `condition_value` VARCHAR(255) NULL,
   `show_in_free` TINYINT(1) NOT NULL DEFAULT 1,
   `show_in_full` TINYINT(1) NOT NULL DEFAULT 1,
+  `display_stage` VARCHAR(20) NOT NULL DEFAULT 'post_test',
   `sort_order` INT NOT NULL DEFAULT 0,
   `active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY `ix_test_active` (`test_id`, `active`, `sort_order`),
+  KEY `ix_test_stage` (`test_id`, `display_stage`, `active`),
   KEY `ix_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

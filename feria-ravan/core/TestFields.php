@@ -2,8 +2,11 @@
 /**
  * ============================================================================
  *  مدیریت فیلدهای سفارشی و داینامیک تست‌های روان‌شناسی (Test Custom Fields Engine)
- *  ─ نگارش ۳٫۵٫۲: فیلدهای دلخواه، پشتیبانی از انواع ورودی و منطق شرطی بلادرنگ
- *  ─ اعتبارسنجی دوطرفه (کلاینت و سرور)، ذخیره ساختاریافته و نمایش در پنل و پرونده بالینی
+ *  ─ نگارش ۳٫۹٫۰: فیلدهای دلخواه به سبک Pronamic / Gravity Forms
+ *  ─ پشتیبانی کامل از چک‌باکس چندگزینه‌ای (انتخاب همزمان N گزینه با ذخیره آرایه/JSON)
+ *  ─ رادیوباتن با گزینه‌های دلخواه، لیست‌های کشویی و منطق شرطی بلادرنگ
+ *  ─ زمان‌بندی و گام اجرا: پایان آزمون (post_test)، آغاز آزمون (pre_test) یا هر دو (both)
+ *  ─ اعتبارسنجی بلادرنگ کلاینت و سرور، نمایش کارنامه، پنل و پرونده بالینی
  * ============================================================================
  */
 declare(strict_types=1);
@@ -11,7 +14,7 @@ declare(strict_types=1);
 class TestFields
 {
     /**
-     * جدول فیلدهای سفارشی تست‌ها
+     * نام جدول فیلدهای سفارشی تست‌ها
      */
     public static function table(): string
     {
@@ -19,14 +22,14 @@ class TestFields
     }
 
     /**
-     * اطمینان از وجود ساختار پایگاه‌داده (Self-Healing Schema)
+     * اطمینان از وجود و به‌روزرسانی ساختار پایگاه‌داده (Self-Healing Schema)
      */
     public static function ensureSchema(): void
     {
         static $ensured = false;
         if ($ensured) return;
 
-        // ۱. ایجاد جدول اختصاصی test_fields در صورت عدم وجود
+        // ۱. ایجاد یا ارتقای جدول اختصاصی test_fields
         DB::run("CREATE TABLE IF NOT EXISTS " . self::table() . " (
             `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             `test_id` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -42,14 +45,27 @@ class TestFields
             `condition_value` VARCHAR(255) NULL,
             `show_in_free` TINYINT(1) NOT NULL DEFAULT 1,
             `show_in_full` TINYINT(1) NOT NULL DEFAULT 1,
+            `display_stage` VARCHAR(20) NOT NULL DEFAULT 'post_test',
             `sort_order` INT NOT NULL DEFAULT 0,
             `active` TINYINT(1) NOT NULL DEFAULT 1,
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX `idx_test_active` (`test_id`, `active`, `sort_order`),
+            INDEX `idx_test_stage` (`test_id`, `display_stage`, `active`),
             INDEX `idx_name` (`name`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        // ۲. افزودن ستون custom_fields_json به جدول attempts در صورت عدم وجود
+        // ۲. ارتقای ستون display_stage در صورت عدم وجود
+        $hasColStage = DB::one("SHOW COLUMNS FROM " . self::table() . " LIKE 'display_stage'");
+        if (!$hasColStage) {
+            try {
+                DB::run("ALTER TABLE " . self::table() . " ADD COLUMN `display_stage` VARCHAR(20) NOT NULL DEFAULT 'post_test' AFTER `show_in_full`");
+                DB::run("ALTER TABLE " . self::table() . " ADD INDEX `idx_test_stage` (`test_id`, `display_stage`, `active`)");
+            } catch (Throwable $e) {
+                error_log('TestFields display_stage migration: ' . $e->getMessage());
+            }
+        }
+
+        // ۳. اطمینان از وجود ستون custom_fields_json در جدول attempts
         $hasColAttempts = DB::one("SHOW COLUMNS FROM " . DB::t('attempts') . " LIKE 'custom_fields_json'");
         if (!$hasColAttempts) {
             try {
@@ -59,7 +75,7 @@ class TestFields
             }
         }
 
-        // ۳. افزودن ستون custom_fields_json به جدول orders در صورت عدم وجود
+        // ۴. اطمینان از وجود ستون custom_fields_json در جدول orders
         $hasColOrders = DB::one("SHOW COLUMNS FROM " . DB::t('orders') . " LIKE 'custom_fields_json'");
         if (!$hasColOrders) {
             try {
@@ -69,7 +85,13 @@ class TestFields
             }
         }
 
-        // ۴. کاشت بذر پیش‌فرض (سناریوی واقعی مشاوره رایگان و همراه) در صورت خالی بودن جدول
+        // ۵. تنظیم گام‌های اجرای فیلدهای از پیش موجود
+        try {
+            DB::run("UPDATE " . self::table() . " SET display_stage='post_test' WHERE name='free_consultation' AND display_stage='pre_test'");
+            DB::run("UPDATE " . self::table() . " SET display_stage='pre_test' WHERE name IN ('has_companion','companion_name','companion_phone')");
+        } catch (Throwable $e) {}
+
+        // ۶. کاشت بذر پیش‌فرض (مشاوره رایگان و همراه) در صورت خالی بودن جدول
         $count = (int)DB::val("SELECT COUNT(*) FROM " . self::table());
         if ($count === 0) {
             self::seedDefaultFields();
@@ -79,49 +101,93 @@ class TestFields
     }
 
     /**
-     * بذر اولیه فیلدهای نمونه شامل منطق شرطی درخواست همراه و مشاوره
+     * کاشت بذر اولیه فیلدها شامل چک‌باکس چندگزینه‌ای مشاوره رایگان پایان آزمون
      */
     public static function seedDefaultFields(): void
     {
         $fields = [
             [
-                'test_id'            => 0, // همه تست‌ها
-                'label'              => 'آیا به جلسه مشاوره رایگان پیش یا پس از تحلیل نیاز دارید؟',
+                'test_id'            => 0, // همه آزمون‌ها
+                'label'              => 'آیا به جلسه مشاوره رایگان تخصصی در مورد نتایج آزمون نیاز دارید؟',
                 'name'               => 'free_consultation',
-                'type'               => 'select',
+                'type'               => 'checkbox', // چک‌باکس چند گزینه‌ای
                 'options'            => json_encode([
-                    ['key' => 'no',  'label' => 'خیر، نیازی ندارم'],
-                    ['key' => 'yes', 'label' => 'بله، تمایل به دریافت جلسه مشاوره رایگان دارم'],
+                    ['key' => 'yes_individual', 'label' => 'بله، تمایل به مشاوره فردی و بررسی کارنامه آزمون دارم'],
+                    ['key' => 'yes_career',     'label' => 'بله، تمایل به مشاوره شغلی و هدایت مسیر حرفه‌ای دارم'],
+                    ['key' => 'yes_family',     'label' => 'بله، تمایل به مشاوره زوجین و روانشناسی خانواده دارم'],
+                    ['key' => 'no',             'label' => 'خیر، در حال حاضر نیازی به مشاوره رایگان ندارم'],
                 ], JSON_UNESCAPED_UNICODE),
-                'placeholder'        => 'انتخاب گزینه...',
-                'help_text'          => 'مشاوران فریا روان می‌توانند پس از اتمام آزمون، راهنمایی اولیه را به شما ارائه دهند.',
+                'placeholder'        => 'انتخاب یک یا چند گزینه...',
+                'help_text'          => 'مشاوران متخصص فریا روان می‌توانند پس از اتمام تست، نتایج و کارنامه شما را تحلیل و راهنمایی اولیه ارائه دهند.',
                 'required'           => 1,
                 'condition_field'    => null,
                 'condition_operator' => 'equals',
                 'condition_value'    => null,
                 'show_in_free'       => 1,
                 'show_in_full'       => 1,
+                'display_stage'      => 'post_test', // پایان آزمون
                 'sort_order'         => 1,
                 'active'             => 1,
             ],
             [
-                'test_id'            => 0, // همه تست‌ها
-                'label'              => 'آیا در این فرآیند ارزیابی و آزمون همراه دارید؟',
+                'test_id'            => 0,
+                'label'              => 'زمان پیشنهادی شما برای تماس کارشناس مشاور',
+                'name'               => 'consultation_time',
+                'type'               => 'radio', // رادیوباتن تک انتخابی
+                'options'            => json_encode([
+                    ['key' => 'morning', 'label' => 'صبح (ساعت ۹ الی ۱۳)'],
+                    ['key' => 'evening', 'label' => 'عصر (ساعت ۱۵ الی ۱۹)'],
+                    ['key' => 'anytime', 'label' => 'هر ساعتی در روزهای کاری'],
+                ], JSON_UNESCAPED_UNICODE),
+                'placeholder'        => 'انتخاب زمان',
+                'help_text'          => 'تماس هماهنگی مشاوره در این بازه زمانی با شما برقرار خواهد شد.',
+                'required'           => 1,
+                'condition_field'    => 'free_consultation',
+                'condition_operator' => 'contains',
+                'condition_value'    => 'yes',
+                'show_in_free'       => 1,
+                'show_in_full'       => 1,
+                'display_stage'      => 'post_test',
+                'sort_order'         => 2,
+                'active'             => 1,
+            ],
+            [
+                'test_id'            => 0,
+                'label'              => 'توضیحات تکمیلی یا دغدغه اصلی برای مشاور (اختیاری)',
+                'name'               => 'consultation_notes',
+                'type'               => 'textarea',
+                'options'            => null,
+                'placeholder'        => 'اگر موضوع یا سؤال خاصی مدنظر دارید اینجا بنویسید...',
+                'help_text'          => 'این توضیحات به مشاور پرونده کمک می‌کند تا جلسه هدفمندتری داشته باشید.',
+                'required'           => 0,
+                'condition_field'    => 'free_consultation',
+                'condition_operator' => 'contains',
+                'condition_value'    => 'yes',
+                'show_in_free'       => 1,
+                'show_in_full'       => 1,
+                'display_stage'      => 'post_test',
+                'sort_order'         => 3,
+                'active'             => 1,
+            ],
+            [
+                'test_id'            => 0,
+                'label'              => 'آیا در این آزمون همراه یا زوج دارید؟',
                 'name'               => 'has_companion',
                 'type'               => 'select',
                 'options'            => json_encode([
                     ['key' => 'no',  'label' => 'خیر، به تنهایی شرکت می‌کنم'],
                     ['key' => 'yes', 'label' => 'بله، همراه دارم'],
                 ], JSON_UNESCAPED_UNICODE),
-                'placeholder'        => 'انتخاب گزینه...',
-                'help_text'          => 'در صورت انتخاب بله، اطلاعات همراه را در کادرهای زیر وارد کنید.',
+                'placeholder'        => 'انتخاب کنید...',
+                'help_text'          => 'در صورت تمایل به سنجش تطابق دونفره، گزینه بله را انتخاب نمایید.',
                 'required'           => 1,
                 'condition_field'    => null,
                 'condition_operator' => 'equals',
                 'condition_value'    => null,
                 'show_in_free'       => 1,
                 'show_in_full'       => 1,
-                'sort_order'         => 2,
+                'display_stage'      => 'pre_test', // آغاز آزمون
+                'sort_order'         => 4,
                 'active'             => 1,
             ],
             [
@@ -138,7 +204,8 @@ class TestFields
                 'condition_value'    => 'yes,بله,بله، همراه دارم',
                 'show_in_free'       => 1,
                 'show_in_full'       => 1,
-                'sort_order'         => 3,
+                'display_stage'      => 'pre_test',
+                'sort_order'         => 5,
                 'active'             => 1,
             ],
             [
@@ -155,7 +222,8 @@ class TestFields
                 'condition_value'    => 'yes,بله,بله، همراه دارم',
                 'show_in_free'       => 1,
                 'show_in_full'       => 1,
-                'sort_order'         => 4,
+                'display_stage'      => 'pre_test',
+                'sort_order'         => 6,
                 'active'             => 1,
             ],
         ];
@@ -166,9 +234,58 @@ class TestFields
     }
 
     /**
-     * واکشی تمام فیلدهای فعال متناسب با تست و حالت (رایگان/ویژه)
+     * تجزیه و یکپارچه‌سازی گزینه‌ها به سبک Gravity Forms (آرایه‌ای از کلید و عنوان)
      */
-    public static function getFieldsForTest(int $testId, string $mode = 'all'): array
+    public static function parseOptions(mixed $rawOptions): array
+    {
+        if (empty($rawOptions)) return [];
+
+        if (is_array($rawOptions)) {
+            $parsed = [];
+            foreach ($rawOptions as $k => $item) {
+                if (is_array($item)) {
+                    $key = trim((string)($item['key'] ?? ($item['value'] ?? $k)));
+                    $lbl = trim((string)($item['label'] ?? ($item['text'] ?? $key)));
+                    $parsed[] = ['key' => $key, 'label' => $lbl];
+                } else {
+                    $str = trim((string)$item);
+                    if (str_contains($str, ':')) {
+                        [$pk, $pv] = explode(':', $str, 2);
+                        $parsed[] = ['key' => trim($pk), 'label' => trim($pv)];
+                    } else {
+                        $parsed[] = ['key' => $str, 'label' => $str];
+                    }
+                }
+            }
+            return $parsed;
+        }
+
+        if (is_string($rawOptions)) {
+            $decoded = json_decode($rawOptions, true);
+            if (is_array($decoded)) {
+                return self::parseOptions($decoded);
+            }
+            // سطر به سطر
+            $lines = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $rawOptions))));
+            $parsed = [];
+            foreach ($lines as $line) {
+                if (str_contains($line, ':')) {
+                    [$pk, $pv] = explode(':', $line, 2);
+                    $parsed[] = ['key' => trim($pk), 'label' => trim($pv)];
+                } else {
+                    $parsed[] = ['key' => $line, 'label' => $line];
+                }
+            }
+            return $parsed;
+        }
+
+        return [];
+    }
+
+    /**
+     * واکشی تمام فیلدهای فعال متناسب با تست، حالت و مرحله اجرا
+     */
+    public static function getFieldsForTest(int $testId, string $mode = 'all', ?string $stage = null): array
     {
         self::ensureSchema();
 
@@ -181,16 +298,20 @@ class TestFields
             $sql .= " AND show_in_full=1";
         }
 
+        if ($stage === 'pre_test') {
+            $sql .= " AND (display_stage='pre_test' OR display_stage='both')";
+        } elseif ($stage === 'post_test') {
+            $sql .= " AND (display_stage='post_test' OR display_stage='both')";
+        } elseif (!empty($stage) && $stage !== 'all') {
+            $sql .= " AND display_stage=?";
+            $params[] = $stage;
+        }
+
         $sql .= " ORDER BY sort_order ASC, id ASC";
 
         $rows = DB::all($sql, $params);
         foreach ($rows as &$r) {
-            if (!empty($r['options']) && is_string($r['options'])) {
-                $decoded = json_decode($r['options'], true);
-                $r['parsed_options'] = is_array($decoded) ? $decoded : [];
-            } else {
-                $r['parsed_options'] = [];
-            }
+            $r['parsed_options'] = self::parseOptions($r['options'] ?? null);
         }
         unset($r);
 
@@ -198,16 +319,32 @@ class TestFields
     }
 
     /**
-     * رندر HTML کادرهای فرم ورودی فیلدها با اتریبیوت‌های شرطی
+     * واکشی فیلدهای پیش از آزمون (پیش از شروع پاسخ‌گویی به سؤالات)
      */
-    public static function renderFormFields(array $fields, array $currentValues = []): string
+    public static function getPreTestFields(int $testId, string $mode = 'all'): array
+    {
+        return self::getFieldsForTest($testId, $mode, 'pre_test');
+    }
+
+    /**
+     * واکشی فیلدهای پایان آزمون (دقیقاً پس از اتمام سؤالات و قبل از تحلیل نهایی)
+     */
+    public static function getPostTestFields(int $testId, string $mode = 'all'): array
+    {
+        return self::getFieldsForTest($testId, $mode, 'post_test');
+    }
+
+    /**
+     * رندر HTML کادرهای فرم ورودی فیلدها با منطق شرطی به سبک گرویتی فرمز
+     */
+    public static function renderFormFields(array $fields, array $currentValues = [], string $containerId = 'testCustomFieldsBox'): string
     {
         if (empty($fields)) return '';
 
         ob_start();
         ?>
-        <div class="fr-test-custom-fields-box" id="testCustomFieldsBox">
-          <div class="fr-custom-fields-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px">
+        <div class="fr-test-custom-fields-box" id="<?= e($containerId) ?>">
+          <div class="fr-custom-fields-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px">
             <?php foreach ($fields as $f):
                 $fieldName = (string)$f['name'];
                 $val = $currentValues[$fieldName] ?? '';
@@ -237,7 +374,80 @@ class TestFields
                 <?php endif; ?>
               </label>
 
-              <?php if ($type === 'select'): ?>
+              <?php if ($type === 'checkbox'): ?>
+                <!-- چک‌باکس چندگزینه‌ای یا تک‌گزینه‌ای به سبک Gravity Forms -->
+                <?php if (!empty($f['parsed_options'])): ?>
+                  <div class="fr-checkbox-group" style="display:flex;flex-direction:column;gap:8px;padding:4px 0">
+                    <?php foreach ($f['parsed_options'] as $opt):
+                        $k = is_array($opt) ? ($opt['key'] ?? '') : (string)$opt;
+                        $lbl = is_array($opt) ? ($opt['label'] ?? $k) : (string)$opt;
+                        $isChecked = (is_array($val) && in_array($k, $val, true)) || ($val === $k);
+                    ?>
+                      <label style="display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:#334155;background:#fff;padding:9px 14px;border-radius:10px;border:1.5px solid #cbd5e1;transition:all .15s ease">
+                        <input type="checkbox"
+                               name="test_custom_fields[<?= e($fieldName) ?>][]"
+                               value="<?= e($k) ?>"
+                               class="tf-input tf-checkbox"
+                               data-field-name="<?= e($fieldName) ?>"
+                               data-required="<?= $req ? '1' : '0' ?>"
+                               <?= $isChecked ? 'checked' : '' ?>
+                               style="width:18px;height:18px;accent-color:#2563eb;cursor:pointer">
+                        <span style="font-weight:600"><?= e($lbl) ?></span>
+                      </label>
+                    <?php endforeach; ?>
+                  </div>
+                <?php else: ?>
+                  <label style="display:inline-flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;background:#fff;border-radius:10px;border:1.5px solid #cbd5e1;font-size:13.5px;color:#334155">
+                    <input type="checkbox"
+                           name="test_custom_fields[<?= e($fieldName) ?>]"
+                           id="tf_<?= e($fieldName) ?>"
+                           class="tf-input tf-checkbox"
+                           data-field-name="<?= e($fieldName) ?>"
+                           data-required="<?= $req ? '1' : '0' ?>"
+                           value="1"
+                           <?= ($val === '1' || $val === 1 || $val === 'yes' || $val === true || $val === 'بله') ? 'checked' : '' ?>
+                           style="width:18px;height:18px;accent-color:#2563eb">
+                    <span><?= e($f['placeholder'] ?: 'تأیید و انتخاب این مورد') ?></span>
+                  </label>
+                <?php endif; ?>
+
+              <?php elseif ($type === 'single_checkbox'): ?>
+                <label style="display:inline-flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;background:#fff;border-radius:10px;border:1.5px solid #cbd5e1;font-size:13.5px;color:#334155">
+                  <input type="checkbox"
+                         name="test_custom_fields[<?= e($fieldName) ?>]"
+                         id="tf_<?= e($fieldName) ?>"
+                         class="tf-input tf-checkbox"
+                         data-field-name="<?= e($fieldName) ?>"
+                         data-required="<?= $req ? '1' : '0' ?>"
+                         value="1"
+                         <?= ($val === '1' || $val === 1 || $val === 'yes' || $val === true || $val === 'بله') ? 'checked' : '' ?>
+                         style="width:18px;height:18px;accent-color:#2563eb">
+                  <span><?= e($f['placeholder'] ?: ($f['parsed_options'][0]['label'] ?? 'تأیید و موافقت')) ?></span>
+                </label>
+
+              <?php elseif ($type === 'radio'): ?>
+                <!-- دکمه‌های رادیویی با انتخاب تک‌گزینه از میان N گزینه -->
+                <div class="fr-radio-group" style="display:flex;flex-direction:column;gap:8px;padding:4px 0">
+                  <?php foreach ($f['parsed_options'] as $opt):
+                      $k = is_array($opt) ? ($opt['key'] ?? '') : (string)$opt;
+                      $lbl = is_array($opt) ? ($opt['label'] ?? $k) : (string)$opt;
+                      $checked = ($val !== '' && ($val === $k || $val === $lbl)) ? 'checked' : '';
+                  ?>
+                    <label style="display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:#334155;background:#fff;padding:9px 14px;border-radius:10px;border:1.5px solid #cbd5e1;transition:all .15s ease">
+                      <input type="radio"
+                             name="test_custom_fields[<?= e($fieldName) ?>]"
+                             value="<?= e($k) ?>"
+                             class="tf-input tf-radio"
+                             data-field-name="<?= e($fieldName) ?>"
+                             data-required="<?= $req ? '1' : '0' ?>"
+                             <?= $checked ?>
+                             style="width:18px;height:18px;accent-color:#2563eb;cursor:pointer">
+                      <span style="font-weight:600"><?= e($lbl) ?></span>
+                    </label>
+                  <?php endforeach; ?>
+                </div>
+
+              <?php elseif ($type === 'select'): ?>
                 <select name="test_custom_fields[<?= e($fieldName) ?>]"
                         id="tf_<?= e($fieldName) ?>"
                         class="fr-input fr-select tf-input"
@@ -254,40 +464,22 @@ class TestFields
                   <?php endforeach; ?>
                 </select>
 
-              <?php elseif ($type === 'checkbox'): ?>
-                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0;font-size:13px;color:#334155">
-                  <input type="checkbox"
-                         name="test_custom_fields[<?= e($fieldName) ?>]"
-                         id="tf_<?= e($fieldName) ?>"
-                         class="tf-input"
-                         data-field-name="<?= e($fieldName) ?>"
-                         data-required="<?= $req ? '1' : '0' ?>"
-                         value="1"
-                         <?= ($val === '1' || $val === 1 || $val === 'yes' || $val === true) ? 'checked' : '' ?>
-                         style="width:18px;height:18px;accent-color:#7c3aed">
-                  <span><?= e($f['placeholder'] ?: 'تأیید و انتخاب این مورد') ?></span>
-                </label>
-
-              <?php elseif ($type === 'radio'): ?>
-                <div class="fr-radio-group" style="display:flex;gap:14px;flex-wrap:wrap;padding:6px 0">
+              <?php elseif ($type === 'multiselect'): ?>
+                <select name="test_custom_fields[<?= e($fieldName) ?>][]"
+                        id="tf_<?= e($fieldName) ?>"
+                        multiple
+                        class="fr-input fr-select tf-input"
+                        data-field-name="<?= e($fieldName) ?>"
+                        data-required="<?= $req ? '1' : '0' ?>"
+                        style="width:100%;min-height:90px;border-radius:10px;border:1.5px solid #cbd5e1;background:#fff;padding:6px 12px;font-family:inherit">
                   <?php foreach ($f['parsed_options'] as $opt):
                       $k = is_array($opt) ? ($opt['key'] ?? '') : (string)$opt;
                       $lbl = is_array($opt) ? ($opt['label'] ?? $k) : (string)$opt;
-                      $checked = ($val !== '' && ($val === $k || $val === $lbl)) ? 'checked' : '';
+                      $selected = (is_array($val) && in_array($k, $val, true)) || ($val === $k) ? 'selected' : '';
                   ?>
-                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#334155">
-                      <input type="radio"
-                             name="test_custom_fields[<?= e($fieldName) ?>]"
-                             value="<?= e($k) ?>"
-                             class="tf-input"
-                             data-field-name="<?= e($fieldName) ?>"
-                             data-required="<?= $req ? '1' : '0' ?>"
-                             <?= $checked ?>
-                             style="width:16px;height:16px;accent-color:#7c3aed">
-                      <span><?= e($lbl) ?></span>
-                    </label>
+                    <option value="<?= e($k) ?>" <?= $selected ?>><?= e($lbl) ?></option>
                   <?php endforeach; ?>
-                </div>
+                </select>
 
               <?php elseif ($type === 'textarea'): ?>
                 <textarea name="test_custom_fields[<?= e($fieldName) ?>]"
@@ -342,13 +534,13 @@ class TestFields
             <?php endforeach; ?>
           </div>
         </div>
-        <?= self::renderClientScript('#testCustomFieldsBox') ?>
+        <?= self::renderClientScript('#' . $containerId) ?>
         <?php
         return ob_get_clean();
     }
 
     /**
-     * رندر اسکریپت پیشرفته اجرای منطق شرطی در مرورگر کاربر
+     * رندر اسکریپت پیشرفته اجرای منطق شرطی کلاینت بر اساس معماری Gravity Forms
      */
     public static function renderClientScript(string $containerSelector = '#testCustomFieldsBox'): string
     {
@@ -370,31 +562,82 @@ class TestFields
                         return checked ? checked.value.trim() : '';
                     }
                     if (first.type === 'checkbox') {
-                        return first.checked ? '1' : '0';
+                        const allChecked = box.querySelectorAll('[data-field-name="' + name + '"]:checked');
+                        if (inputs.length > 1 || (first.name && first.name.indexOf('[]') !== -1)) {
+                            return Array.from(allChecked).map(el => el.value.trim());
+                        }
+                        return first.checked ? (first.value || '1').trim() : '';
+                    }
+                    if (first.tagName === 'SELECT' && first.multiple) {
+                        return Array.from(first.selectedOptions).map(o => o.value.trim());
                     }
                     return first.value.trim();
                 }
 
                 function evalCondition(parentVal, op, condVal) {
-                    parentVal = (parentVal || '').toString().trim().toLowerCase();
                     condVal = (condVal || '').toString().trim().toLowerCase();
                     
+                    // بررسی والد از نوع آرایه (چک‌باکس چندگزینه‌ای یا مالتی‌سلکت)
+                    if (Array.isArray(parentVal)) {
+                        const pArr = parentVal.map(v => (v || '').toString().trim().toLowerCase());
+                        const hasSub = pArr.some(v => v === condVal || (condVal && v.indexOf(condVal) !== -1));
+                        switch (op) {
+                            case 'equals':
+                            case 'is':
+                                return pArr.includes(condVal);
+                            case 'not_equals':
+                            case 'isnot':
+                                return !pArr.includes(condVal);
+                            case 'contains':
+                                return hasSub;
+                            case 'not_contains':
+                                return !hasSub;
+                            case 'checked':
+                            case 'is_not_empty':
+                                return pArr.length > 0;
+                            case 'not_checked':
+                            case 'is_empty':
+                                return pArr.length === 0;
+                            case 'in':
+                                const inList = condVal.split(',').map(s => s.trim().toLowerCase());
+                                return pArr.some(v => inList.includes(v));
+                            case 'not_in':
+                                const notInList = condVal.split(',').map(s => s.trim().toLowerCase());
+                                return !pArr.some(v => notInList.includes(v));
+                            default:
+                                return pArr.includes(condVal);
+                        }
+                    }
+
+                    // بررسی والد از نوع رشته
+                    const pStr = (parentVal || '').toString().trim().toLowerCase();
                     switch (op) {
                         case 'equals':
-                            return parentVal === condVal;
+                        case 'is':
+                            return pStr === condVal;
                         case 'not_equals':
-                            return parentVal !== '' && parentVal !== condVal;
+                        case 'isnot':
+                            return pStr !== '' && pStr !== condVal;
                         case 'checked':
-                            return parentVal === '1' || parentVal === 'true' || parentVal === 'yes' || parentVal === 'on' || parentVal === 'بله';
+                            return ['1', 'true', 'yes', 'on', 'checked', 'بله'].includes(pStr);
                         case 'not_checked':
-                            return parentVal === '0' || parentVal === 'false' || parentVal === 'off' || parentVal === '' || parentVal === 'no' || parentVal === 'خیر';
+                            return ['0', 'false', 'off', '', 'no', 'خیر'].includes(pStr);
+                        case 'is_empty':
+                            return pStr === '';
+                        case 'is_not_empty':
+                            return pStr !== '';
                         case 'contains':
-                            return condVal !== '' && parentVal.indexOf(condVal) !== -1;
+                            return condVal !== '' && pStr.indexOf(condVal) !== -1;
+                        case 'not_contains':
+                            return condVal === '' || pStr.indexOf(condVal) === -1;
                         case 'in':
                             const list = condVal.split(',').map(s => s.trim().toLowerCase());
-                            return list.includes(parentVal);
+                            return list.includes(pStr);
+                        case 'not_in':
+                            const nList = condVal.split(',').map(s => s.trim().toLowerCase());
+                            return !nList.includes(pStr);
                         default:
-                            return parentVal === condVal;
+                            return pStr === condVal;
                     }
                 }
 
@@ -430,14 +673,10 @@ class TestFields
                     });
                 }
 
-                // ثبت لیسنر روی تمام اینپوت‌ها برای واکنش آنی
                 box.addEventListener('input', applyConditions);
                 box.addEventListener('change', applyConditions);
-
-                // اجرای اولیه در زمان لود صفحه
                 applyConditions();
 
-                // اتصال خودکار به فرم‌های شروع و پرداخت در صفحه
                 function attachFormValidation(form) {
                     if (!form || form._tfAttached) return;
                     form._tfAttached = true;
@@ -452,53 +691,62 @@ class TestFields
                             if (wrap.style.display === 'none') return;
 
                             const inputs = wrap.querySelectorAll('input, select, textarea');
-                            inputs.forEach(inp => {
-                                const isReq = inp.getAttribute('data-required') === '1';
-                                let val = inp.value ? inp.value.trim() : '';
-                                if (inp.type === 'checkbox') val = inp.checked ? '1' : '';
-                                if (inp.type === 'radio') {
-                                    const radName = inp.getAttribute('data-field-name');
-                                    const checked = box.querySelector('[data-field-name="' + radName + '"]:checked');
-                                    val = checked ? checked.value : '';
-                                }
+                            if (!inputs.length) return;
 
-                                const errEl = wrap.querySelector('.field-error-msg');
-                                if (isReq && !val) {
+                            const primaryInput = inputs[0];
+                            const isReq = wrap.querySelector('[data-required="1"]') !== null;
+                            let isFilled = false;
+
+                            if (primaryInput.type === 'checkbox') {
+                                const checkedCount = wrap.querySelectorAll('input[type="checkbox"]:checked').length;
+                                isFilled = (checkedCount > 0);
+                            } else if (primaryInput.type === 'radio') {
+                                const checkedRadio = wrap.querySelector('input[type="radio"]:checked');
+                                isFilled = !!checkedRadio;
+                            } else {
+                                isFilled = (primaryInput.value || '').trim() !== '';
+                            }
+
+                            const errEl = wrap.querySelector('.field-error-msg');
+                            if (isReq && !isFilled) {
+                                hasError = true;
+                                wrap.classList.add('has-error');
+                                if (primaryInput.style && primaryInput.type !== 'checkbox' && primaryInput.type !== 'radio') {
+                                    primaryInput.style.borderColor = '#ef4444';
+                                }
+                                if (errEl) {
+                                    if (primaryInput.type === 'checkbox') {
+                                        errEl.innerText = 'تأیید و انتخاب حداقل یکی از گزینه‌ها الزامی است.';
+                                    } else if (primaryInput.type === 'radio' || primaryInput.tagName === 'SELECT') {
+                                        errEl.innerText = 'انتخاب یکی از گزینه‌ها الزامی است.';
+                                    } else {
+                                        errEl.innerText = 'تکمیل این فیلد الزامی است.';
+                                    }
+                                    errEl.style.display = 'block';
+                                }
+                                if (!firstErrorInput) firstErrorInput = primaryInput;
+                            } else {
+                                wrap.classList.remove('has-error');
+                                if (primaryInput.style && primaryInput.type !== 'checkbox' && primaryInput.type !== 'radio') {
+                                    primaryInput.style.borderColor = '#cbd5e1';
+                                }
+                                if (errEl) errEl.style.display = 'none';
+                            }
+
+                            // اعتبارسنجی تلفن همراه در صورت پر بودن
+                            if (primaryInput.type === 'tel' && (primaryInput.value || '').trim()) {
+                                const cleanTel = primaryInput.value.replace(/[\s\-\(\)]/g, '');
+                                if (!/^(\+98|0)?9\d{9}$/.test(cleanTel) && !/^0\d{2,3}\d{7,8}$/.test(cleanTel)) {
                                     hasError = true;
                                     wrap.classList.add('has-error');
-                                    if (inp.style) inp.style.borderColor = '#ef4444';
+                                    if (primaryInput.style) primaryInput.style.borderColor = '#ef4444';
                                     if (errEl) {
-                                        if (inp.type === 'checkbox') {
-                                            errEl.innerText = 'تأیید و انتخاب این مورد الزامی است.';
-                                        } else if (inp.type === 'radio' || inp.tagName === 'SELECT') {
-                                            errEl.innerText = 'انتخاب یکی از گزینه‌ها الزامی است.';
-                                        } else {
-                                            errEl.innerText = 'تکمیل این فیلد الزامی است.';
-                                        }
+                                        errEl.innerText = 'شماره تماس واردشده معتبر نیست (مثال: 09123456789).';
                                         errEl.style.display = 'block';
                                     }
-                                    if (!firstErrorInput) firstErrorInput = inp;
-                                } else {
-                                    wrap.classList.remove('has-error');
-                                    if (inp.style) inp.style.borderColor = '#cbd5e1';
-                                    if (errEl) errEl.style.display = 'none';
+                                    if (!firstErrorInput) firstErrorInput = primaryInput;
                                 }
-
-                                // اعتبارسنجی تلفن همراه در صورت پر بودن
-                                if (inp.type === 'tel' && val) {
-                                    const cleanTel = val.replace(/[\s\-\(\)]/g, '');
-                                    if (!/^(\+98|0)?9\d{9}$/.test(cleanTel) && !/^0\d{2,3}\d{7,8}$/.test(cleanTel)) {
-                                        hasError = true;
-                                        wrap.classList.add('has-error');
-                                        if (inp.style) inp.style.borderColor = '#ef4444';
-                                        if (errEl) {
-                                            errEl.innerText = 'شماره تماس واردشده معتبر نیست (مثال: 09123456789).';
-                                            errEl.style.display = 'block';
-                                        }
-                                        if (!firstErrorInput) firstErrorInput = inp;
-                                    }
-                                }
-                            });
+                            }
                         });
 
                         if (hasError) {
@@ -509,38 +757,10 @@ class TestFields
                             }
                             return false;
                         }
-
-                        // همگام‌سازی فیلدهای فعال با فرم در حال سابمیت به عنوان Hidden
-                        visibleWraps.forEach(wrap => {
-                            if (wrap.style.display === 'none') return;
-                            const inp = wrap.querySelector('input:not([type="radio"]), select, textarea');
-                            const radios = wrap.querySelectorAll('input[type="radio"]:checked');
-
-                            if (inp && inp.name && !inp.name.includes('[')) return;
-                            if (inp && inp.name) {
-                                let val = inp.value;
-                                if (inp.type === 'checkbox') val = inp.checked ? '1' : '0';
-                                syncHiddenToForm(form, inp.name, val);
-                            }
-                            radios.forEach(r => {
-                                syncHiddenToForm(form, r.name, r.value);
-                            });
-                        });
                     });
                 }
 
-                function syncHiddenToForm(form, name, value) {
-                    let existing = form.querySelector('input[type="hidden"][name="' + CSS.escape(name) + '"]');
-                    if (!existing) {
-                        existing = document.createElement('input');
-                        existing.type = 'hidden';
-                        existing.name = name;
-                        form.appendChild(existing);
-                    }
-                    existing.value = value;
-                }
-
-                document.querySelectorAll('form[method="post"]').forEach(attachFormValidation);
+                document.querySelectorAll('form').forEach(attachFormValidation);
             }
 
             if (document.readyState === 'loading') {
@@ -555,11 +775,11 @@ class TestFields
     }
 
     /**
-     * اعتبارسنجی امن سمت سرور با اجرای منطق شرطی
+     * اعتبارسنجی امن سمت سرور با اجرای منطق شرطی و تفکیک مرحله اجرا
      */
-    public static function validateAndProcess(int $testId, string $mode, array $postData): array
+    public static function validateAndProcess(int $testId, string $mode, array $postData, ?string $stage = null): array
     {
-        $fields = self::getFieldsForTest($testId, $mode);
+        $fields = self::getFieldsForTest($testId, $mode, $stage);
         if (empty($fields)) {
             return ['ok' => true, 'errors' => [], 'data' => [], 'json' => null];
         }
@@ -572,22 +792,22 @@ class TestFields
         $valMap = [];
         foreach ($fields as $f) {
             $name = (string)$f['name'];
-            $valMap[$name] = trim((string)($submitted[$name] ?? ''));
+            $valMap[$name] = $submitted[$name] ?? '';
         }
 
         foreach ($fields as $f) {
-            $name = (string)$f['name'];
-            $label = (string)$f['label'];
-            $type = (string)$f['type'];
-            $rawVal = trim((string)($submitted[$name] ?? ''));
-            $isReq = (int)$f['required'] === 1;
+            $name   = (string)$f['name'];
+            $label  = (string)$f['label'];
+            $type   = (string)$f['type'];
+            $rawVal = $submitted[$name] ?? null;
+            $isReq  = (int)$f['required'] === 1;
 
             // ۱. بررسی منطق شرطی (Conditional Logic)
             $isVisible = true;
             if (!empty($f['condition_field'])) {
                 $condField = (string)$f['condition_field'];
-                $condOp = (string)($f['condition_operator'] ?? 'equals');
-                $condVal = (string)($f['condition_value'] ?? '');
+                $condOp    = (string)($f['condition_operator'] ?? 'equals');
+                $condVal   = (string)($f['condition_value'] ?? '');
                 $parentVal = $valMap[$condField] ?? '';
 
                 $isVisible = self::evaluateCondition($parentVal, $condOp, $condVal);
@@ -599,7 +819,16 @@ class TestFields
             }
 
             // ۲. بررسی الزامی بودن (Required check)
-            if ($isReq && $rawVal === '') {
+            $isEmpty = false;
+            if ($rawVal === null || $rawVal === '') {
+                $isEmpty = true;
+            } elseif (is_array($rawVal) && count($rawVal) === 0) {
+                $isEmpty = true;
+            } elseif (is_string($rawVal) && trim($rawVal) === '') {
+                $isEmpty = true;
+            }
+
+            if ($isReq && $isEmpty) {
                 if ($type === 'checkbox') {
                     $errors[] = "تأیید و انتخاب گزینه «{$label}» الزامی است.";
                 } elseif ($type === 'radio' || $type === 'select') {
@@ -610,48 +839,73 @@ class TestFields
                 continue;
             }
 
-            // اگر فیلد غیر اجباری (اختیاری) باشد و مقداری وارد نشده باشد، بدون خطا عبور می‌کند
-            if (!$isReq && $rawVal === '') {
+            // فیلد غیر اجباری (اختیاری) و بدون مقدار
+            if (!$isReq && $isEmpty) {
                 continue;
             }
 
             // ۳. اعتبارسنجی فرمت‌های خاص
-            if ($type === 'tel' && $rawVal !== '') {
-                $cleanTel = preg_replace('/[\s\-\(\)]/', '', $rawVal);
+            if ($type === 'tel' && !empty($rawVal) && is_string($rawVal)) {
+                $cleanTel = preg_replace('/[\s\-\(\)]/', '', trim($rawVal));
                 if (!preg_match('/^(\+98|0)?9\d{9}$/', $cleanTel) && !preg_match('/^0\d{2,3}\d{7,8}$/', $cleanTel)) {
                     $errors[] = "شماره تماس واردشده برای «{$label}» معتبر نیست.";
                     continue;
                 }
             }
 
-            if ($type === 'number' && $rawVal !== '') {
-                if (!is_numeric($rawVal)) {
+            if ($type === 'number' && !empty($rawVal) && is_string($rawVal)) {
+                if (!is_numeric(trim($rawVal))) {
                     $errors[] = "مقدار فیلد «{$label}» باید عدد باشد.";
                     continue;
                 }
             }
 
-            // ۴. برچسب‌گذاری و تبدیل مقادیر گزینه‌ای (Select / Radio)
+            // ۴. برچسب‌گذاری و تبدیل مقادیر گزینه‌ای به ساختار استاندارد Gravity Forms
             $displayValue = $rawVal;
-            if (!empty($f['parsed_options']) && ($type === 'select' || $type === 'radio')) {
+            $labelsList   = [];
+
+            if ($type === 'checkbox') {
+                if (is_array($rawVal)) {
+                    $labelsList = [];
+                    foreach ($rawVal as $chosenKey) {
+                        $foundLbl = (string)$chosenKey;
+                        if (!empty($f['parsed_options'])) {
+                            foreach ($f['parsed_options'] as $opt) {
+                                $k = is_array($opt) ? ($opt['key'] ?? '') : (string)$opt;
+                                $lbl = is_array($opt) ? ($opt['label'] ?? $k) : (string)$opt;
+                                if ((string)$chosenKey === (string)$k || (string)$chosenKey === (string)$lbl) {
+                                    $foundLbl = $lbl;
+                                    break;
+                                }
+                            }
+                        }
+                        $labelsList[] = $foundLbl;
+                    }
+                    $displayValue = implode('، ', $labelsList);
+                } else {
+                    $displayValue = ($rawVal === '1' || $rawVal === 1 || $rawVal === 'yes' || $rawVal === 'بله') ? 'بله' : 'خیر';
+                    $labelsList = [$displayValue];
+                }
+            } elseif (!empty($f['parsed_options']) && ($type === 'select' || $type === 'radio')) {
+                $strVal = is_array($rawVal) ? '' : trim((string)$rawVal);
                 foreach ($f['parsed_options'] as $opt) {
                     $k = is_array($opt) ? ($opt['key'] ?? '') : (string)$opt;
                     $lbl = is_array($opt) ? ($opt['label'] ?? $k) : (string)$opt;
-                    if ($rawVal === $k || $rawVal === $lbl) {
+                    if ($strVal === (string)$k || $strVal === (string)$lbl) {
                         $displayValue = $lbl;
+                        $labelsList = [$lbl];
                         break;
                     }
                 }
-            } elseif ($type === 'checkbox') {
-                $displayValue = ($rawVal === '1' || $rawVal === 1) ? 'بله' : 'خیر';
             }
 
             $responses[$name] = [
-                'name'    => $name,
-                'label'   => $label,
-                'type'    => $type,
-                'value'   => $displayValue,
-                'raw'     => $rawVal,
+                'name'         => $name,
+                'label'        => $label,
+                'type'         => $type,
+                'value'        => $displayValue,
+                'raw'          => $rawVal,
+                'value_labels' => $labelsList,
             ];
         }
 
@@ -668,24 +922,52 @@ class TestFields
      */
     public static function evaluateCondition(mixed $parentVal, string $operator, ?string $condVal): bool
     {
-        $p = mb_strtolower(trim((string)$parentVal));
         $c = mb_strtolower(trim((string)$condVal));
 
+        if (is_array($parentVal)) {
+            $pArr = array_map(fn($v) => mb_strtolower(trim((string)$v)), $parentVal);
+            $hasSub = false;
+            foreach ($pArr as $item) {
+                if ($item === $c || ($c !== '' && str_contains($item, $c))) {
+                    $hasSub = true;
+                    break;
+                }
+            }
+
+            return match ($operator) {
+                'equals', 'is'          => in_array($c, $pArr, true),
+                'not_equals', 'isnot'   => !in_array($c, $pArr, true),
+                'checked', 'is_not_empty' => !empty($pArr),
+                'not_checked', 'is_empty' => empty($pArr),
+                'contains'              => $hasSub,
+                'not_contains'          => !$hasSub,
+                'in'                    => !empty(array_intersect($pArr, array_map('trim', explode(',', $c)))),
+                'not_in'                => empty(array_intersect($pArr, array_map('trim', explode(',', $c)))),
+                default                 => in_array($c, $pArr, true),
+            };
+        }
+
+        $p = mb_strtolower(trim((string)$parentVal));
+
         return match ($operator) {
-            'equals' => ($p === $c),
-            'not_equals' => ($p !== $c && $p !== ''),
-            'checked' => in_array($p, ['1', 'true', 'yes', 'on', 'checked', 'بله'], true),
-            'not_checked' => in_array($p, ['0', 'false', 'off', '', 'no', 'خیر'], true),
-            'contains' => ($c !== '' && str_contains($p, $c)),
-            'in' => in_array($p, array_map('trim', explode(',', $c)), true),
-            default => ($p === $c),
+            'equals', 'is'          => ($p === $c),
+            'not_equals', 'isnot'   => ($p !== $c && $p !== ''),
+            'checked'               => in_array($p, ['1', 'true', 'yes', 'on', 'checked', 'بله'], true),
+            'not_checked'           => in_array($p, ['0', 'false', 'off', '', 'no', 'خیر'], true),
+            'is_empty'              => ($p === ''),
+            'is_not_empty'          => ($p !== ''),
+            'contains'              => ($c !== '' && str_contains($p, $c)),
+            'not_contains'          => ($c === '' || !str_contains($p, $c)),
+            'in'                    => in_array($p, array_map('trim', explode(',', $c)), true),
+            'not_in'                => !in_array($p, array_map('trim', explode(',', $c)), true),
+            default                 => ($p === $c),
         };
     }
 
     /**
-     * رندر کارت ویژوال نمایش اطلاعات پیش از آزمون در پنل مدیریت، گزارش و پرونده بالینی
+     * رندر کارت ویژوال نمایش اطلاعات ثبت‌شده در پنل مدیریت، کارنامه و پرونده بالینی
      */
-    public static function renderDisplayCard(array|string|null $customFieldsJson, string $title = '📋 اطلاعات و گزینه‌های تکمیلی پیش از آزمون'): string
+    public static function renderDisplayCard(array|string|null $customFieldsJson, string $title = '📋 اطلاعات و گزینه‌های تکمیلی آزمون'): string
     {
         if (empty($customFieldsJson)) return '';
 
@@ -704,18 +986,25 @@ class TestFields
                 $label = is_array($item) ? ($item['label'] ?? $k) : $k;
                 $val   = is_array($item) ? ($item['value'] ?? '') : (string)$item;
                 $type  = is_array($item) ? ($item['type'] ?? 'text') : 'text';
+
+                $valStr = '';
+                if (is_array($val)) {
+                    $valStr = implode('، ', array_map('strval', $val));
+                } else {
+                    $valStr = (string)$val;
+                }
             ?>
               <div style="background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #e2e8f0;line-height:1.9">
                 <div style="color:#64748b;font-size:12px;margin-bottom:2px"><?= e($label) ?></div>
                 <div style="font-weight:700;color:#0f172a">
-                  <?php if ($type === 'tel' && $val): ?>
-                    <a href="tel:<?= e($val) ?>" dir="ltr" style="color:#2563eb;text-decoration:none">📱 <?= fa_num($val) ?></a>
-                  <?php elseif ($val === 'بله' || $val === '1'): ?>
-                    <span class="fr-chip ok sm" style="font-size:11.5px">✓ <?= e($val) ?></span>
-                  <?php elseif ($val === 'خیر' || $val === '0'): ?>
-                    <span class="fr-chip info sm" style="font-size:11.5px"><?= e($val) ?></span>
+                  <?php if ($type === 'tel' && $valStr): ?>
+                    <a href="tel:<?= e($valStr) ?>" dir="ltr" style="color:#2563eb;text-decoration:none">📱 <?= fa_num($valStr) ?></a>
+                  <?php elseif ($valStr === 'بله' || $valStr === '1'): ?>
+                    <span class="fr-chip ok sm" style="font-size:11.5px">✓ <?= e($valStr) ?></span>
+                  <?php elseif ($valStr === 'خیر' || $valStr === '0'): ?>
+                    <span class="fr-chip info sm" style="font-size:11.5px"><?= e($valStr) ?></span>
                   <?php else: ?>
-                    <?= e((string)$val) ?>
+                    <?= e($valStr) ?>
                   <?php endif; ?>
                 </div>
               </div>

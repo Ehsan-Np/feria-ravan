@@ -20,6 +20,22 @@ function fr_test_url(array $t): string
     return SITE_URL . ($s !== '' ? '/t/' . rawurlencode($s) : '/panel/test-start.php?id=' . (int)$t['id']);
 }
 
+/** نشانی کوتاه اختصاصی تست بر اساس شناسه عددی: /t/1 */
+function fr_test_short_url(array|int $t): string
+{
+    $id = is_array($t) ? (int)($t['id'] ?? 0) : (int)$t;
+    if ($id <= 0) return SITE_URL;
+    return SITE_URL . '/t/' . $id;
+}
+
+/** نشانی فوق‌کوتاه (Tiny URL) تست بر اساس شناسه یا اسلاگ: /s/1 */
+function fr_test_tiny_url(array|int $t): string
+{
+    $id = is_array($t) ? (int)($t['id'] ?? 0) : (int)$t;
+    if ($id <= 0) return SITE_URL;
+    return SITE_URL . '/s/' . $id;
+}
+
 /** نشانی زیبای رویداد: /w/اسلاگ برای کارگاه، /c/اسلاگ برای دوره */
 function fr_event_url(array $ev): string
 {
@@ -192,6 +208,12 @@ function fr_permalinks_flush(): array
          $lines[] = "RewriteRule ^{$prefix}/{$q}/?$ {$target}{$slug} [L,QSA]";
     }
     /* قوانین کلی — برای لینک‌های تازهٔ بعد از بازتولید بعدی */
+    $lines[] = '# قوانین پیوندهای کوتاه تست‌ها و رویدادها (Short URLs)';
+    $lines[] = 'RewriteRule ^t/([0-9]+)/?$ test-page.php?id=$1 [L,QSA]';
+    $lines[] = 'RewriteRule ^s/([0-9]+)/?$ test-page.php?id=$1 [L,QSA]';
+    $lines[] = 'RewriteRule ^s/([^/]+)/?$ test-page.php?s=$1 [L,QSA]';
+    $lines[] = 'RewriteRule ^quiz/([^/]+)/?$ test-page.php?s=$1 [L,QSA]';
+    $lines[] = 'RewriteRule ^test/([^/]+)/?$ test-page.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^w/([^/]+)/?$ workshop.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^c/([^/]+)/?$ course.php?s=$1 [L,QSA]';
     $lines[] = 'RewriteRule ^t/([^/]+)/?$ test-page.php?s=$1 [L,QSA]';
@@ -222,7 +244,7 @@ function fr_permalinks_flush(): array
 
     /* robots.txt با ارجاع نقشهٔ سایت */
     $disSlug = ($pSlug !== '' && $pSlug !== 'panel') ? ("\nDisallow: /" . $pSlug . "/") : '';
-    $robots = "# فریا روان — robots.txt\nUser-agent: *\nAllow: /workshops.php\nAllow: /courses.php\nAllow: /consult.php\nAllow: /w/\nAllow: /c/\nAllow: /t/\nDisallow: /panel/{$disSlug}\nDisallow: /admin/\nDisallow: /api/\nDisallow: /install/\n\nSitemap: " . SITE_URL . "/sitemap.xml\n";
+    $robots = "# فریا روان — robots.txt\nUser-agent: *\nAllow: /workshops.php\nAllow: /courses.php\nAllow: /consult.php\nAllow: /w/\nAllow: /c/\nAllow: /t/\nAllow: /s/\nDisallow: /panel/{$disSlug}\nDisallow: /admin/\nDisallow: /api/\nDisallow: /install/\n\nSitemap: " . SITE_URL . "/sitemap.xml\n";
     @file_put_contents(FR_ROOT . '/robots.txt', $robots, LOCK_EX);
 
     return ['ok' => $ok, 'count' => count($rules)];

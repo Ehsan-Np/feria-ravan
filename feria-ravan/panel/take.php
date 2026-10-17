@@ -16,7 +16,10 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/security.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/view.php';
+require_once __DIR__ . '/../core/TestFields.php';
 fr_bootstrap();
+
+TestFields::ensureSchema();
 
 $u = require_user();
 $attemptId = (int)($_GET['attempt'] ?? 0);
@@ -28,6 +31,10 @@ $at = DB::one('SELECT a.*, t.title, t.engine, t.question_count, t.instructions, 
 if (!$at) redirect(fr_panel_url());
 if ($at['mode'] === 'full' && $at['os'] !== 'paid') redirect(fr_panel_url('test-start.php?id=' . $at['test_id']));
 if ($at['status'] !== 'in_progress') redirect(fr_panel_url('report.php?attempt=' . $attemptId));
+
+$postTestFields = TestFields::getPostTestFields((int)$at['test_id'], (string)$at['mode']);
+$existingCustomFields = !empty($at['custom_fields_json']) ? json_decode((string)$at['custom_fields_json'], true) : [];
+if (!is_array($existingCustomFields)) $existingCustomFields = [];
 
 /* برچسب‌های طیف لیکرت (فارسی) */
 $likertLabels = [
@@ -146,6 +153,33 @@ render_header('درحال انجام: ' . $at['title']);
     </div>
   </div>
 </div>
+
+<?php if (!empty($postTestFields)): ?>
+<!-- مودال / مرحله پرسش‌های پایانی و مشاوره رایگان پس از اتمام تست -->
+<div id="postTestModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.8);z-index:99999;overflow-y:auto;padding:24px 14px;backdrop-filter:blur(6px);align-items:center;justify-content:center">
+  <div class="fr-card" style="max-width:680px;width:100%;margin:auto;border-radius:18px;border:2px solid #cbd5e1;box-shadow:0 25px 50px -12px rgba(0,0,0,0.3);background:#fff;padding:26px">
+    <div style="text-align:center;padding:6px 0 16px;border-bottom:1px solid #e2e8f0;margin-bottom:20px">
+      <div style="font-size:42px;line-height:1">🎉</div>
+      <h3 style="margin:10px 0 6px;font-size:20px;color:#1e293b;font-weight:900">پاسخ‌گویی به سؤالات با موفقیت به پایان رسید!</h3>
+      <p style="margin:0;font-size:13.5px;color:#64748b">لطفاً پیش از صدور کارنامه و تحلیل نهایی، به پرسش‌های پایانی زیر پاسخ دهید:</p>
+    </div>
+
+    <form id="postTestForm" method="post">
+      <?= TestFields::renderFormFields($postTestFields, $existingCustomFields, 'postTestFieldsBox') ?>
+
+      <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid #e2e8f0;padding-top:18px">
+        <button type="button" class="fr-btn sm ghost" id="btnBackToQuestions" style="color:#64748b">
+          ← بازگشت به مرور سؤال‌ها
+        </button>
+        <button type="submit" class="fr-btn primary" id="btnSubmitPostFinal" style="padding:12px 28px;font-size:15px;font-weight:800;background:linear-gradient(135deg, #2563eb, #1d4ed8)">
+          ثبت نهایی و مشاهده تحلیل کارنامه 🎯
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
+
 <script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
 <script>
 (function(){
@@ -155,6 +189,7 @@ render_header('درحال انجام: ' . $at['title']);
   const API        = '<?= SITE_URL ?>/api/attempt.php';
   const LABELS     = <?= json_encode($likertLabels, JSON_UNESCAPED_UNICODE) ?>;
   const START_TIME = Date.now();
+  const HAS_POST_FIELDS = <?= json_encode(!empty($postTestFields)) ?>;
 
   let TOTAL        = <?= max(1, $totalQuestions) ?>;
   let questions    = [];        // کش سؤال‌ها (پشتیبانی توأم از ایندکس ترتیبی و q.number-1)
@@ -469,19 +504,67 @@ render_header('درحال انجام: ' . $at['title']);
     go(firstIdx >= 0 ? firstIdx : firstMiss - 1);
   };
 
-  /* پایان آزمون */
+  /* پایان آزمون با پشتیبانی از گام پرسش‌های تکمیلی و مشاوره رایگان */
   $id('btnFinish').onclick = async () => {
     const btn = $id('btnFinish');
     btn.disabled = true;
     btn.innerHTML = '<span class="spin"></span> درحال بررسی پاسخ‌ها...';
+
+    for (let i = 0; i < TOTAL; i += 10) await loadMore(i);
+    missing = localMissing();
+    if (missing.length > 0) {
+      btn.disabled = false;
+      btn.innerHTML = 'پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯';
+      if (window.toast) toast('هنوز ' + toFa(missing.length) + ' سؤال بی‌پاسخ مانده است.', 'warn');
+      $id('reviewBox').style.display = 'block';
+      paintReview();
+      const fMiss = missing[0];
+      const fIdx = questions.findIndex(q => q && q.number === fMiss);
+      go(fIdx >= 0 ? fIdx : fMiss - 1);
+      return;
+    }
+
+    if (HAS_POST_FIELDS) {
+      btn.disabled = false;
+      btn.innerHTML = 'پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯';
+      const modal = $id('postTestModal');
+      if (modal) {
+        modal.style.display = 'flex';
+        modal.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+    }
+
+    await executeFinishSubmit({});
+  };
+
+  async function executeFinishSubmit(customFields) {
+    const btn = $id('btnFinish');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> درحال تحلیل پاسخ‌ها...';
+
     const durationSec = Math.max(1, Math.round((Date.now() - START_TIME) / 1000));
     const fnApi = window.api || (typeof api === 'function' ? api : null);
-    const r = fnApi ? await fnApi(API, {action:'finish', attempt:ATTEMPT, duration:durationSec}) : null;
+    const postPayload = {
+      action: 'finish',
+      attempt: ATTEMPT,
+      duration: durationSec,
+      custom_fields: customFields
+    };
+
+    const r = fnApi ? await fnApi(API, postPayload) : null;
     if (!r || !r.ok) {
       btn.disabled = false;
       btn.innerHTML = 'پایان تست روانشناسی و مشاهدهٔ تحلیل 🎯';
+      const btnPost = $id('btnSubmitPostFinal');
+      if (btnPost) {
+        btnPost.disabled = false;
+        btnPost.innerHTML = 'ثبت نهایی و مشاهده تحلیل کارنامه 🎯';
+      }
+
       if (r && r.redirect) { location.href = r.redirect; return; }
       if (r && Array.isArray(r.missing) && r.missing.length) {
+        if ($id('postTestModal')) $id('postTestModal').style.display = 'none';
         if (window.toast) toast(r.message, 'warn');
         missing = r.missing.map(Number);
         for (const n of missing) {
@@ -494,13 +577,47 @@ render_header('درحال انجام: ' . $at['title']);
         const fIdx = questions.findIndex(q => q && q.number === fMiss);
         go(fIdx >= 0 ? fIdx : fMiss - 1);
       } else {
-        if (window.toast) toast((r && r.message) || 'خطا در پایان تست روانشناسی', 'err');
+        if (window.toast) toast((r && r.message) || 'خطا در ثبت نهایی آزمون', 'err');
       }
     } else {
-      btn.innerHTML = '<span class="spin"></span> درحال تحلیل پاسخ‌ها...';
       location.href = r.redirect;
     }
-  };
+  }
+
+  const ptForm = $id('postTestForm');
+  if (ptForm) {
+    ptForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const btnSubmit = $id('btnSubmitPostFinal');
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = '<span class="spin"></span> درحال ثبت و تحلیل کارنامه...';
+
+      const customData = {};
+      const fd = new FormData(ptForm);
+      for (const [rawKey, val] of fd.entries()) {
+        const m = rawKey.match(/^test_custom_fields\[(.*?)\](\[\])?$/);
+        if (m) {
+          const fieldKey = m[1];
+          const isArr = !!m[2];
+          if (isArr) {
+            if (!customData[fieldKey]) customData[fieldKey] = [];
+            customData[fieldKey].push(val);
+          } else {
+            customData[fieldKey] = val;
+          }
+        }
+      }
+
+      await executeFinishSubmit(customData);
+    };
+
+    const btnBack = $id('btnBackToQuestions');
+    if (btnBack) {
+      btnBack.onclick = () => {
+        $id('postTestModal').style.display = 'none';
+      };
+    }
+  }
 
   /* =========================================================================
    | شروع سریع و مقاوم (Immediate Zero-Latency Startup)

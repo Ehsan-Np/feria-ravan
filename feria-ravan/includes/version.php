@@ -1,4 +1,4 @@
 <?php
 declare(strict_types=1);
-define('FR_RELEASE', '3.8.0');
+define('FR_RELEASE', '3.9.0');
 if (!defined('FR_VERSION')) define('FR_VERSION', FR_RELEASE);

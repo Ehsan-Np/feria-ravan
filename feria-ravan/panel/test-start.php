@@ -90,8 +90,8 @@ if ($open && $open['os'] === 'paid' && $completedFree) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode = (string)($_POST['mode'] ?? 'free');
 
-    // اعتبارسنجی فیلدهای سفارشی و اجرای منطق شرطی
-    $tfValidation = TestFields::validateAndProcess((int)$test['id'], $mode, $_POST);
+    // اعتبارسنجی فیلدهای سفارشی پیش از آزمون (pre_test) و اجرای منطق شرطی
+    $tfValidation = TestFields::validateAndProcess((int)$test['id'], $mode, $_POST, 'pre_test');
     if (!$tfValidation['ok']) {
         $err = implode('<br>', $tfValidation['errors']);
     } else {
@@ -237,7 +237,7 @@ $bnn = DB::one("SELECT * FROM " . DB::t('banners') . " WHERE active=1 AND placem
   <h3><?= e($test['title']) ?></h3>
 
   <?php
-  $testCustomFields = TestFields::getFieldsForTest((int)$test['id'], 'all');
+  $testCustomFields = TestFields::getPreTestFields((int)$test['id'], 'all');
   if (!empty($testCustomFields)):
   ?>
   <div class="fr-test-custom-fields-wrapper" style="margin-bottom:24px;padding:20px 22px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:14px">

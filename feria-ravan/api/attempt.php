@@ -132,6 +132,37 @@ switch ($action) {
         }
         if ($total === 0) json_out(['ok'=>false,'message'=>'سؤالی برای این تست روانشناسی فعال نیست.']);
 
+        // بررسی و اعتبارسنجی فیلدهای سفارشی پایان آزمون (post_test) نظیر مشاوره رایگان
+        require_once FR_ROOT . '/core/TestFields.php';
+        $postFields = TestFields::getPostTestFields((int)$at['test_id'], (string)$at['mode']);
+        $submittedCustom = $in['custom_fields'] ?? ($in['test_custom_fields'] ?? null);
+
+        if (!empty($postFields)) {
+            $tfValidation = TestFields::validateAndProcess(
+                (int)$at['test_id'],
+                (string)$at['mode'],
+                ['test_custom_fields' => (array)($submittedCustom ?? [])],
+                'post_test'
+            );
+            if (!$tfValidation['ok']) {
+                json_out([
+                    'ok' => false,
+                    'message' => implode(' | ', $tfValidation['errors']),
+                    'errors' => $tfValidation['errors'],
+                ]);
+            }
+
+            // ادغام با مقادیر از پیش ذخیره شده در attempts
+            $existingJson = (string)($at['custom_fields_json'] ?? '');
+            $existingData = $existingJson ? json_decode($existingJson, true) : [];
+            if (!is_array($existingData)) $existingData = [];
+
+            $merged = array_merge($existingData, $tfValidation['data'] ?? []);
+            DB::update('attempts', [
+                'custom_fields_json' => json_encode($merged, JSON_UNESCAPED_UNICODE)
+            ], 'id=?', [$attemptId]);
+        }
+
         $duration = (int)($in['duration'] ?? 0);
         if ($duration > 0) {
             DB::update('attempts', ['duration_sec' => $duration], 'id=?', [$attemptId]);

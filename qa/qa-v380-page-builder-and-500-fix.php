@@ -70,8 +70,8 @@ echo "=================================================================\n\n";
 
 // --- بخش ۱: بررسی نگارش سامانه ---
 echo "1. System Version Verification:\n";
-assert_test(defined('FR_RELEASE') && FR_RELEASE === '3.8.0', 'FR_RELEASE is 3.8.0');
-assert_test(defined('FR_VERSION') && FR_VERSION === '3.8.0', 'FR_VERSION is 3.8.0');
+assert_test(defined('FR_RELEASE') && version_compare(FR_RELEASE, '3.8.0', '>='), 'FR_RELEASE is 3.8.0 or higher');
+assert_test(defined('FR_VERSION') && version_compare(FR_VERSION, '3.8.0', '>='), 'FR_VERSION is 3.8.0 or higher');
 
 // --- بخش ۲: رفع خطای ۵۰۰ در ورود به آزمون‌ها و کیف پول ---
 echo "\n2. Test Start & Wallet 500 Error Prevention:\n";

@@ -74,7 +74,7 @@ final class ClinicalAnalyzer
             $s = (float)($map['S']['percent'] ?? 50);
             $c = (float)($map['C']['percent'] ?? 50);
 
-            if ($d >= 68 && $s <= 42) {
+            if ($d >= 65 && ($s <= 52 || $i <= 35)) {
                 $hypotheses[] = [
                     'category' => 'دینامیک روانی و ساختار ایگو',
                     'title'    => 'الگوی کنترل‌گری همه‌توان و اضطراب از انفعال (Dominance-Driven)',
