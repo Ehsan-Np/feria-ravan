@@ -20,12 +20,26 @@ require_once __DIR__ . '/includes/consult.php';
 require_once __DIR__ . '/includes/deposit.php';
 require_once __DIR__ . '/core/Kavenegar.php';
 require_once __DIR__ . '/core/Zarinpal.php';
+require_once __DIR__ . '/core/PageBuilder.php';
 fr_bootstrap();
 
 consult_release_expired_holds();
 $me    = current_user();
 $api   = SITE_URL . '/api/consult.php';
 $slug  = trim((string)($_GET['s'] ?? ''));
+
+/* ---------------------------------------------------------------------------
+ | برگه رزرو مشاوره سفارشی طراحی‌شده با صفحه‌ساز دیداری فریا روان
+ * -------------------------------------------------------------------------*/
+if ($slug === '' && empty($_GET['classic']) && empty($_GET['default_view']) && class_exists('PageBuilder')) {
+    PageBuilder::ensureSchema();
+    $customPage = PageBuilder::getSectionPage('consult');
+    if ($customPage && !empty($customPage['active'])) {
+        PageBuilder::renderPage($customPage, true);
+        exit;
+    }
+}
+
 [$jyNow, $jmNow, $jdNow] = fr_jnow();
 $todayJ = $jyNow . '/' . $jmNow . '/' . $jdNow;   // ASCII برای data-jnow (پردازش JS)
 

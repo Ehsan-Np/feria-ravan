@@ -19,7 +19,7 @@ require_once __DIR__ . '/includes/seo.php';
 require_once __DIR__ . '/includes/reviews-ui.php';
 fr_bootstrap();
 
-$slug = trim((string)($_GET['s'] ?? ''));
+$slug = trim((string)($_GET['s'] ?? ($_GET['slug'] ?? '')));
 $t    = $slug !== ''
       ? DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE slug=? AND status='active'", [$slug])
       : DB::one('SELECT * FROM ' . DB::t('tests') . " WHERE id=? AND status='active'", [(int)($_GET['id'] ?? 0)]);

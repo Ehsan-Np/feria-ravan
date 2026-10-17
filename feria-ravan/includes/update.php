@@ -167,6 +167,17 @@ function fr_update_pipeline(bool $force = false): void
                              SELECT `mobile`,`code`,`purpose`,`expires_at`,`created_at` FROM `{$p}otp_codes`");
                 }
             } catch (Throwable $e) {}
+
+            // پایداری و خودترمیمی جدول تراکنش‌های کیف‌پول (wallet_transactions)
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `kind` ENUM('credit','debit','refund','gift','adjustment') NOT NULL DEFAULT 'credit' AFTER `amount`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `reference_type` VARCHAR(40) DEFAULT NULL AFTER `kind`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `reference_id` BIGINT UNSIGNED DEFAULT NULL AFTER `reference_type`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `description` VARCHAR(255) DEFAULT NULL AFTER `reference_id`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `expires_at` DATETIME DEFAULT NULL AFTER `description`");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `balance_after` INT NULL DEFAULT 0");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `type` VARCHAR(30) NULL DEFAULT NULL");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD COLUMN IF NOT EXISTS `note` VARCHAR(255) DEFAULT NULL");
+            fr_db_run_safe_ddl("ALTER TABLE `{$p}wallet_transactions` ADD KEY IF NOT EXISTS `ix_created` (`created_at`)");
         } catch (Throwable $e) { error_log('feria: admins & otps hardening: ' . $e->getMessage()); }
 
         /* ─── ۱٫۹: زباله‌دانِ تست‌های روانشناسی (status='trash') ─── */
@@ -1109,6 +1120,15 @@ function fr_update_pipeline(bool $force = false): void
             require_once FR_ROOT . '/core/PageBuilder.php';
             PageBuilder::ensureSchema();
         } catch (Throwable $e) { error_log('feria: 3.7.0 menu builder and header/footer migration: ' . $e->getMessage()); }
+
+        /* ---- ۳٫۸٫۰: صفحه‌ساز چندبخشی (تست‌ها، دوره‌ها، کارگاه‌ها، مشاوره) و رفع خطای ۵۰۰ کیف پول ---- */
+        try {
+            fr_db_run_safe_ddl("ALTER TABLE " . DB::t('event_registrations') . " ADD COLUMN `companion_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `order_id`");
+            fr_db_run_safe_ddl("ALTER TABLE " . DB::t('event_registrations') . " ADD COLUMN `companions_count` INT UNSIGNED NOT NULL DEFAULT 0 AFTER `companion_count`");
+            require_once FR_ROOT . '/core/PageBuilder.php';
+            PageBuilder::ensureSchema();
+            PageBuilder::seedDefaultPages();
+        } catch (Throwable $e) { error_log('feria: 3.8.0 page builder and section catalog migration: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);

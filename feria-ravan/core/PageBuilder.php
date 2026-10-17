@@ -12,6 +12,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../includes/seo.php';
 require_once __DIR__ . '/MenuBuilder.php';
 
 class PageBuilder
@@ -36,6 +37,7 @@ class PageBuilder
     {
         static $ensured = false;
         if ($ensured) return;
+        $ensured = true;
 
         MenuBuilder::ensureSchema();
 
@@ -89,13 +91,159 @@ class PageBuilder
             }
         }
 
-        // ۳. اگر هیچ برگه‌ای وجود ندارد، ایجاد برگه پیش‌فرض صفحه اصلی با محتوای اولیه
-        $count = (int)DB::val("SELECT COUNT(*) FROM " . self::table());
-        if ($count === 0) {
-            self::seedDefaultHomepage();
+        // ۳. اطمینان از وجود برگه‌های پیش‌فرض سامانه (صفحه اصلی، تست‌ها، دوره‌ها، کارگاه‌ها، مشاوره و...)
+        self::seedDefaultPages();
+    }
+
+    /**
+     * ایجاد و همگام‌سازی برگه‌های اصلی سامانه جهت مدیریت در صفحه‌ساز
+     */
+    public static function seedDefaultPages(): void
+    {
+        static $seeding = false;
+        if ($seeding) return;
+        $seeding = true;
+
+        self::ensureSchema();
+
+        // ۱. صفحه اصلی (Homepage)
+        $homeExists = DB::one("SELECT id FROM " . self::table() . " WHERE is_home=1");
+        if (!$homeExists) {
+            $slugHome = DB::one("SELECT id FROM " . self::table() . " WHERE slug='home'");
+            if ($slugHome) {
+                try {
+                    DB::run("UPDATE " . self::table() . " SET is_home=1 WHERE id=?", [(int)$slugHome['id']]);
+                } catch (Throwable $e) {}
+            } else {
+                self::seedDefaultHomepage();
+            }
         }
 
-        $ensured = true;
+        // ۲. آرشیو تست‌های روان‌شناسی (Tests Catalog)
+        $testsExists = DB::one("SELECT id FROM " . self::table() . " WHERE page_type='tests' OR slug='tests'");
+        if (!$testsExists) {
+            DB::insert('site_pages', [
+                'name'         => 'آزمون‌های روان‌شناسی',
+                'title'        => 'مرکز آزمون‌های تخصصی روان‌شناسی و خودشناسی',
+                'slug'         => 'tests',
+                'page_type'    => 'tests',
+                'layout'       => 'default',
+                'seo_title'    => 'تست‌های روانشناسی تخصصی و آنلاین | فریا روان',
+                'meta_desc'    => 'فهرست کامل آزمون‌های معتبر روان‌سنجی شامل DISC، نئو NEO، هوش هیجانی و غربالگری سلامت روان با تفسیر بالینی.',
+                'is_home'      => 0,
+                'is_default'   => 1,
+                'active'       => 1,
+                'content_html' => self::getDefaultTestsHtml(),
+                'content_css'  => self::getDefaultHomepageCss(),
+                'builder_json' => null,
+                'view_count'   => 0
+            ]);
+        }
+
+        // ۳. دوره‌های آموزشی (Courses)
+        $coursesExists = DB::one("SELECT id FROM " . self::table() . " WHERE page_type='courses' OR slug='courses'");
+        if (!$coursesExists) {
+            DB::insert('site_pages', [
+                'name'         => 'دوره‌های آموزشی',
+                'title'        => 'دوره‌های تخصصی و کاربردی روان‌شناسی و مهارت‌افزایی',
+                'slug'         => 'courses',
+                'page_type'    => 'courses',
+                'layout'       => 'default',
+                'seo_title'    => 'دوره‌های آموزشی روانشناسی و مهارت‌های فردی | فریا روان',
+                'meta_desc'    => 'دوره‌های تخصصی چندجلسه‌ای با تدریس اساتید برجسته روان‌شناسی، سرفصل‌های جامع و ارائه گواهی پایان دوره.',
+                'is_home'      => 0,
+                'is_default'   => 1,
+                'active'       => 1,
+                'content_html' => self::getDefaultCoursesHtml(),
+                'content_css'  => self::getDefaultHomepageCss(),
+                'builder_json' => null,
+                'view_count'   => 0
+            ]);
+        }
+
+        // ۴. کارگاه‌های تعاملی (Workshops)
+        $workshopsExists = DB::one("SELECT id FROM " . self::table() . " WHERE page_type='workshops' OR slug='workshops'");
+        if (!$workshopsExists) {
+            DB::insert('site_pages', [
+                'name'         => 'کارگاه‌های تعاملی',
+                'title'        => 'کارگاه‌های عملی و مهارت‌محور روان‌شناختی',
+                'slug'         => 'workshops',
+                'page_type'    => 'workshops',
+                'layout'       => 'default',
+                'seo_title'    => 'کارگاه‌های عملی روانشناسی و رشد فردی | فریا روان',
+                'meta_desc'    => 'کارگاه‌های یک‌روزه و فشرده با تمرین‌های کاربردی، بررسی کیس‌های بالینی و تخفیف ویژه همراهی.',
+                'is_home'      => 0,
+                'is_default'   => 1,
+                'active'       => 1,
+                'content_html' => self::getDefaultWorkshopsHtml(),
+                'content_css'  => self::getDefaultHomepageCss(),
+                'builder_json' => null,
+                'view_count'   => 0
+            ]);
+        }
+
+        // ۵. رزرو مشاوره (Consult)
+        $consultExists = DB::one("SELECT id FROM " . self::table() . " WHERE page_type='consult' OR slug='consult'");
+        if (!$consultExists) {
+            DB::insert('site_pages', [
+                'name'         => 'رزرو وقت مشاوره',
+                'title'        => 'مرکز خدمات و نوبت‌دهی مشاوره فردی و خانواده',
+                'slug'         => 'consult',
+                'page_type'    => 'consult',
+                'layout'       => 'default',
+                'seo_title'    => 'رزرو نوبت مشاوره روانشناسی آنلاین و حضوری | فریا روان',
+                'meta_desc'    => 'رزرو وقت مشاوره آنلاین و حضوری با روان‌درمانگران مجرب کلینیک فریا روان در زمینه‌های فردی، زوجین و شغلی.',
+                'is_home'      => 0,
+                'is_default'   => 1,
+                'active'       => 1,
+                'content_html' => self::getDefaultConsultHtml(),
+                'content_css'  => self::getDefaultHomepageCss(),
+                'builder_json' => null,
+                'view_count'   => 0
+            ]);
+        }
+
+        // ۶. درباره ما (About Us)
+        $aboutExists = DB::one("SELECT id FROM " . self::table() . " WHERE slug='about-us'");
+        if (!$aboutExists) {
+            DB::insert('site_pages', [
+                'name'         => 'درباره ما',
+                'title'        => 'درباره مرکز خدمات روان‌شناسی و مشاوره فریا روان',
+                'slug'         => 'about-us',
+                'page_type'    => 'page',
+                'layout'       => 'default',
+                'seo_title'    => 'درباره فریا روان | معرفی کلینیک، اهداف و متخصصان',
+                'meta_desc'    => 'آشنایی با تاریخچه، رسالت علمی، استانداردهای بالینی و اعضای هیئت علمی و درمانگران مرکز فریا روان.',
+                'is_home'      => 0,
+                'is_default'   => 0,
+                'active'       => 1,
+                'content_html' => self::getDefaultAboutHtml(),
+                'content_css'  => self::getDefaultHomepageCss(),
+                'builder_json' => null,
+                'view_count'   => 0
+            ]);
+        }
+
+        // ۷. تماس با ما (Contact Us)
+        $contactExists = DB::one("SELECT id FROM " . self::table() . " WHERE slug='contact-us'");
+        if (!$contactExists) {
+            DB::insert('site_pages', [
+                'name'         => 'تماس با ما',
+                'title'        => 'راه‌های ارتباطی و نشانی کلینیک فریا روان',
+                'slug'         => 'contact-us',
+                'page_type'    => 'page',
+                'layout'       => 'default',
+                'seo_title'    => 'تماس با ما | نشانی، تلفن و پشتیبانی فریا روان',
+                'meta_desc'    => 'آدرس کلینیک، شماره تلفن‌های پشتیبانی و مشاوره، ساعات کاری و نقشه دسترسی حضوری.',
+                'is_home'      => 0,
+                'is_default'   => 0,
+                'active'       => 1,
+                'content_html' => self::getDefaultContactHtml(),
+                'content_css'  => self::getDefaultHomepageCss(),
+                'builder_json' => null,
+                'view_count'   => 0
+            ]);
+        }
     }
 
     /**
@@ -160,6 +308,15 @@ class PageBuilder
     {
         self::ensureSchema();
         $p = DB::one("SELECT * FROM " . self::table() . " WHERE is_home=1 AND active=1 ORDER BY id DESC LIMIT 1");
+        if (!$p) {
+            $p = DB::one("SELECT * FROM " . self::table() . " WHERE slug='home' AND active=1 ORDER BY id ASC LIMIT 1");
+            if ($p) {
+                try {
+                    DB::run("UPDATE " . self::table() . " SET is_home=1 WHERE id=?", [(int)$p['id']]);
+                    $p['is_home'] = 1;
+                } catch (Throwable $e) {}
+            }
+        }
         return $p ?: null;
     }
 
@@ -172,6 +329,25 @@ class PageBuilder
         DB::run("UPDATE " . self::table() . " SET is_home=0");
         DB::run("UPDATE " . self::table() . " SET is_home=1, active=1 WHERE id=?", [$pageId]);
         return true;
+    }
+
+    /**
+     * دریافت برگه اختصاصی یک بخش از سامانه (home, tests, courses, workshops, consult)
+     */
+    public static function getSectionPage(string $section): ?array
+    {
+        self::ensureSchema();
+        if ($section === 'home') {
+            return self::getHomepage();
+        }
+
+        // ۱. جستجو بر اساس page_type فعال
+        $p = DB::one("SELECT * FROM " . self::table() . " WHERE page_type=? AND active=1 ORDER BY is_default DESC, id DESC LIMIT 1", [$section]);
+        if ($p) return $p;
+
+        // ۲. جستجو بر اساس اسلاگ یکتا
+        $p = DB::one("SELECT * FROM " . self::table() . " WHERE slug=? AND active=1 LIMIT 1", [$section]);
+        return $p ?: null;
     }
 
     /**
@@ -515,16 +691,50 @@ class PageBuilder
                 self::renderWidgetTests($params, $isEditor);
                 break;
 
+            case 'tests_catalog':
+            case 'tests-catalog':
+                self::renderWidgetTestsCatalog($params, $isEditor);
+                break;
+
+            case 'test_single':
+            case 'test-single':
+            case 'test_featured':
+                self::renderWidgetTestSingle($params, $isEditor);
+                break;
+
             case 'courses':
                 self::renderWidgetCourses($params, $isEditor);
+                break;
+
+            case 'course_single':
+            case 'course-single':
+            case 'course_featured':
+                self::renderWidgetCourseSingle($params, $isEditor);
                 break;
 
             case 'workshops':
                 self::renderWidgetWorkshops($params, $isEditor);
                 break;
 
+            case 'workshop_single':
+            case 'workshop-single':
+            case 'workshop_featured':
+                self::renderWidgetWorkshopSingle($params, $isEditor);
+                break;
+
             case 'consult':
                 self::renderWidgetConsult($params, $isEditor);
+                break;
+
+            case 'consultants_list':
+            case 'consultants-list':
+            case 'therapists':
+                self::renderWidgetConsultantsList($params, $isEditor);
+                break;
+
+            case 'banner_cta':
+            case 'banner-cta':
+                self::renderWidgetBannerCta($params, $isEditor);
                 break;
 
             case 'newsletter':
@@ -724,6 +934,161 @@ class PageBuilder
     }
 
     /**
+     * ویجت ۱-ب: کاتالوگ جامع تست‌های روان‌شناسی با فیلتر دسته‌بندی
+     */
+    public static function renderWidgetTestsCatalog(array $params, bool $isEditor): void
+    {
+        $limit = !empty($params['limit']) ? (int)$params['limit'] : 12;
+        $activeCat = (string)($params['category'] ?? ($_GET['cat'] ?? 'all'));
+        $where = "status='active'";
+        $qParams = [];
+        if (in_array($activeCat, ['clinical', 'personality', 'intelligence'], true)) {
+            $where .= " AND category=?";
+            $qParams[] = $activeCat;
+        }
+        $tests = DB::all("SELECT * FROM " . DB::t('tests') . " WHERE $where ORDER BY sort_order ASC LIMIT $limit", $qParams);
+        $totalTests = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('tests') . " WHERE status='active'");
+        $clinCount  = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('tests') . " WHERE status='active' AND category='clinical'");
+        $persCount  = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('tests') . " WHERE status='active' AND category='personality'");
+        $intelCount = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('tests') . " WHERE status='active' AND category='intelligence'");
+        ?>
+        <div class="fr-widget-tests-catalog-wrap" style="padding:40px 16px;max-width:1200px;margin:0 auto">
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:30px">
+            <a href="<?= SITE_URL ?>/tests.php" class="fr-btn sm <?= $activeCat==='all'?'primary':'ghost' ?>" style="text-decoration:none;border-radius:10px;padding:8px 18px">
+              همه آزمون‌ها (<?= fa_num($totalTests) ?>)
+            </a>
+            <a href="<?= SITE_URL ?>/tests.php?cat=clinical" class="fr-btn sm <?= $activeCat==='clinical'?'primary':'ghost' ?>" style="text-decoration:none;border-radius:10px;padding:8px 18px">
+              🩺 بالینی و سلامت روان (<?= fa_num($clinCount) ?>)
+            </a>
+            <a href="<?= SITE_URL ?>/tests.php?cat=personality" class="fr-btn sm <?= $activeCat==='personality'?'primary':'ghost' ?>" style="text-decoration:none;border-radius:10px;padding:8px 18px">
+              🎭 شخصیت و خودشناسی (<?= fa_num($persCount) ?>)
+            </a>
+            <a href="<?= SITE_URL ?>/tests.php?cat=intelligence" class="fr-btn sm <?= $activeCat==='intelligence'?'primary':'ghost' ?>" style="text-decoration:none;border-radius:10px;padding:8px 18px">
+              💡 هوش و پیشرفت شغلی (<?= fa_num($intelCount) ?>)
+            </a>
+          </div>
+
+          <?php if (empty($tests)): ?>
+            <div style="text-align:center;padding:40px;color:#94a3b8">آزمونی در این دسته‌بندی یافت نشد.</div>
+          <?php else: ?>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:24px">
+              <?php foreach ($tests as $t):
+                $testUrl = fr_test_url($t);
+                $isFree = !empty($t['free_enabled']);
+                $price = (int)($t['price_full'] ?? 0);
+                $salePrice = (int)($t['price_sale'] ?? 0);
+                $isMgr = ((string)($t['audience'] ?? 'general')) === 'manager';
+              ?>
+                <div class="fr-test-card" style="background:#fff;border-radius:18px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.04);display:flex;flex-direction:column;transition:all .2s ease">
+                  <div style="height:120px;background:linear-gradient(135deg,<?= $isMgr ? '#1e1b4b,#3b2a7a' : '#4f46e5,#7c3aed' ?>);display:flex;align-items:center;justify-content:center;position:relative;color:#fff">
+                    <span style="font-size:38px"><?= $isMgr ? '👑' : '🧠' ?></span>
+                    <?php if ($isMgr): ?>
+                      <span style="position:absolute;top:10px;right:10px;background:#f59e0b;color:#0f172a;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">ویژه مدیران</span>
+                    <?php endif; ?>
+                    <?php if ($isFree): ?>
+                      <span style="position:absolute;top:10px;left:10px;background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px">تحلیل خلاصه رایگان</span>
+                    <?php endif; ?>
+                  </div>
+                  <div style="padding:18px;display:flex;flex-direction:column;flex:1">
+                    <h3 style="font-size:16px;font-weight:800;color:#0f172a;margin:0 0 8px;line-height:1.5">
+                      <a href="<?= e($testUrl) ?>" style="color:inherit;text-decoration:none"><?= e($t['title']) ?></a>
+                    </h3>
+                    <p style="font-size:12.5px;color:#64748b;margin:0 0 16px;line-height:1.7;flex:1">
+                      <?= e(mb_strimwidth((string)($t['short_desc'] ?: $t['description']), 0, 100, '...')) ?>
+                    </p>
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#64748b;padding-bottom:12px;border-bottom:1px solid #f1f5f9;margin-bottom:12px">
+                      <span>⏱️ حدود <?= fa_num($t['est_minutes'] ?: 15) ?> دقیقه</span>
+                      <span>❓ <?= fa_num($t['question_count'] ?: 50) ?> سؤال</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <div>
+                        <?php if ($isFree): ?>
+                          <span style="color:#10b981;font-weight:800;font-size:13.5px">رایگان</span>
+                        <?php elseif ($salePrice > 0 && $salePrice < $price): ?>
+                          <div style="text-decoration:line-through;color:#94a3b8;font-size:11px"><?= fa_num(number_format($price)) ?> ت</div>
+                          <div style="color:#0284c7;font-weight:800;font-size:13.5px"><?= fa_num(number_format($salePrice)) ?> تومان</div>
+                        <?php else: ?>
+                          <div style="color:#0f172a;font-weight:800;font-size:13.5px"><?= fa_num(number_format($price)) ?> تومان</div>
+                        <?php endif; ?>
+                      </div>
+                      <a href="<?= e($testUrl) ?>" class="fr-btn sm primary" style="padding:6px 14px;border-radius:8px;font-size:12px;text-decoration:none">
+                        شروع آزمون ←
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت ۱-ج: معرفی آزمون برگزیده (تکی)
+     */
+    public static function renderWidgetTestSingle(array $params, bool $isEditor): void
+    {
+        $testId = !empty($params['id']) ? (int)$params['id'] : 0;
+        $t = $testId > 0
+            ? DB::one("SELECT * FROM " . DB::t('tests') . " WHERE id=? AND status='active'", [$testId])
+            : DB::one("SELECT * FROM " . DB::t('tests') . " WHERE status='active' ORDER BY (audience='manager') DESC, id ASC LIMIT 1");
+
+        if (!$t) {
+            if ($isEditor) {
+                ?>
+                <div class="fr-widget-test-single" style="max-width:1100px;margin:30px auto;padding:24px;border:2px dashed #4338ca;border-radius:18px;text-align:center;background:#eef2ff;color:#3730a3">
+                  <b>🧠 ویجت معرفی آزمون برگزیده (تکی)</b>
+                  <p style="font-size:12px;margin:6px 0 0">هنوز تستی در سامانه ثبت نشده است. پس از افزودن آزمون، در این بخش نمایش می‌یابد.</p>
+                </div>
+                <?php
+            }
+            return;
+        }
+
+        $testUrl = fr_test_url($t);
+        $price = (int)($t['price_full'] ?? 0);
+        $salePrice = (int)($t['price_sale'] ?? 0);
+        ?>
+        <div class="fr-widget-test-single" style="max-width:1100px;margin:30px auto;padding:0 16px">
+          <div style="background:linear-gradient(135deg, #1e3a8a, #312e81);border-radius:24px;padding:36px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;box-shadow:0 12px 30px rgba(30,58,138,0.25)">
+            <div style="flex:1;min-width:280px">
+              <span style="background:rgba(255,255,255,0.15);padding:4px 12px;border-radius:8px;font-size:11px;font-weight:700;display:inline-block;margin-bottom:12px">
+                ✨ آزمون برگزیده روان‌سنجی
+              </span>
+              <h2 style="font-size:24px;font-weight:900;margin:0 0 10px;line-height:1.4"><?= e($t['title']) ?></h2>
+              <p style="font-size:14px;color:#cbd5e1;line-height:1.9;margin:0 0 20px;max-width:620px">
+                <?= e((string)($t['short_desc'] ?: $t['description'])) ?>
+              </p>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#93c5fd;margin-bottom:24px">
+                <span>⏱ زمان تخمینی: <?= fa_num($t['est_minutes'] ?: 15) ?> دقیقه</span>
+                <span>❓ تعداد سوالات: <?= fa_num($t['question_count'] ?: 50) ?> سوال</span>
+                <span>📊 کارنامه تحلیلی هوشمند</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <a href="<?= e($testUrl) ?>" class="fr-btn white" style="font-weight:800;padding:12px 28px;border-radius:12px;font-size:14px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,0.2)">
+                  ورود به آزمون و شروع ارزیابی ←
+                </a>
+                <span style="font-size:15px;font-weight:800">
+                  <?php if (!empty($t['free_enabled'])): ?>
+                    رایگان
+                  <?php elseif ($salePrice > 0 && $salePrice < $price): ?>
+                    <del style="opacity:.6;font-size:12px"><?= fa_num(number_format($price)) ?></del> <?= fa_num(number_format($salePrice)) ?> تومان
+                  <?php else: ?>
+                    <?= fa_num(number_format($price)) ?> تومان
+                  <?php endif; ?>
+                </span>
+              </div>
+            </div>
+            <div style="font-size:80px;background:rgba(255,255,255,0.08);width:140px;height:140px;border-radius:24px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 20px rgba(255,255,255,0.05)">
+              🧠
+            </div>
+          </div>
+        </div>
+        <?php
+    }
+
+    /**
      * ویجت ۲: دوره‌های آموزشی روان‌شناسی
      */
     public static function renderWidgetCourses(array $params, bool $isEditor): void
@@ -789,6 +1154,72 @@ class PageBuilder
     }
 
     /**
+     * ویجت ۲-ب: معرفی دوره آموزشی برگزیده (تکی)
+     */
+    public static function renderWidgetCourseSingle(array $params, bool $isEditor): void
+    {
+        $courseId = !empty($params['id']) ? (int)$params['id'] : 0;
+        $c = $courseId > 0
+            ? DB::one("SELECT * FROM " . DB::t('events') . " WHERE id=? AND kind='course' AND status='active'", [$courseId])
+            : DB::one("SELECT * FROM " . DB::t('events') . " WHERE kind='course' AND status='active' ORDER BY starts_at ASC LIMIT 1");
+
+        if (!$c) {
+            if ($isEditor) {
+                ?>
+                <div class="fr-widget-course-single" style="max-width:1100px;margin:30px auto;padding:24px;border:2px dashed #0284c7;border-radius:18px;text-align:center;background:#f0f9ff;color:#0369a1">
+                  <b>📚 ویجت معرفی دوره برگزیده (تکی)</b>
+                  <p style="font-size:12px;margin:6px 0 0">هنوز دوره‌ای در سیستم ثبت نشده است. پس از افزودن دوره در پنل، دوره منتخب در این بخش نمایش خواهد یافت.</p>
+                </div>
+                <?php
+            }
+            return;
+        }
+
+        $courseUrl = SITE_URL . '/course.php?slug=' . urlencode((string)$c['slug']);
+        $price = (int)($c['price'] ?? 0);
+        $salePrice = (int)($c['sale_price'] ?? 0);
+        ?>
+        <div class="fr-widget-course-single" style="max-width:1100px;margin:30px auto;padding:0 16px">
+          <div style="background:#fff;border-radius:20px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.05);display:flex;flex-wrap:wrap">
+            <div style="flex:1;min-width:300px;padding:32px;display:flex;flex-direction:column;justify-content:center">
+              <span style="color:#0284c7;font-size:12px;font-weight:800;display:inline-block;margin-bottom:8px">📚 دوره آموزشی ویژه</span>
+              <h2 style="font-size:22px;font-weight:900;color:#0f172a;margin:0 0 12px;line-height:1.4"><?= e($c['title']) ?></h2>
+              <p style="font-size:13.5px;color:#64748b;line-height:1.8;margin:0 0 18px">
+                <?= e((string)($c['short_desc'] ?: mb_strimwidth(strip_tags((string)$c['description']), 0, 150, '...'))) ?>
+              </p>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#475569;margin-bottom:20px">
+                <?php if (!empty($c['starts_at'])): ?>
+                  <span>📅 تاریخ شروع: <?= fa_num(jdate('j F Y', strtotime($c['starts_at']))) ?></span>
+                <?php endif; ?>
+                <?php if (!empty($c['location'])): ?>
+                  <span>📍 نحوه برگزاری: <?= e($c['location']) ?></span>
+                <?php endif; ?>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                <div>
+                  <?php if ($salePrice > 0 && $salePrice < $price): ?>
+                    <del style="font-size:11px;color:#94a3b8"><?= fa_num(number_format($price)) ?> ت</del>
+                    <b style="color:#0284c7;font-size:16px"><?= fa_num(number_format($salePrice)) ?> تومان</b>
+                  <?php else: ?>
+                    <b style="color:#0f172a;font-size:16px"><?= fa_num(number_format($price)) ?> تومان</b>
+                  <?php endif; ?>
+                </div>
+                <a href="<?= e($courseUrl) ?>" class="fr-btn sm primary" style="font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none">
+                  مشاهده سرفصل‌ها و ثبت‌نام ←
+                </a>
+              </div>
+            </div>
+            <?php if (!empty($c['image'])): ?>
+              <div style="width:340px;min-height:240px;background:#f8fafc;position:relative">
+                <img src="<?= e(SITE_URL . '/' . ltrim((string)$c['image'], '/')) ?>" alt="<?= e($c['title']) ?>" style="width:100%;height:100%;object-fit:cover">
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php
+    }
+
+    /**
      * ویجت ۳: کارگاه‌های روان‌شناسی
      */
     public static function renderWidgetWorkshops(array $params, bool $isEditor): void
@@ -846,6 +1277,71 @@ class PageBuilder
     }
 
     /**
+     * ویجت ۳-ب: معرفی کارگاه روان‌شناسی برگزیده (تکی)
+     */
+    public static function renderWidgetWorkshopSingle(array $params, bool $isEditor): void
+    {
+        $wsId = !empty($params['id']) ? (int)$params['id'] : 0;
+        $w = $wsId > 0
+            ? DB::one("SELECT * FROM " . DB::t('events') . " WHERE id=? AND kind='workshop' AND status='active'", [$wsId])
+            : DB::one("SELECT * FROM " . DB::t('events') . " WHERE kind='workshop' AND status='active' ORDER BY starts_at ASC LIMIT 1");
+
+        if (!$w) {
+            if ($isEditor) {
+                ?>
+                <div class="fr-widget-workshop-single" style="max-width:1100px;margin:30px auto;padding:24px;border:2px dashed #059669;border-radius:18px;text-align:center;background:#ecfdf5;color:#047857">
+                  <b>🛠 ویجت معرفی کارگاه برگزیده (تکی)</b>
+                  <p style="font-size:12px;margin:6px 0 0">هنوز کارگاهی در سیستم ثبت نشده است. پس از تعریف کارگاه، در این محل قرار می‌گیرد.</p>
+                </div>
+                <?php
+            }
+            return;
+        }
+
+        $wsUrl = SITE_URL . '/workshop.php?slug=' . urlencode((string)$w['slug']);
+        $price = (int)($w['price'] ?? 0);
+        $salePrice = (int)($w['sale_price'] ?? 0);
+        ?>
+        <div class="fr-widget-workshop-single" style="max-width:1100px;margin:30px auto;padding:0 16px">
+          <div style="background:linear-gradient(135deg, #064e3b, #047857);border-radius:20px;padding:32px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;box-shadow:0 10px 25px rgba(4,120,87,0.25)">
+            <div style="flex:1;min-width:280px">
+              <span style="background:rgba(255,255,255,0.18);padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;display:inline-block;margin-bottom:10px">
+                🛠 کارگاه تعاملی برگزیده
+              </span>
+              <h2 style="font-size:22px;font-weight:900;margin:0 0 10px"><?= e($w['title']) ?></h2>
+              <p style="font-size:13.5px;color:#d1fae5;line-height:1.8;margin:0 0 18px;max-width:600px">
+                <?= e((string)($w['short_desc'] ?: mb_strimwidth(strip_tags((string)$w['description']), 0, 140, '...'))) ?>
+              </p>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#a7f3d0;margin-bottom:20px">
+                <?php if (!empty($w['starts_at'])): ?>
+                  <span>📅 زمان برگزاری: <?= fa_num(jdate('j F Y - H:i', strtotime($w['starts_at']))) ?></span>
+                <?php endif; ?>
+                <?php if (!empty($w['capacity'])): ?>
+                  <span>👥 ظرفیت کارگاه: <?= fa_num($w['capacity']) ?> نفر</span>
+                <?php endif; ?>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <a href="<?= e($wsUrl) ?>" class="fr-btn white" style="font-weight:800;padding:10px 24px;border-radius:10px;font-size:13px;text-decoration:none">
+                  رزرو صندلی در کارگاه ←
+                </a>
+                <span style="font-size:15px;font-weight:800">
+                  <?php if ($salePrice > 0 && $salePrice < $price): ?>
+                    <del style="opacity:.6;font-size:11px"><?= fa_num(number_format($price)) ?></del> <?= fa_num(number_format($salePrice)) ?> تومان
+                  <?php else: ?>
+                    <?= fa_num(number_format($price)) ?> تومان
+                  <?php endif; ?>
+                </span>
+              </div>
+            </div>
+            <div style="font-size:75px;background:rgba(255,255,255,0.1);width:130px;height:130px;border-radius:20px;display:flex;align-items:center;justify-content:center">
+              🛠
+            </div>
+          </div>
+        </div>
+        <?php
+    }
+
+    /**
      * ویجت ۴: رزرو نوبت مشاوره روان‌شناسی
      */
     public static function renderWidgetConsult(array $params, bool $isEditor): void
@@ -880,6 +1376,74 @@ class PageBuilder
           <div style="text-align:center">
             <a href="<?= SITE_URL ?>/consult.php" class="fr-btn ghost sm" style="text-decoration:none">
               مشاهده راهنمای کامل نوبت‌دهی مشاوره ←
+            </a>
+          </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت ۴-ب: فهرست مشاوران و درمانگران بالینی کلینیک
+     */
+    public static function renderWidgetConsultantsList(array $params, bool $isEditor): void
+    {
+        $title = (string)($params['title'] ?? '🛋 مشاوران و متخصصان بالینی کلینیک');
+        $subtitle = (string)($params['subtitle'] ?? 'تیم روان‌درمانگران و متخصصان ارزیابی با شماره عضویت سازمان نظام روان‌شناسی');
+        $consultants = DB::all("SELECT * FROM " . DB::t('consultants') . " WHERE active=1 ORDER BY sort ASC");
+        ?>
+        <div class="fr-widget-consultants-wrap" style="padding:40px 16px;max-width:1200px;margin:0 auto">
+          <?php if (!empty($title)): ?>
+            <div style="text-align:center;margin-bottom:30px">
+              <h2 style="font-size:24px;font-weight:800;color:#1e293b;margin:0 0 10px"><?= e($title) ?></h2>
+              <?php if (!empty($subtitle)): ?><p style="font-size:14px;color:#64748b;margin:0"><?= e($subtitle) ?></p><?php endif; ?>
+            </div>
+          <?php endif; ?>
+
+          <?php if (empty($consultants)): ?>
+            <div style="text-align:center;padding:30px;color:#94a3b8">اطلاعات مشاوران به‌زودی بارگذاری می‌شود.</div>
+          <?php else: ?>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:24px">
+              <?php foreach ($consultants as $c): ?>
+                <div class="fr-consultant-card" style="background:#fff;border-radius:18px;border:1px solid #e2e8f0;padding:24px;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,0.03);display:flex;flex-direction:column;align-items:center">
+                  <div style="width:90px;height:90px;border-radius:50%;overflow:hidden;background:#f1f5f9;margin-bottom:14px;border:3px solid #e0e7ff;box-shadow:0 4px 12px rgba(99,102,241,0.15)">
+                    <?php if (!empty($c['avatar'])): ?>
+                      <img src="<?= e(SITE_URL . '/' . ltrim((string)$c['avatar'], '/')) ?>" alt="<?= e($c['name']) ?>" style="width:100%;height:100%;object-fit:cover">
+                    <?php else: ?>
+                      <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px;background:#e0e7ff;color:#4338ca">👤</div>
+                    <?php endif; ?>
+                  </div>
+                  <h3 style="font-size:16px;font-weight:800;color:#0f172a;margin:0 0 6px"><?= e($c['name']) ?></h3>
+                  <div style="font-size:12.5px;color:#4338ca;font-weight:700;margin-bottom:10px"><?= e($c['title'] ?: 'روانشناس و مشاور بالینی') ?></div>
+                  <p style="font-size:12px;color:#64748b;line-height:1.7;margin:0 0 18px;flex:1">
+                    <?= e(mb_strimwidth((string)$c['bio'], 0, 110, '...')) ?>
+                  </p>
+                  <a href="<?= SITE_URL ?>/consult.php" class="fr-btn sm primary" style="width:100%;text-align:center;padding:8px 16px;border-radius:10px;text-decoration:none;font-weight:700">
+                    رزرو نوبت مشاوره ←
+                  </a>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * ویجت ۴-ج: بنر دعوت به اقدام و ثبت‌نام
+     */
+    public static function renderWidgetBannerCta(array $params, bool $isEditor): void
+    {
+        $title = (string)($params['title'] ?? 'شروع مسیر خودشناسی و سلامت روان');
+        $subtitle = (string)($params['subtitle'] ?? 'با انجام تست‌های معتبر روان‌شناسی و مشاوره تخصصی، کیفیت روابط و زندگی فردی خود را ارتقا دهید.');
+        $btnText = (string)($params['btn_text'] ?? 'مشاهده تمام آزمون‌ها');
+        $btnUrl = (string)($params['btn_url'] ?? (SITE_URL . '/tests.php'));
+        ?>
+        <div class="fr-widget-banner-cta" style="padding:40px 16px;max-width:1200px;margin:0 auto">
+          <div style="background:linear-gradient(135deg, #1e3a8a, #0284c7);border-radius:24px;padding:48px 24px;text-align:center;color:#fff;box-shadow:0 12px 30px rgba(2,132,199,0.25)">
+            <h2 style="font-size:26px;font-weight:900;margin:0 0 12px"><?= e($title) ?></h2>
+            <p style="font-size:14px;color:#e0f2fe;line-height:1.9;margin:0 auto 24px;max-width:650px"><?= e($subtitle) ?></p>
+            <a href="<?= e($btnUrl) ?>" class="fr-btn white" style="font-weight:800;padding:12px 32px;border-radius:12px;font-size:14px;text-decoration:none;display:inline-block;box-shadow:0 6px 20px rgba(0,0,0,0.15)">
+              <?= e($btnText) ?> ←
             </a>
           </div>
         </div>
@@ -1391,6 +1955,24 @@ class PageBuilder
                 'content'     => '<div data-widget="tests" data-limit="6" data-category="all" class="fr-pb-block fr-pb-widget-tests"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>🧠 ویجت آزمون‌های روان‌شناسی فریا روان</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">در نمایش زنده، کارت‌های آخرین آزمون‌های دیتابیس جایگزین این بخش می‌شوند.</p></div></div>'
             ],
             [
+                'id'          => 'tests_catalog',
+                'name'        => 'tests_catalog',
+                'title'       => 'کاتالوگ جامع تست‌ها',
+                'category'    => 'ویجت‌های فریا روان',
+                'icon'        => '📑',
+                'description' => 'کاتالوگ کامل با تب‌های بالینی، شخصیت، هوش و فیلترها',
+                'content'     => '<div data-widget="tests_catalog" data-limit="12" class="fr-pb-block fr-pb-widget-tests-catalog"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>📑 کاتالوگ جامع آزمون‌های روان‌شناسی</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">نمایش کارت‌های تست با تب‌های دسته‌بندی و فیلتر هوشمند.</p></div></div>'
+            ],
+            [
+                'id'          => 'test_single',
+                'name'        => 'test_single',
+                'title'       => 'معرفی آزمون ویژه (تکی)',
+                'category'    => 'ویجت‌های فریا روان',
+                'icon'        => '🎯',
+                'description' => 'بنر برجسته معرفی یک آزمون خاص با دکمه شروع و قیمت',
+                'content'     => '<div data-widget="test_single" class="fr-pb-block fr-pb-widget-test-single"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>🎯 ویجت معرفی آزمون برگزیده</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">بنر جذاب آزمون شاخص همراه با خلاصه بالینی و دکمه شروع.</p></div></div>'
+            ],
+            [
                 'id'          => 'courses',
                 'name'        => 'courses',
                 'title'       => 'دوره‌های آموزشی',
@@ -1398,6 +1980,15 @@ class PageBuilder
                 'icon'        => '📚',
                 'description' => 'فهرست دوره‌های آموزشی روان‌شناسی با تصویر، مدرس و قیمت',
                 'content'     => '<div data-widget="courses" data-limit="3" class="fr-pb-block fr-pb-widget-courses"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>📚 ویجت دوره‌های آموزشی روان‌شناسی</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">در نمایش زنده، کارت‌های دوره‌های آموزشی فعال نمایش داده خواهند شد.</p></div></div>'
+            ],
+            [
+                'id'          => 'course_single',
+                'name'        => 'course_single',
+                'title'       => 'معرفی دوره ویژه (تکی)',
+                'category'    => 'ویجت‌های فریا روان',
+                'icon'        => '🎓',
+                'description' => 'باکس معرفی یک دوره آموزشی خاص با تصویر، سرفصل و ثبت‌نام',
+                'content'     => '<div data-widget="course_single" class="fr-pb-block fr-pb-widget-course-single"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>🎓 ویجت معرفی دوره برگزیده</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">بنر دوره آموزشی همراه با کاور، مدرس، ساعت آموزش و ثبت‌نام.</p></div></div>'
             ],
             [
                 'id'          => 'workshops',
@@ -1409,6 +2000,15 @@ class PageBuilder
                 'content'     => '<div data-widget="workshops" data-limit="3" class="fr-pb-block fr-pb-widget-workshops"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>🛠 ویجت کارگاه‌های روان‌شناختی</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">در نمایش زنده، جدیدترین کارگاه‌های فعال لود می‌شوند.</p></div></div>'
             ],
             [
+                'id'          => 'workshop_single',
+                'name'        => 'workshop_single',
+                'title'       => 'معرفی کارگاه ویژه (تکی)',
+                'category'    => 'ویجت‌های فریا روان',
+                'icon'        => '🏷️',
+                'description' => 'باکس معرفی یک کارگاه خاص با زمان برگزاری، ظرفیت و ثبت‌نام',
+                'content'     => '<div data-widget="workshop_single" class="fr-pb-block fr-pb-widget-workshop-single"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>🏷️ ویجت معرفی کارگاه برگزیده</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">بنر کارگاه عملی با زمان‌بندی و دکمه رزرو صندلی.</p></div></div>'
+            ],
+            [
                 'id'          => 'consult',
                 'name'        => 'consult',
                 'title'       => 'رزرو وقت مشاوره',
@@ -1416,6 +2016,24 @@ class PageBuilder
                 'icon'        => '🛋',
                 'description' => 'بخش نوبت‌دهی خدمات مشاوره فردی، زوجین و خانواده',
                 'content'     => '<div data-widget="consult" class="fr-pb-block fr-pb-widget-consult"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>🛋 ویجت رزرو وقت مشاوره روان‌شناسی</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">کارت‌های خدمات مشاوره به همراه هزینه و زمان‌بندی جلسه.</p></div></div>'
+            ],
+            [
+                'id'          => 'consultants_list',
+                'name'        => 'consultants_list',
+                'title'       => 'مشاوران و روان‌درمانگران',
+                'category'    => 'ویجت‌های فریا روان',
+                'icon'        => '👥',
+                'description' => 'فهرست مشاوران و متخصصان کلینیک با آواتار و دکمه رزرو',
+                'content'     => '<div data-widget="consultants_list" class="fr-pb-block fr-pb-widget-consultants"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>👥 ویجت کادر مشاوران و درمانگران کلینیک</b><p style="margin:6px 0 0;font-size:12px;color:#64748b">کارت‌های معرفی مشاوران همراه با بیوگرافی و رزرو نوبت.</p></div></div>'
+            ],
+            [
+                'id'          => 'banner_cta',
+                'name'        => 'banner_cta',
+                'title'       => 'بنر دعوت به اقدام (CTA)',
+                'category'    => 'ویجت‌های فریا روان',
+                'icon'        => '📣',
+                'description' => 'بنر جذاب تمام‌عرض با تیتر، توضیحات و دکمه ثبت‌نام یا شروع',
+                'content'     => '<div data-widget="banner_cta" class="fr-pb-block fr-pb-widget-cta"><div class="fr-widget-placeholder" style="padding:30px;text-align:center;background:#f8fafc;border:2px dashed #93c5fd;border-radius:12px;color:#1e40af;font-family:inherit"><b>📣 ویجت بنر دعوت به اقدام (Call To Action)</b></div></div>'
             ],
             [
                 'id'          => 'newsletter',
@@ -1642,5 +2260,93 @@ class PageBuilder
     border-color: #3b82f6 !important;
     background: #eff6ff !important;
 }';
+    }
+
+    /**
+     * قالب اولیه بخش تست‌های روان‌شناسی
+     */
+    public static function getDefaultTestsHtml(): string
+    {
+        return '<div class="fr-tests-page-builder-content">
+  <div data-widget="hero" data-title="🧠 مرکز آزمون‌های تخصصی روان‌شناسی و خودشناسی" data-subtitle="آزمون‌های استاندارد و معتبر با تفسیر عمیق، تحلیل شاخص‌های بالینی و کارنامه تفصیلی هوشمند"></div>
+  <div data-widget="test_single"></div>
+  <div data-widget="tests_catalog" data-limit="12"></div>
+  <div data-widget="features" data-title="چرا آزمون‌های روان‌شناسی فریا روان؟"></div>
+  <div data-widget="reviews" data-limit="3"></div>
+  <div data-widget="faq" data-title="پرسش‌های متداول درباره تست‌های روانشناسی"></div>
+  <div data-widget="newsletter"></div>
+</div>';
+    }
+
+    /**
+     * قالب اولیه بخش دوره‌های آموزشی
+     */
+    public static function getDefaultCoursesHtml(): string
+    {
+        return '<div class="fr-courses-page-builder-content">
+  <div data-widget="hero" data-title="📚 دوره‌های آموزشی تخصصی روان‌شناسی و مهارت‌افزایی" data-subtitle="آموزش‌های کاربردی گام‌به‌گام با تدریس اساتید و روان‌درمانگران برجسته"></div>
+  <div data-widget="course_single"></div>
+  <div data-widget="courses" data-limit="6"></div>
+  <div data-widget="features" data-title="مزایای دوره‌های آموزشی کلینیک"></div>
+  <div data-widget="reviews" data-limit="3"></div>
+  <div data-widget="faq"></div>
+</div>';
+    }
+
+    /**
+     * قالب اولیه بخش کارگاه‌های تعاملی
+     */
+    public static function getDefaultWorkshopsHtml(): string
+    {
+        return '<div class="fr-workshops-page-builder-content">
+  <div data-widget="hero" data-title="🛠 کارگاه‌های عملی و تعاملی روان‌شناختی" data-subtitle="کارگاه‌های حضوری و آنلاین با تمرین واقعی، بررسی پرونده و تخفیف ویژه همراهان"></div>
+  <div data-widget="workshop_single"></div>
+  <div data-widget="workshops" data-limit="6"></div>
+  <div data-widget="features" data-title="چرا در کارگاه‌های روانشناسی شرکت کنیم؟"></div>
+  <div data-widget="reviews" data-limit="3"></div>
+  <div data-widget="faq"></div>
+</div>';
+    }
+
+    /**
+     * قالب اولیه بخش رزرو نوبت مشاوره
+     */
+    public static function getDefaultConsultHtml(): string
+    {
+        return '<div class="fr-consult-page-builder-content">
+  <div data-widget="hero" data-title="🛋 مرکز خدمات و رزرو وقت مشاوره فردی و خانواده" data-subtitle="مشاوره تخصصی آنلاین و حضوری با درمانگران رسمی سازمان نظام روان‌شناسی"></div>
+  <div data-widget="consultants_list"></div>
+  <div data-widget="consult"></div>
+  <div data-widget="features" data-title="فرایند برگزاری جلسات مشاوره"></div>
+  <div data-widget="faq" data-title="پرسش‌های متداول مراجعان مشاوره"></div>
+  <div data-widget="contact_box"></div>
+</div>';
+    }
+
+    /**
+     * قالب اولیه برگه درباره ما
+     */
+    public static function getDefaultAboutHtml(): string
+    {
+        return '<div class="fr-about-page-builder-content" style="max-width:1100px;margin:30px auto;padding:0 16px">
+  <div data-widget="hero" data-title="درباره مرکز خدمات روان‌شناسی و مشاوره فریا روان" data-subtitle="بیش از یک دهه همراهی در مسیر سلامت روان، خودشناسی و رشد فردی با استانداردهای علمی"></div>
+  <div data-widget="features" data-title="رسالت و ارزش‌های بنیادین کلینیک فریا روان"></div>
+  <div data-widget="stats"></div>
+  <div data-widget="consultants_list" data-title="کادر متخصصان و روان‌درمانگران مرکز"></div>
+  <div data-widget="trust_badges"></div>
+</div>';
+    }
+
+    /**
+     * قالب اولیه برگه تماس با ما
+     */
+    public static function getDefaultContactHtml(): string
+    {
+        return '<div class="fr-contact-page-builder-content" style="max-width:1100px;margin:30px auto;padding:0 16px">
+  <div data-widget="hero" data-title="راه‌های ارتباطی و نشانی کلینیک فریا روان" data-subtitle="ما در تمام روزهای کاری آماده همراهی و پاسخگویی به مراجعان گرامی هستیم"></div>
+  <div data-widget="contact_box"></div>
+  <div data-widget="faq" data-title="پرسش‌های متداول پیش از مراجعه"></div>
+  <div data-widget="consult"></div>
+</div>';
     }
 }

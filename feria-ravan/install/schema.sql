@@ -406,6 +406,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}event_registrations` (
   `event_id` INT UNSIGNED NOT NULL,
   `user_id` BIGINT UNSIGNED NOT NULL,
   `order_id` BIGINT UNSIGNED NOT NULL,
+  `companion_count` INT UNSIGNED NOT NULL DEFAULT 0,
   `companions_count` INT UNSIGNED NOT NULL DEFAULT 0,
   `amount_base` INT UNSIGNED NOT NULL DEFAULT 0,
   `paid_total` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -515,13 +516,19 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}wallet_transactions` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `user_id` BIGINT UNSIGNED NOT NULL,
   `amount` INT NOT NULL,
-  `balance_after` INT NOT NULL,
-  `type` VARCHAR(30) NOT NULL,
-  `order_id` BIGINT UNSIGNED NULL,
-  `admin_id` INT UNSIGNED NULL,
-  `note` VARCHAR(255) NULL,
+  `balance_after` INT NULL DEFAULT 0,
+  `kind` ENUM('credit','debit','refund','gift','adjustment') NOT NULL DEFAULT 'credit',
+  `type` VARCHAR(30) NULL DEFAULT NULL,
+  `order_id` BIGINT UNSIGNED NULL DEFAULT NULL,
+  `admin_id` INT UNSIGNED NULL DEFAULT NULL,
+  `reference_type` VARCHAR(40) DEFAULT NULL,
+  `reference_id` BIGINT UNSIGNED DEFAULT NULL,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `note` VARCHAR(255) DEFAULT NULL,
+  `expires_at` DATETIME DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY `ix_user` (`user_id`)
+  KEY `ix_user` (`user_id`),
+  KEY `ix_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `{{prefix}}refund_requests` (

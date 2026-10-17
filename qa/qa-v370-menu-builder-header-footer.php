@@ -53,7 +53,7 @@ echo "1. Testing Version & Architecture Integrity:\n";
 assert_test(version_compare(FR_RELEASE, '3.7.0', '>='), "FR_RELEASE is 3.7.0 or higher (actual: " . FR_RELEASE . ")");
 assert_test(version_compare(FR_VERSION, '3.7.0', '>='), "FR_VERSION is 3.7.0 or higher (actual: " . FR_VERSION . ")");
 $configContent = file_get_contents(FR_ROOT . '/config.php');
-assert_test(str_contains($configContent, '3.7.0'), "config.php references version 3.7.0");
+assert_test(str_contains($configContent, '3.7.0') || str_contains($configContent, '3.8.0'), "config.php references version 3.7.0 or higher");
 $updateContent = file_get_contents(FR_ROOT . '/includes/update.php');
 assert_test(str_contains($updateContent, '۳٫۷٫۰'), "includes/update.php contains 3.7.0 migration hook");
 

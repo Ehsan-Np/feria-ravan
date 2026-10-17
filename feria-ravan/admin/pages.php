@@ -17,7 +17,8 @@ PageBuilder::ensureSchema();
 MenuBuilder::ensureSchema();
 
 $curTab = (string)($_GET['tab'] ?? 'page');
-if (!in_array($curTab, ['page', 'header', 'footer'], true)) {
+$validTabs = ['all', 'page', 'tests', 'courses', 'workshops', 'consult', 'header', 'footer'];
+if (!in_array($curTab, $validTabs, true)) {
     $curTab = 'page';
 }
 
@@ -52,12 +53,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'active'      => !empty(post('active')) ? 1 : 0,
         ];
 
-        // محتوای اولیه در صورت ساخت هدر یا فوتر جدید
+        // محتوای اولیه در صورت ساخت هدر، فوتر یا بخش‌های اختصاصی جدید
         if ($id <= 0) {
             if ($pageType === 'header') {
                 $data['content_html'] = '<header class="fr-custom-header" style="background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 24px"><div style="max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px"><div data-widget="site_logo"></div><div data-widget="menu" data-location="primary"></div><div style="display:flex;align-items:center;gap:10px"><div data-widget="user_auth"></div><div data-widget="header_cta"></div></div></div></header>';
             } elseif ($pageType === 'footer') {
                 $data['content_html'] = '<footer class="fr-custom-footer" style="background:#0f172a;color:#f8fafc;padding:50px 24px 20px;border-top:3px solid #3b82f6"><div style="max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:32px;margin-bottom:30px"><div data-widget="footer_brand"></div><div><h3 style="font-size:15px;font-weight:700;color:#38bdf8;margin:0 0 16px">فهرست و دسترسی سریع</h3><div data-widget="footer_menu" data-location="footer"></div></div><div data-widget="footer_contact"></div><div data-widget="footer_badges"></div></div><div style="border-top:1px solid #1e293b;padding-top:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12.5px;color:#94a3b8"><div data-widget="copyright"></div><div data-widget="social_icons"></div></div></footer>';
+            } elseif ($pageType === 'tests') {
+                $data['content_html'] = PageBuilder::getDefaultTestsHtml();
+            } elseif ($pageType === 'courses') {
+                $data['content_html'] = PageBuilder::getDefaultCoursesHtml();
+            } elseif ($pageType === 'workshops') {
+                $data['content_html'] = PageBuilder::getDefaultWorkshopsHtml();
+            } elseif ($pageType === 'consult') {
+                $data['content_html'] = PageBuilder::getDefaultConsultHtml();
             }
         }
 
@@ -69,6 +78,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('مورد جدید با موفقیت ایجاد شد 🎉 اکنون می‌توانید با صفحه‌ساز آن را طراحی کنید.', 'ok');
             redirect(SITE_URL . '/admin/page-builder.php?id=' . $savedId);
         }
+    }
+
+    if ($act === 'seed_defaults') {
+        PageBuilder::seedDefaultPages();
+        flash('قالب‌های پیش‌فرض بخش‌های سامانه (تست‌ها، دوره‌ها، کارگاه‌ها، مشاوره و درباره ما) با موفقیت همگام‌سازی و بارگذاری شدند 🎉', 'ok');
+        redirect(SITE_URL . '/admin/pages.php?tab=' . $curTab);
     }
 
     if ($act === 'set_home') {
@@ -135,10 +150,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // واکشی داده‌ها بر اساس تب جاری
 $allPages = PageBuilder::getPages();
-$pages    = array_values(array_filter($allPages, fn($p) => ($p['page_type'] ?? 'page') === $curTab));
-$homePage = PageBuilder::getHomepage();
+if ($curTab === 'all') {
+    $pages = $allPages;
+} else {
+    $pages = array_values(array_filter($allPages, fn($p) => ($p['page_type'] ?? 'page') === $curTab));
+}
+
+$homePage     = PageBuilder::getHomepage();
 $activeHeader = PageBuilder::getActiveHeader();
 $activeFooter = PageBuilder::getActiveFooter();
+
+$tabDefs = [
+    'all'       => ['title' => 'همه موارد', 'icon' => '📁'],
+    'page'      => ['title' => 'برگه‌ها', 'icon' => '📄'],
+    'tests'     => ['title' => 'آزمون‌ها', 'icon' => '🧠'],
+    'courses'   => ['title' => 'دوره‌ها', 'icon' => '🎓'],
+    'workshops' => ['title' => 'کارگاه‌ها', 'icon' => '👥'],
+    'consult'   => ['title' => 'مشاوره', 'icon' => '💬'],
+    'header'    => ['title' => 'سربرگ‌ها', 'icon' => '🔝'],
+    'footer'    => ['title' => 'پاورقی‌ها', 'icon' => '🔻'],
+];
 
 admin_layout($adm, 'pages', 'مدیریت برگه‌ها، سربرگ و پاورقی');
 echo flash();
@@ -149,56 +180,51 @@ echo flash();
   <div>
     <h2 style="margin:0;font-size:22px;color:#0f172a">📄 مدیریت برگه‌ها، سربرگ و پاورقی (Header & Footer Builder)</h2>
     <p style="margin:4px 0 0;font-size:13px;color:#64748b">
-      طراحی کامل سربرگ، پاورقی، صفحه اصلی و تمام برگه‌های سایت با صفحه‌ساز دیداری و ویجت‌های اختصاصی فریا روان.
+      طراحی کامل سربرگ، پاورقی، صفحه اصلی و تمام بخش‌ها (آزمون‌ها، دوره‌ها، کارگاه‌ها، مشاوره) با صفحه‌ساز دیداری فریا روان.
     </p>
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <form method="post" style="display:inline" onsubmit="return confirm('آیا می‌خواهید صفحات و قالب‌های پیش‌فرض بخش‌های آزمون، دوره، کارگاه، مشاوره و درباره ما بارگذاری و همگام شوند؟');">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="seed_defaults">
+      <button type="submit" class="fr-btn sm ghost" style="text-decoration:none;background:#f8fafc;border-color:#cbd5e1;font-weight:700">
+        ⚡️ بارگذاری / بازنشانی قالب‌های پیش‌فرض
+      </button>
+    </form>
     <a class="fr-btn sm ghost" href="menus.php" style="text-decoration:none;background:#f1f5f9;border-color:#cbd5e1;font-weight:700">
       📋 فهرست‌ساز و منوها (Menu Builder)
     </a>
-    <?php if ($curTab === 'page'): ?>
-      <button type="button" class="fr-btn sm primary" onclick="openNewModal('page')">
-        + ساخت برگه جدید
-      </button>
-    <?php elseif ($curTab === 'header'): ?>
-      <button type="button" class="fr-btn sm primary" onclick="openNewModal('header')">
-        + ساخت سربرگ جدید (Header)
-      </button>
-    <?php elseif ($curTab === 'footer'): ?>
-      <button type="button" class="fr-btn sm primary" onclick="openNewModal('footer')">
-        + ساخت پاورقی جدید (Footer)
-      </button>
-    <?php endif; ?>
+    <button type="button" class="fr-btn sm primary" onclick="openNewModal('<?= $curTab === 'all' ? 'page' : e($curTab) ?>')">
+      + ساخت مورد جدید
+    </button>
   </div>
 </div>
 
 <!-- تب‌های ناوبری بخش‌ها -->
-<div style="display:flex;gap:8px;border-bottom:2px solid #e2e8f0;margin-bottom:24px">
-  <a href="pages.php?tab=page" class="fr-btn ghost sm" style="border-radius:10px 10px 0 0;margin-bottom:-2px;border:none;border-bottom:3px solid <?= ($curTab === 'page') ? '#3b82f6' : 'transparent' ?>;color:<?= ($curTab === 'page') ? '#2563eb' : '#64748b' ?>;font-weight:800;background:<?= ($curTab === 'page') ? '#fff' : 'transparent' ?>;padding:10px 18px;text-decoration:none">
-    📄 برگه‌های سایت (<?= fa_num(count(array_filter($allPages, fn($p) => ($p['page_type'] ?? 'page') === 'page'))) ?>)
-  </a>
-  <a href="pages.php?tab=header" class="fr-btn ghost sm" style="border-radius:10px 10px 0 0;margin-bottom:-2px;border:none;border-bottom:3px solid <?= ($curTab === 'header') ? '#3b82f6' : 'transparent' ?>;color:<?= ($curTab === 'header') ? '#2563eb' : '#64748b' ?>;font-weight:800;background:<?= ($curTab === 'header') ? '#fff' : 'transparent' ?>;padding:10px 18px;text-decoration:none">
-    🔝 سربرگ‌ها / Headers (<?= fa_num(count(array_filter($allPages, fn($p) => ($p['page_type'] ?? 'page') === 'header'))) ?>)
-    <?php if ($activeHeader): ?>
-      <span style="font-size:10px;background:#10b981;color:#fff;padding:2px 6px;border-radius:6px;margin-right:4px">فعال</span>
-    <?php endif; ?>
-  </a>
-  <a href="pages.php?tab=footer" class="fr-btn ghost sm" style="border-radius:10px 10px 0 0;margin-bottom:-2px;border:none;border-bottom:3px solid <?= ($curTab === 'footer') ? '#3b82f6' : 'transparent' ?>;color:<?= ($curTab === 'footer') ? '#2563eb' : '#64748b' ?>;font-weight:800;background:<?= ($curTab === 'footer') ? '#fff' : 'transparent' ?>;padding:10px 18px;text-decoration:none">
-    🔻 پاورقی‌ها / Footers (<?= fa_num(count(array_filter($allPages, fn($p) => ($p['page_type'] ?? 'page') === 'footer'))) ?>)
-    <?php if ($activeFooter): ?>
-      <span style="font-size:10px;background:#10b981;color:#fff;padding:2px 6px;border-radius:6px;margin-right:4px">فعال</span>
-    <?php endif; ?>
-  </a>
+<div style="display:flex;gap:6px;border-bottom:2px solid #e2e8f0;margin-bottom:24px;overflow-x:auto;padding-bottom:2px">
+  <?php foreach ($tabDefs as $tabKey => $tabInfo):
+      $count = $tabKey === 'all' ? count($allPages) : count(array_filter($allPages, fn($p) => ($p['page_type'] ?? 'page') === $tabKey));
+      $isActive = ($curTab === $tabKey);
+  ?>
+    <a href="pages.php?tab=<?= e($tabKey) ?>" class="fr-btn ghost sm" style="white-space:nowrap;border-radius:10px 10px 0 0;margin-bottom:-2px;border:none;border-bottom:3px solid <?= $isActive ? '#3b82f6' : 'transparent' ?>;color:<?= $isActive ? '#2563eb' : '#64748b' ?>;font-weight:800;background:<?= $isActive ? '#fff' : 'transparent' ?>;padding:10px 16px;text-decoration:none">
+      <?= $tabInfo['icon'] ?> <?= e($tabInfo['title']) ?> (<?= fa_num($count) ?>)
+      <?php if ($tabKey === 'header' && $activeHeader): ?>
+        <span style="font-size:10px;background:#10b981;color:#fff;padding:2px 6px;border-radius:6px;margin-right:4px">فعال</span>
+      <?php elseif ($tabKey === 'footer' && $activeFooter): ?>
+        <span style="font-size:10px;background:#10b981;color:#fff;padding:2px 6px;border-radius:6px;margin-right:4px">فعال</span>
+      <?php endif; ?>
+    </a>
+  <?php endforeach; ?>
 </div>
 
 <!-- کارت‌های آمار و وضعیت -->
 <div class="fr-grid cols-4" style="margin-bottom:24px">
   <div class="fr-card" style="margin:0;padding:16px;display:flex;align-items:center;gap:14px">
     <div style="width:44px;height:44px;border-radius:12px;background:#e0e7ff;color:#4338ca;font-size:22px;display:flex;align-items:center;justify-content:center">
-      📄
+      <?= $tabDefs[$curTab]['icon'] ?? '📄' ?>
     </div>
     <div>
-      <div style="font-size:12px;color:#64748b">تعداد در این بخش</div>
+      <div style="font-size:12px;color:#64748b">تعداد در تب فعلی</div>
       <b style="font-size:18px;color:#0f172a"><?= fa_num(count($pages)) ?> مورد</b>
     </div>
   </div>
@@ -238,14 +264,14 @@ echo flash();
 <div class="fr-card" style="padding:0;overflow:hidden">
   <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:space-between;align-items:center">
     <b style="font-size:15px;color:#1e293b">
-      <?= $curTab === 'page' ? '📋 فهرست برگه‌های سایت' : ($curTab === 'header' ? '🔝 فهرست قالب‌های سربرگ (Header Templates)' : '🔻 فهرست قالب‌های پاورقی (Footer Templates)') ?>
+      📋 فهرست موارد: <?= e($tabDefs[$curTab]['title'] ?? 'برگه‌ها') ?>
     </b>
     <span class="fr-chip info sm">طراحی با صفحه‌ساز دیداری PHPageBuilder / GrapesJS</span>
   </div>
 
   <?php if (empty($pages)): ?>
     <div style="padding:40px;text-align:center;color:#64748b">
-      هنوز موردی در این بخش تعریف نشده است. می‌توانید با کلیک بر روی دکمهٔ «ساخت جدید» اولین مورد خود را ایجاد نمایید.
+      هنوز موردی در این بخش تعریف نشده است. می‌توانید با کلیک بر روی دکمهٔ «ساخت مورد جدید» یا دکمهٔ «بارگذاری قالب‌های پیش‌فرض» موارد مورد نیاز را ایجاد نمایید.
     </div>
   <?php else: ?>
     <div style="overflow-x:auto">
@@ -253,13 +279,9 @@ echo flash();
         <thead>
           <tr style="background:#f1f5f9;text-align:right">
             <th>عنوان و شناسه</th>
-            <?php if ($curTab === 'page'): ?>
-              <th style="text-align:center">صفحه اصلی</th>
-              <th style="text-align:center">قالب</th>
-            <?php else: ?>
-              <th style="text-align:center">وضعیت پیش‌فرض سراسری</th>
-            <?php endif; ?>
-            <th style="text-align:center">وضعیت</th>
+            <th style="text-align:center">نوع بخش</th>
+            <th style="text-align:center">تنظیمات اصلی</th>
+            <th style="text-align:center">وضعیت انتشار</th>
             <th style="text-align:center">بازدید</th>
             <th style="text-align:center">آخرین ویرایش</th>
             <th style="text-align:left;width:260px">عملیات و طراحی</th>
@@ -270,17 +292,43 @@ echo flash();
               $isHome = !empty($p['is_home']);
               $isDef  = !empty($p['is_default']);
               $isPub  = !empty($p['active']);
-              $pageUrl = $isHome ? SITE_URL . '/' : (SITE_URL . '/page.php?slug=' . urlencode((string)$p['slug']));
+              $pType  = (string)($p['page_type'] ?? 'page');
+
+              if ($isHome) {
+                  $pageUrl = SITE_URL . '/';
+              } elseif ($pType === 'tests') {
+                  $pageUrl = SITE_URL . '/tests.php';
+              } elseif ($pType === 'courses') {
+                  $pageUrl = SITE_URL . '/courses.php';
+              } elseif ($pType === 'workshops') {
+                  $pageUrl = SITE_URL . '/workshops.php';
+              } elseif ($pType === 'consult') {
+                  $pageUrl = SITE_URL . '/consult.php';
+              } elseif ($pType === 'page') {
+                  $pageUrl = SITE_URL . '/page.php?slug=' . urlencode((string)$p['slug']);
+              } else {
+                  $pageUrl = '';
+              }
+
+              $typeLabels = [
+                  'page'      => 'برگه',
+                  'tests'     => 'آزمون‌ها',
+                  'courses'   => 'دوره‌ها',
+                  'workshops' => 'کارگاه‌ها',
+                  'consult'   => 'مشاوره',
+                  'header'    => 'سربرگ',
+                  'footer'    => 'پاورقی',
+              ];
           ?>
             <tr style="<?= ($isHome || $isDef) ? 'background:#fffdf5' : '' ?>">
               <td>
                 <div style="display:flex;align-items:center;gap:8px">
                   <b style="font-size:14px;color:#0f172a"><?= e($p['title']) ?></b>
                   <?php if ($isHome): ?>
-                    <span class="fr-chip sm warn" style="font-size:11px;font-weight:700">⭐️ صفحه اصلی سایت</span>
+                    <span class="fr-chip sm warn" style="font-size:11px;font-weight:700">⭐️ صفحه اصلی</span>
                   <?php endif; ?>
                   <?php if ($isDef): ?>
-                    <span class="fr-chip sm ok" style="font-size:11px;font-weight:700">⭐️ فعال در تمام صفحات</span>
+                    <span class="fr-chip sm ok" style="font-size:11px;font-weight:700">⭐️ قالب فعال سراسری</span>
                   <?php endif; ?>
                 </div>
                 <div style="font-size:12px;color:#64748b;font-family:monospace;margin-top:3px;direction:ltr;text-align:right">
@@ -288,34 +336,33 @@ echo flash();
                 </div>
               </td>
 
-              <?php if ($curTab === 'page'): ?>
-                <td style="text-align:center">
+              <td style="text-align:center">
+                <span class="fr-chip sm" style="font-size:11px;background:#f1f5f9;color:#334155;font-weight:700">
+                  <?= $tabDefs[$pType]['icon'] ?? '📄' ?> <?= e($typeLabels[$pType] ?? $pType) ?>
+                </span>
+              </td>
+
+              <td style="text-align:center">
+                <?php if ($pType === 'page'): ?>
                   <?php if ($isHome): ?>
-                    <span style="color:#f59e0b;font-size:18px" title="صفحه اصلی فعال">⭐️</span>
+                    <span style="color:#f59e0b;font-size:13px;font-weight:700" title="صفحه اصلی فعال">⭐️ خانه سایت</span>
                   <?php else: ?>
                     <form method="post" style="display:inline">
                       <?= csrf_field() ?>
                       <input type="hidden" name="act" value="set_home">
                       <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
                       <button type="submit" class="fr-btn sm ghost" style="font-size:11px;padding:4px 8px;border-color:#e2e8f0" title="تنظیم این برگه به عنوان صفحه اصلی سایت">
-                        انتخاب به عنوان خانه
+                        تنظیم به عنوان خانه
                       </button>
                     </form>
                   <?php endif; ?>
-                </td>
-                <td style="text-align:center">
-                  <span class="fr-chip sm" style="font-size:11px;background:#f1f5f9;color:#475569">
-                    <?= $p['layout'] === 'blank' ? 'خام / Canvas' : ($p['layout'] === 'landing' ? 'لندینگ پیج' : 'پیش‌فرض (با هدر/فوتر)') ?>
-                  </span>
-                </td>
-              <?php else: ?>
-                <td style="text-align:center">
+                <?php elseif ($pType === 'header' || $pType === 'footer'): ?>
                   <?php if ($isDef): ?>
                     <form method="post" style="display:inline">
                       <?= csrf_field() ?>
                       <input type="hidden" name="act" value="unset_default_template">
                       <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
-                      <input type="hidden" name="type" value="<?= e($curTab) ?>">
+                      <input type="hidden" name="type" value="<?= e($pType) ?>">
                       <button type="submit" class="fr-chip sm ok" style="border:none;cursor:pointer;font-size:11px" title="کلیک کنید تا به هدر/فوتر کلاسیک بازگردد">
                         ⭐️ قالب فعال پیش‌فرض
                       </button>
@@ -325,14 +372,18 @@ echo flash();
                       <?= csrf_field() ?>
                       <input type="hidden" name="act" value="set_default_template">
                       <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
-                      <input type="hidden" name="type" value="<?= e($curTab) ?>">
+                      <input type="hidden" name="type" value="<?= e($pType) ?>">
                       <button type="submit" class="fr-btn sm ghost" style="font-size:11px;padding:4px 8px;border-color:#e2e8f0">
-                        تنظیم به عنوان قالب فعال سایت
+                        فعال‌سازی سراسری
                       </button>
                     </form>
                   <?php endif; ?>
-                </td>
-              <?php endif; ?>
+                <?php else: ?>
+                  <span class="fr-chip sm" style="font-size:11px;background:#f8fafc;color:#64748b">
+                    <?= $isPub ? 'قالب فعال بخش' : 'پیش‌نویس (طرح آزمایشی)' ?>
+                  </span>
+                <?php endif; ?>
+              </td>
 
               <td style="text-align:center">
                 <form method="post" style="display:inline">
@@ -340,7 +391,7 @@ echo flash();
                   <input type="hidden" name="act" value="toggle_active">
                   <input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
                   <button type="submit" class="fr-chip sm <?= $isPub ? 'ok' : 'err' ?>" style="border:none;cursor:pointer;font-size:11px">
-                    <?= $isPub ? '✓ منتشرشده' : '✕ پیش‌نویس' ?>
+                    <?= $isPub ? '✓ فعال / منتشر' : '✕ پیش‌نویس' ?>
                   </button>
                 </form>
               </td>
@@ -359,8 +410,8 @@ echo flash();
                     🎨 صفحه‌ساز
                   </a>
 
-                  <?php if ($curTab === 'page'): ?>
-                    <a href="<?= e($pageUrl) ?>" target="_blank" class="fr-btn sm ghost" title="مشاهده برگه" style="padding:5px 8px">
+                  <?php if ($pageUrl): ?>
+                    <a href="<?= e($pageUrl) ?>" target="_blank" class="fr-btn sm ghost" title="مشاهده پیش‌نمایش زنده" style="padding:5px 8px">
                       👁️
                     </a>
                   <?php endif; ?>
@@ -399,7 +450,7 @@ echo flash();
   <?php endif; ?>
 </div>
 
-<!-- مودال ساخت / ویرایش برگه، هدر یا فوتر -->
+<!-- مودال ساخت / ویرایش برگه، هدر، فوتر و بخش‌ها -->
 <div id="modalAddPage" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:9999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(2px)">
   <div class="fr-card" style="width:100%;max-width:560px;margin:0;max-height:90vh;overflow-y:auto;border-radius:18px;box-shadow:0 20px 40px rgba(0,0,0,0.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:16px">
@@ -411,11 +462,23 @@ echo flash();
       <?= csrf_field() ?>
       <input type="hidden" name="act" value="save">
       <input type="hidden" name="id" id="f_id" value="0">
-      <input type="hidden" name="page_type" id="f_page_type" value="<?= e($curTab) ?>">
+
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px">نوع برگه یا قالب: <span style="color:#ef4444">*</span></label>
+        <select name="page_type" id="f_page_type" class="fr-input fr-select" style="width:100%" onchange="onPageTypeChange(this.value)">
+          <option value="page">📄 برگه استاندارد / عمومی</option>
+          <option value="tests">🧠 کاتالوگ و برگه آزمون‌ها</option>
+          <option value="courses">🎓 کاتالوگ و برگه دوره‌های آموزشی</option>
+          <option value="workshops">👥 کاتالوگ و برگه کارگاه‌ها</option>
+          <option value="consult">💬 کاتالوگ و برگه خدمات مشاوره</option>
+          <option value="header">🔝 سربرگ سایت (Header Template)</option>
+          <option value="footer">🔻 پاورقی سایت (Footer Template)</option>
+        </select>
+      </div>
 
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px">عنوان: <span style="color:#ef4444">*</span></label>
-        <input type="text" name="title" id="f_title" class="fr-input" style="width:100%" required placeholder="مثال: سربرگ مدرن یا درباره ما">
+        <input type="text" name="title" id="f_title" class="fr-input" style="width:100%" required placeholder="مثال: سربرگ مدرن یا کاتالوگ دوره‌ها">
       </div>
 
       <div class="fr-grid cols-2" style="margin-bottom:14px">
@@ -429,50 +492,40 @@ echo flash();
         </div>
       </div>
 
-      <?php if ($curTab === 'page'): ?>
-        <div class="fr-grid cols-2" style="margin-bottom:14px">
-          <div>
-            <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">قالب برگه (Layout):</label>
-            <select name="layout" id="f_layout" class="fr-input fr-select" style="width:100%">
-              <option value="default">پیش‌فرض (با هدر و فوتر سایت)</option>
-              <option value="landing">تمام‌صفحه (لندینگ پیج)</option>
-              <option value="blank">خام (Canvas مستقل بدون هدر/فوتر)</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">وضعیت انتشار:</label>
-            <select name="active" id="f_active" class="fr-input fr-select" style="width:100%">
-              <option value="1">✓ منتشرشده</option>
-              <option value="0">✕ پیش‌نویس</option>
-            </select>
-          </div>
+      <div class="fr-grid cols-2" style="margin-bottom:14px">
+        <div id="sec-layout">
+          <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">قالب چیدمان (Layout):</label>
+          <select name="layout" id="f_layout" class="fr-input fr-select" style="width:100%">
+            <option value="default">پیش‌فرض (همراه هدر و فوتر)</option>
+            <option value="landing">لندینگ تمام‌صفحه</option>
+            <option value="blank">خام / Canvas مستقل</option>
+          </select>
         </div>
-
-        <div style="background:#f8fafc;padding:12px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px">
-          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-            <input type="checkbox" name="is_home" id="f_is_home" value="1" style="width:16px;height:16px">
-            <span><b>⭐️ تنظیم به عنوان صفحه اصلی سایت:</b> محتوای این برگه جایگزین صفحه اصلی (/) شود.</span>
-          </label>
-        </div>
-      <?php else: ?>
-        <div style="margin-bottom:14px">
+        <div>
           <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px">وضعیت انتشار:</label>
           <select name="active" id="f_active" class="fr-input fr-select" style="width:100%">
             <option value="1">✓ فعال و منتشرشده</option>
             <option value="0">✕ پیش‌نویس</option>
           </select>
         </div>
+      </div>
 
-        <div style="background:#f8fafc;padding:12px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px">
-          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-            <input type="checkbox" name="is_default" id="f_is_default" value="1" style="width:16px;height:16px">
-            <span><b>⭐️ تنظیم به عنوان قالب پیش‌فرض سایت:</b> به صورت سراسری در تمام صفحات جایگزین شود.</span>
-          </label>
-        </div>
-      <?php endif; ?>
+      <div id="sec-is-home" style="background:#f8fafc;padding:12px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" name="is_home" id="f_is_home" value="1" style="width:16px;height:16px">
+          <span><b>⭐️ تنظیم به عنوان صفحه اصلی سایت:</b> محتوای این برگه جایگزین صفحه اصلی (/) شود.</span>
+        </label>
+      </div>
+
+      <div id="sec-is-default" style="display:none;background:#f8fafc;padding:12px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" name="is_default" id="f_is_default" value="1" style="width:16px;height:16px">
+          <span><b>⭐️ تنظیم به عنوان قالب پیش‌فرض سایت:</b> به صورت سراسری در تمام صفحات جایگزین شود.</span>
+        </label>
+      </div>
 
       <!-- تنظیمات سئو -->
-      <?php if ($curTab === 'page'): ?>
+      <div id="sec-seo">
         <details style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:18px">
           <summary style="font-size:13px;font-weight:700;color:#334155;cursor:pointer">⚙️ تنظیمات سئو و بهینه‌سازی موتورهای جستجو</summary>
           <div style="margin-top:12px">
@@ -490,7 +543,7 @@ echo flash();
             </label>
           </div>
         </details>
-      <?php endif; ?>
+      </div>
 
       <div style="display:flex;justify-content:flex-end;gap:10px">
         <button type="button" class="fr-btn ghost sm" onclick="closeModal()">انصراف</button>
@@ -501,6 +554,21 @@ echo flash();
 </div>
 
 <script>
+function onPageTypeChange(type) {
+    const isHeaderFooter = (type === 'header' || type === 'footer');
+    const isPage = (type === 'page');
+
+    const secIsHome = document.getElementById('sec-is-home');
+    const secIsDefault = document.getElementById('sec-is-default');
+    const secLayout = document.getElementById('sec-layout');
+    const secSeo = document.getElementById('sec-seo');
+
+    if (secIsHome) secIsHome.style.display = isPage ? 'block' : 'none';
+    if (secIsDefault) secIsDefault.style.display = isHeaderFooter ? 'block' : 'none';
+    if (secLayout) secLayout.style.display = isHeaderFooter ? 'none' : 'block';
+    if (secSeo) secSeo.style.display = isHeaderFooter ? 'none' : 'block';
+}
+
 function closeModal() {
     document.getElementById('modalAddPage').style.display = 'none';
     document.getElementById('pageForm').reset();
@@ -509,16 +577,30 @@ function closeModal() {
 
 function openNewModal(type) {
     document.getElementById('f_id').value = '0';
+    if (!type || type === 'all') type = 'page';
     document.getElementById('f_page_type').value = type;
-    const label = type === 'header' ? 'سربرگ جدید (Header)' : (type === 'footer' ? 'پاورقی جدید (Footer)' : 'برگه جدید');
-    document.getElementById('modalTitle').innerText = '➕ ایجاد ' + label;
+    onPageTypeChange(type);
+
+    const labels = {
+        'page': 'برگه جدید',
+        'tests': 'برگه جدید آزمون‌ها',
+        'courses': 'برگه جدید دوره‌ها',
+        'workshops': 'برگه جدید کارگاه‌ها',
+        'consult': 'برگه جدید مشاوره',
+        'header': 'سربرگ جدید (Header)',
+        'footer': 'پاورقی جدید (Footer)'
+    };
+    document.getElementById('modalTitle').innerText = '➕ ایجاد ' + (labels[type] || 'مورد جدید');
     document.getElementById('modalAddPage').style.display = 'flex';
 }
 
 function openEditModal(page) {
     document.getElementById('modalTitle').innerText = '✏️ ویرایش: «' + page.title + '»';
     document.getElementById('f_id').value = page.id || 0;
-    document.getElementById('f_page_type').value = page.page_type || 'page';
+    const pType = page.page_type || 'page';
+    document.getElementById('f_page_type').value = pType;
+    onPageTypeChange(pType);
+
     document.getElementById('f_title').value = page.title || '';
     document.getElementById('f_name').value = page.name || '';
     document.getElementById('f_slug').value = page.slug || '';

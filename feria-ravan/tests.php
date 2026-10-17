@@ -17,7 +17,20 @@ require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/view.php';
 require_once __DIR__ . '/includes/public-layout.php';
+require_once __DIR__ . '/core/PageBuilder.php';
 fr_bootstrap();
+
+/* ---------------------------------------------------------------------------
+ | برگه تست‌های روان‌شناسی سفارشی طراحی‌شده با صفحه‌ساز دیداری فریا روان
+ * -------------------------------------------------------------------------*/
+if (empty($_GET['classic']) && empty($_GET['default_view']) && empty($_GET['cat']) && empty($_GET['a']) && empty($_GET['q'])) {
+    PageBuilder::ensureSchema();
+    $customPage = PageBuilder::getSectionPage('tests');
+    if ($customPage && !empty($customPage['active'])) {
+        PageBuilder::renderPage($customPage, true);
+        exit;
+    }
+}
 
 $cat = (string)($_GET['cat'] ?? 'all');
 if (!in_array($cat, ['all', 'clinical', 'personality', 'intelligence'], true)) {

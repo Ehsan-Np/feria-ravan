@@ -178,7 +178,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-}
 
 /* آیا قبلاً نسخهٔ رایگان انجام داده؟ */
 $freeDone = (int)DB::val("SELECT COUNT(*) FROM " . DB::t('attempts') .

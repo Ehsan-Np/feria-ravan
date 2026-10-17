@@ -15,14 +15,38 @@ require_once FR_ROOT . '/core/PageBuilder.php';
 $adm = require_admin(['superadmin', 'manager']);
 PageBuilder::ensureSchema();
 
-$pageId = (int)($_GET['id'] ?? 0);
-$page   = $pageId > 0 ? PageBuilder::getPage($pageId) : null;
+$pageId  = (int)($_GET['id'] ?? 0);
+$slug    = trim((string)($_GET['slug'] ?? ''));
+$section = trim((string)($_GET['section'] ?? ''));
+
+$page = null;
+if ($pageId > 0) {
+    $page = PageBuilder::getPage($pageId);
+} elseif ($slug !== '') {
+    $page = PageBuilder::getPage($slug);
+} elseif ($section !== '') {
+    $page = PageBuilder::getSectionPage($section);
+}
+
+if (!$page) {
+    // بازگشت خودکار به صفحه اصلی فعال سایت یا اولین برگه موجود
+    $page = PageBuilder::getHomepage();
+    if (!$page) {
+        $all = PageBuilder::getPages();
+        $page = $all[0] ?? null;
+    }
+    if (!$page) {
+        PageBuilder::seedDefaultPages();
+        $page = PageBuilder::getHomepage();
+    }
+}
 
 if (!$page) {
     flash('برگه موردنظر یافت نشد.', 'err');
     redirect(SITE_URL . '/admin/pages.php');
 }
 
+$allPages = PageBuilder::getPages();
 $widgets = PageBuilder::getAvailableWidgets();
 $isHome  = !empty($page['is_home']);
 ?>
@@ -34,8 +58,9 @@ $isHome  = !empty($page['is_home']);
   <title>صفحه‌ساز: <?= e($page['title']) ?> | فریا روان</title>
   <link rel="icon" type="image/svg+xml" href="<?= SITE_URL ?>/assets/img/favicon.svg">
   
-  <!-- استایل‌های رسمی GrapesJS (فایل محلی با پشتیبانی آفلاین) -->
+  <!-- استایل‌های رسمی GrapesJS (فایل محلی با پشتیبانی آفلاین و نسبی) -->
   <link rel="stylesheet" href="<?= SITE_URL ?>/assets/vendor/grapesjs/grapes.min.css">
+  <link rel="stylesheet" href="../assets/vendor/grapesjs/grapes.min.css">
   
   <style>
     @font-face {
@@ -268,6 +293,16 @@ $isHome  = !empty($page['is_home']);
 </head>
 <body>
 
+  <!-- لودر وضعیت آماده‌سازی محیط صفحه‌ساز -->
+  <div id="pb-loader" style="position:fixed;inset:0;background:#0f172a;z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff">
+    <div style="font-size:42px;margin-bottom:14px;animation:pbSpin 1.8s linear infinite">⚙️</div>
+    <div style="font-size:16px;font-weight:800;color:#f8fafc">در حال بارگذاری محیط صفحه‌ساز دیداری فریا روان...</div>
+    <div style="font-size:12.5px;color:#94a3b8;margin-top:8px">لطفاً چند لحظه شکیبا باشید</div>
+  </div>
+  <style>
+    @keyframes pbSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+
   <!-- نوار ابزار بالای ویرایشگر -->
   <?php
     $pType = $page['page_type'] ?? 'page';
@@ -279,17 +314,35 @@ $isHome  = !empty($page['is_home']);
       <a href="pages.php<?= $backTab ?>" class="pb-btn ghost" style="padding:5px 12px">
         ← بازگشت
       </a>
-      <div style="font-size:14px;font-weight:700;color:#f8fafc">
-        <?= $typeLabel . e($page['title']) ?>
+      
+      <!-- منوی سوئیچ سریع میان بخش‌ها و برگه‌ها -->
+      <select id="pbPageSwitcher" onchange="if(this.value) location.href='page-builder.php?id='+this.value" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:5px 10px;font-size:12px;font-family:inherit;outline:none;cursor:pointer;max-width:240px">
+        <?php foreach ($allPages as $ap): ?>
+          <option value="<?= (int)$ap['id'] ?>" <?= (int)$ap['id'] === (int)$page['id'] ? 'selected' : '' ?>>
+            <?= (!empty($ap['is_home']) ? '🏠 ' : '') . e($ap['title']) ?> (<?= e($ap['page_type']) ?>)
+          </option>
+        <?php endforeach; ?>
+      </select>
+
+      <div style="font-size:13.5px;font-weight:700;color:#f8fafc;display:flex;align-items:center;gap:6px">
         <?php if ($isHome): ?>
-          <span style="background:#f59e0b;color:#0f172a;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-right:6px">⭐️ صفحه اصلی</span>
+          <span style="background:#f59e0b;color:#0f172a;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px">⭐️ صفحه اصلی</span>
         <?php endif; ?>
         <?php if (!empty($page['is_default'])): ?>
-          <span style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-right:6px">⭐️ قالب فعال سراسری</span>
+          <span style="background:#10b981;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px">⭐️ قالب فعال سراسری</span>
         <?php endif; ?>
       </div>
-      <?php if ($pType === 'page'): ?>
-        <a href="<?= $isHome ? SITE_URL . '/' : SITE_URL . '/page.php?slug=' . urlencode((string)$page['slug']) ?>" target="_blank" class="pb-btn ghost" style="font-size:11px;padding:4px 8px" title="مشاهده پیش‌نمایش در تب جدید">
+      <?php if ($pType === 'page' || $pType === 'tests' || $pType === 'courses' || $pType === 'workshops' || $pType === 'consult'): ?>
+        <?php
+          $liveUrl = $isHome ? SITE_URL . '/' : (
+            $pType === 'tests' ? SITE_URL . '/tests.php' : (
+            $pType === 'courses' ? SITE_URL . '/courses.php' : (
+            $pType === 'workshops' ? SITE_URL . '/workshops.php' : (
+            $pType === 'consult' ? SITE_URL . '/consult.php' :
+            SITE_URL . '/page.php?slug=' . urlencode((string)$page['slug'])
+          ))));
+        ?>
+        <a href="<?= e($liveUrl) ?>" target="_blank" class="pb-btn ghost" style="font-size:11px;padding:4px 8px" title="مشاهده پیش‌نمایش در تب جدید">
           👁️ نمایش زنده
         </a>
       <?php endif; ?>
@@ -315,6 +368,9 @@ $isHome  = !empty($page['is_home']);
       </button>
       <button class="pb-btn ghost" onclick="editor.UndoManager.redo()" title="ازنو (Ctrl+Y)">
         ↪
+      </button>
+      <button class="pb-btn ghost" onclick="refreshWidgetContent()" title="نوسازی پیش‌نمایش ویجت‌ها بر مبنای آخرین محتوای دیتابیس">
+        🔄 نوسازی ویجت‌ها
       </button>
       <button class="pb-btn ghost" onclick="togglePreview()" id="btnPreview" title="حالت پیش‌نمایش">
         👁️ پیش‌نمایش
@@ -404,20 +460,33 @@ $isHome  = !empty($page['is_home']);
 
   <div id="pb-toast"></div>
 
-  <!-- اسکریپت رسمی GrapesJS (فایل محلی با پشتیبانی آفلاین کامل) -->
+  <!-- اسکریپت رسمی GrapesJS (فایل محلی با پشتیبانی آفلاین کامل و نسبی) -->
   <script src="<?= SITE_URL ?>/assets/vendor/grapesjs/grapes.min.js"></script>
+  <script>
+  if (typeof grapesjs === 'undefined') {
+      document.write('<script src="../assets/vendor/grapesjs/grapes.min.js"><\/script>');
+  }
+  </script>
 
   <script>
   let editor;
 
   document.addEventListener('DOMContentLoaded', function() {
-      // داده‌های اولیه برگه
-      const initialHtml = <?= json_encode($page['content_html'] ?: '<div class="fr-page-container"><p style="text-align:center;padding:50px;color:#64748b;font-family:inherit">یک بلوک یا ویجت را از منوی سمت راست به این ناحیه بکشید...</p></div>', JSON_UNESCAPED_UNICODE) ?>;
+      // داده‌های اولیه برگه همراه با رندر دیداری ویجت‌ها جهت جلوگیری از صفحه سفید در بوم
+      <?php
+        $rawHtml = (string)($page['content_html'] ?? '');
+        if (trim($rawHtml) === '') {
+            $rawHtml = '<div class="fr-page-container"><p style="text-align:center;padding:50px;color:#64748b;font-family:inherit">یک بلوک یا ویجت را از منوی سمت راست به این ناحیه بکشید...</p></div>';
+        }
+        $editorHtml = PageBuilder::resolveWidgets($rawHtml, true);
+      ?>
+      const initialHtml = <?= json_encode($editorHtml, JSON_UNESCAPED_UNICODE) ?>;
       const initialCss  = <?= json_encode($page['content_css'] ?: '', JSON_UNESCAPED_UNICODE) ?>;
       const initialJson = <?= json_encode($page['builder_json'] ?: null, JSON_UNESCAPED_UNICODE) ?>;
 
       // ۱. راه‌اندازی GrapesJS بر اساس معماری PHPageBuilder
-      editor = grapesjs.init({
+      try {
+        editor = grapesjs.init({
           container: '#gjs',
           fromElement: false,
           height: '100%',
@@ -483,9 +552,29 @@ $isHome  = !empty($page['is_home']);
               }
           }
       });
+      } catch (initErr) {
+          console.error('PageBuilder Init Error:', initErr);
+          const ldr = document.getElementById('pb-loader');
+          if (ldr) {
+              ldr.innerHTML = `
+                <div style="max-width:520px;background:#1e293b;border:1px solid #ef4444;border-radius:16px;padding:26px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.5)">
+                  <h3 style="color:#f87171;margin:0 0 12px;font-size:17px">خطا در راه‌اندازی صفحه‌ساز دیداری</h3>
+                  <p style="font-size:13px;color:#cbd5e1;line-height:1.8;margin:0 0 18px">${initErr.message || 'خطای بارگذاری کتابخانه ویرایشگر'}</p>
+                  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                    <button onclick="location.reload()" class="pb-btn primary">🔄 بارگذاری مجدد</button>
+                    <a href="pages.php" class="pb-btn ghost">← بازگشت به لیست برگه‌ها</a>
+                  </div>
+                </div>
+              `;
+          }
+          return;
+      }
 
       // ۲. تزریق فونت وزیرمتن و تنظیمات RTL به فریم بوم
       editor.on('load', function() {
+          const ldr = document.getElementById('pb-loader');
+          if (ldr) ldr.style.display = 'none';
+
           const doc = editor.Canvas.getDocument();
           if (doc) {
               const head = doc.head;
@@ -501,10 +590,39 @@ $isHome  = !empty($page['is_home']);
                   direction: rtl;
                   text-align: right;
                   font-family: 'Vazirmatn', system-ui, sans-serif !important;
+                  background-color: #ffffff;
+                  min-height: 100vh;
+                  padding-bottom: 60px;
+                }
+                [data-widget]:empty {
+                  min-height: 120px !important;
+                  background: #f8fafc !important;
+                  border: 2px dashed #3b82f6 !important;
+                  border-radius: 12px !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  position: relative !important;
+                  padding: 24px !important;
+                  margin: 16px auto !important;
+                }
+                [data-widget]:empty::after {
+                  content: "ویجت: " attr(data-widget);
+                  color: #2563eb !important;
+                  font-size: 14px !important;
+                  font-weight: 700 !important;
+                  font-family: 'Vazirmatn', sans-serif !important;
                 }
               `;
               head.appendChild(linkFont);
           }
+      });
+
+      // تضمین بسته شدن لودر
+      setTimeout(function() {
+          const ldr = document.getElementById('pb-loader');
+          if (ldr && ldr.style.display !== 'none') ldr.style.display = 'none';
+      }, 2500);
       });
 
       // ۳. ثبت ویجت‌های اختصاصی فریا روان در BlockManager
@@ -576,19 +694,46 @@ $isHome  = !empty($page['is_home']);
           content: '<div style="text-align:center;margin:16px 0"><img src="<?= SITE_URL ?>/assets/img/consultant-1.jpg" alt="تصویر" style="max-width:100%;height:auto;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,0.06)" /></div>',
       });
 
-      // ۴. بارگذاری محتوای برگه
+      // ۴. بارگذاری محتوای برگه با اولویت داده‌های زنده و ساختار کامل
+      let projectLoaded = false;
       if (initialJson) {
           try {
-              editor.loadProjectData(JSON.parse(initialJson));
+              const pData = JSON.parse(initialJson);
+              if (pData && (pData.pages || pData.components)) {
+                  editor.loadProjectData(pData);
+                  projectLoaded = true;
+              }
           } catch (e) {
-              editor.setComponents(initialHtml);
-              editor.setStyle(initialCss);
+              console.warn('Fallback to initialHtml:', e);
           }
-      } else {
+      }
+      if (!projectLoaded) {
           editor.setComponents(initialHtml);
           editor.setStyle(initialCss);
       }
+      } catch (err) {
+          console.error('fr_page_builder_catch: GrapesJS init error', err);
+          const loader = document.getElementById('pb-loader');
+          if (loader) {
+              loader.innerHTML = '<div style="background:#1e293b;border:1px solid #ef4444;border-radius:16px;padding:30px;max-width:500px;text-align:center;box-shadow:0 20px 40px rgba(0,0,0,0.4)">' +
+                  '<div style="font-size:40px;margin-bottom:12px">⚠️</div>' +
+                  '<h3 style="color:#ef4444;margin:0 0 10px;font-size:17px">خطا در راه‌اندازی ویرایشگر دیداری</h3>' +
+                  '<p style="color:#94a3b8;font-size:13px;line-height:1.7;margin:0 0 16px">' + (err.message || 'مشکلی در بارگذاری کتابخانه رخ داد.') + '</p>' +
+                  '<a href="pages.php" class="pb-btn ghost" style="margin-left:8px">بازگشت به لیست برگه‌ها</a>' +
+                  '<button onclick="location.reload()" class="pb-btn primary">تلاش دوباره</button>' +
+                  '</div>';
+          }
+      }
   });
+
+  // تابع بازنشانی محتوا بر اساس آخرین تغییرات ویجت‌ها
+  function refreshWidgetContent() {
+      if (confirm('آیا مطمئن هستید که می‌خواهید پیش‌نمایش تمام ویجت‌ها را از نو بارگذاری کنید؟')) {
+          editor.setComponents(initialHtml);
+          editor.setStyle(initialCss);
+          showToast('پیش‌نمایش ویجت‌ها با موفقیت نوسازی شد 🔄', false);
+      }
+  }
 
   // کنترل تغییر نماهای دستگاه
   function setDevice(device) {

@@ -16,7 +16,20 @@ require_once __DIR__ . '/includes/public-layout.php';
 require_once __DIR__ . '/includes/event-pricing.php';
 require_once __DIR__ . '/core/Kavenegar.php';
 require_once __DIR__ . '/core/Zarinpal.php';
+require_once __DIR__ . '/core/PageBuilder.php';
 fr_bootstrap();
+
+/* ---------------------------------------------------------------------------
+ | برگه دوره‌های آموزشی سفارشی طراحی‌شده با صفحه‌ساز دیداری فریا روان
+ * -------------------------------------------------------------------------*/
+if (empty($_GET['classic']) && empty($_GET['default_view']) && class_exists('PageBuilder')) {
+    PageBuilder::ensureSchema();
+    $customPage = PageBuilder::getSectionPage('courses');
+    if ($customPage && !empty($customPage['active'])) {
+        PageBuilder::renderPage($customPage, true);
+        exit;
+    }
+}
 
 $rows = DB::all("SELECT e.*, (SELECT COALESCE(SUM(1 + COALESCE(r.companion_count,0)),0)
                     FROM " . DB::t('event_registrations') . " r

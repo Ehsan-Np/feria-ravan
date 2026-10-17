@@ -18,8 +18,17 @@ declare(strict_types=1);
 /** موجودی قابل‌استفادهٔ کاربر (جمع تراکنش‌های منقضی‌نشده) */
 function wallet_balance(int $userId): int
 {
-    return (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM ' . DB::t('wallet_transactions')
-        . ' WHERE user_id=? AND (expires_at IS NULL OR expires_at>NOW())', [$userId]);
+    try {
+        return (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM ' . DB::t('wallet_transactions')
+            . ' WHERE user_id=? AND (expires_at IS NULL OR expires_at>NOW())', [$userId]);
+    } catch (Throwable $e) {
+        try {
+            return (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM ' . DB::t('wallet_transactions')
+                . ' WHERE user_id=?', [$userId]);
+        } catch (Throwable $e2) {
+            return 0;
+        }
+    }
 }
 
 /** سینک کشِ موجودی در جدول کاربران */
@@ -38,12 +47,15 @@ function wallet_credit(int $userId, int $amount, string $kind, string $desc, str
 {
     if ($amount <= 0) throw new RuntimeException('مبلغ شارژ باید بزرگ‌تر از صفر باشد.');
     if (!in_array($kind, ['credit','refund','gift','adjustment'], true)) $kind = 'credit';
-    $id = DB::insert('wallet_transactions', [
+    $rec = [
         'user_id' => $userId, 'amount' => $amount, 'kind' => $kind,
         'reference_type' => $refType !== '' ? $refType : null,
         'reference_id'   => $refId > 0 ? $refId : null,
         'description'    => mb_substr($desc, 0, 255),
-    ]);
+        'type'           => $kind,
+        'note'           => mb_substr($desc, 0, 255),
+    ];
+    $id = DB::insert('wallet_transactions', $rec);
     wallet_sync($userId);
     log_activity('wallet_credit', 'user', $userId, ['amount'=>$amount, 'kind'=>$kind]);
     return $id;
@@ -62,14 +74,15 @@ function wallet_debit(int $userId, int $amount, string $desc, string $refType = 
     try {
         // قفل ردیف کاربر تا دو خرید هم‌زمان موجودی را منفی نکنند
         DB::run('SELECT id FROM ' . DB::t('users') . ' WHERE id=? FOR UPDATE', [$userId]);
-        $bal = (int)DB::val('SELECT COALESCE(SUM(amount),0) FROM ' . DB::t('wallet_transactions')
-            . ' WHERE user_id=? AND (expires_at IS NULL OR expires_at>NOW())', [$userId]);
+        $bal = wallet_balance($userId);
         if ($bal < $amount) throw new RuntimeException('موجودی کیف پول کافی نیست.');
         $id = DB::insert('wallet_transactions', [
             'user_id' => $userId, 'amount' => -$amount, 'kind' => 'debit',
             'reference_type' => $refType !== '' ? $refType : null,
             'reference_id'   => $refId > 0 ? $refId : null,
             'description'    => mb_substr($desc, 0, 255),
+            'type'           => 'debit',
+            'note'           => mb_substr($desc, 0, 255),
         ]);
         wallet_sync($userId);
         if ($own) $pdo->commit();
