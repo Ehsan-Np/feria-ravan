@@ -1090,6 +1090,12 @@ function fr_update_pipeline(bool $force = false): void
             TestFields::ensureSchema();
         } catch (Throwable $e) { error_log('feria: 3.5.2 test custom fields migration: ' . $e->getMessage()); }
 
+        /* ---- ۳٫۵٫۳: تفکیک فیلدهای اجباری و اختیاری، ضامن تغییر سریع و به‌روزرسانی اعتبارسنجی ---- */
+        try {
+            require_once FR_ROOT . '/core/TestFields.php';
+            TestFields::ensureSchema();
+        } catch (Throwable $e) { error_log('feria: 3.5.3 required-optional fields migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
