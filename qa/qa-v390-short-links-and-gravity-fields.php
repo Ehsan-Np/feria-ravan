@@ -296,8 +296,10 @@ echo "\n--- بخش ۸: بررسی نسخه ۳٫۹٫۰ و فایل‌های ما�
 assert_test(FR_RELEASE === '3.9.0', 'تعریف ثابت FR_RELEASE به نگارش 3.9.0');
 assert_test(FR_VERSION === '3.9.0', 'تعریف ثابت FR_VERSION به نگارش 3.9.0');
 
-$migrationPath = FR_ROOT . '/database/migrations/v390_short_links_and_gravity_fields.sql';
-assert_test(file_exists($migrationPath), 'وجود فایل مایگریشن v390_short_links_and_gravity_fields.sql');
+$migrationPath = file_exists(FR_ROOT . '/database/migrations/v390_short_links_and_gravity_fields.sql')
+    ? FR_ROOT . '/database/migrations/v390_short_links_and_gravity_fields.sql'
+    : FR_ROOT . '/database/migrations/v470_unified_migration.sql';
+assert_test(file_exists($migrationPath), 'وجود فایل مایگریشن تجمیعی یا اختصاصی');
 $sqlContent = (string)file_get_contents($migrationPath);
 assert_test(str_contains($sqlContent, 'display_stage'), 'دستور افزودن ستون display_stage در فایل مایگریشن SQL');
 

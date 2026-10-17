@@ -61,7 +61,7 @@ assert_test(file_exists(FR_ROOT . '/core/MenuBuilder.php'), "core/MenuBuilder.ph
 assert_test(file_exists(FR_ROOT . '/core/PageBuilder.php'), "core/PageBuilder.php exists");
 assert_test(file_exists(FR_ROOT . '/admin/menus.php'), "admin/menus.php exists");
 assert_test(file_exists(FR_ROOT . '/admin/pages.php'), "admin/pages.php exists");
-assert_test(file_exists(FR_ROOT . '/database/migrations/v370_menu_builder_and_header_footer.sql'), "database/migrations/v370 migration SQL file exists");
+assert_test(file_exists(FR_ROOT . '/database/migrations/v370_menu_builder_and_header_footer.sql') || file_exists(FR_ROOT . '/database/migrations/v470_unified_migration.sql'), "database/migrations migration SQL file exists");
 
 // بخش ۲: بررسی خودترمیمی اسکیما و جداول فهرست‌ها
 echo "\n2. Testing MenuBuilder Database Schema & Self-Healing:\n";

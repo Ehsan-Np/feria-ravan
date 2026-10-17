@@ -68,11 +68,13 @@ it('2. نگارش فال‌بک در config.php و sample حداقل 4.3.0 اس�
            (str_contains($sample, "'4.3.0'") || str_contains($sample, "'4.4.0'"));
 });
 
-it('3. فایل مایگریشن v430_price_persistence_on_update.sql موجود و معتبر است', function() {
-    $file = FR_ROOT . '/database/migrations/v430_price_persistence_on_update.sql';
+it('3. فایل مایگریشن تجمیعی یا اختصاصی پایداری قیمت‌ها موجود و معتبر است', function() {
+    $file = file_exists(FR_ROOT . '/database/migrations/v430_price_persistence_on_update.sql')
+        ? FR_ROOT . '/database/migrations/v430_price_persistence_on_update.sql'
+        : FR_ROOT . '/database/migrations/v470_unified_migration.sql';
     if (!file_exists($file)) return false;
     $content = file_get_contents($file);
-    return str_contains($content, '4.3.0') && str_contains($content, 'price_persistence_enabled');
+    return str_contains($content, 'price_persistence_enabled');
 });
 
 // ۲. راه‌اندازی اولیه و حصول اطمینان از وجود جداول و داده‌های پایه

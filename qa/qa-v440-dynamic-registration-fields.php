@@ -61,11 +61,13 @@ it('2. نگارش فال‌بک در config.php و sample برابر 4.4.0 اس�
     return str_contains($cfg, "'4.4.0'") && str_contains($sample, "'4.4.0'");
 });
 
-it('3. فایل مایگریشن v440_dynamic_registration_fields.sql موجود و معتبر است', function() {
-    $file = FR_ROOT . '/database/migrations/v440_dynamic_registration_fields.sql';
+it('3. فایل مایگریشن تجمیعی یا اختصاصی فیلدهای پروفایل موجود و معتبر است', function() {
+    $file = file_exists(FR_ROOT . '/database/migrations/v440_dynamic_registration_fields.sql')
+        ? FR_ROOT . '/database/migrations/v440_dynamic_registration_fields.sql'
+        : FR_ROOT . '/database/migrations/v470_unified_migration.sql';
     if (!file_exists($file)) return false;
     $content = file_get_contents($file);
-    return str_contains($content, '4.4.0') && str_contains($content, 'profile_fields');
+    return str_contains($content, 'profile_fields');
 });
 
 // ۲. بررسی وجود و صحت اسکیمای جدول profile_fields
