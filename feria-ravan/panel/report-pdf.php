@@ -690,6 +690,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 </div>
 
 <script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
+<script src="<?= SITE_URL ?>/assets/js/html2pdf.bundle.min.js?v=<?= FR_VERSION ?>"></script>
 <script>
 /* ══════════════════════════════════════════════════════════════════
    رسم باکیفیت و برداری نمودارهای اختصاصی چاپ ISO A4 روی Canvas
@@ -789,12 +790,49 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     if (hint) {
       hint.style.display = 'block';
     }
-    // باز کردن پنجره چاپ مرورگر که خروجی برداری ۱۰۰٪ دقیق A4 تولید می‌کند
-    window.print();
+
+    var btn = document.querySelector('.pr-btn-download');
+    var origText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.innerHTML = '⏳ در حال دانلود PDF...';
+      btn.disabled = true;
+    }
+
+    var element = document.getElementById('reportSheet');
+    if (window.html2pdf && element) {
+      var opt = {
+        margin:       [8, 8, 8, 8],
+        filename:     <?= json_encode($docTitle . '.pdf', JSON_UNESCAPED_UNICODE) ?>,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(element).save().then(function () {
+        if (btn) {
+          btn.innerHTML = '✅ دریافت شد!';
+          setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 2500);
+        }
+      }).catch(function (e) {
+        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+        window.print();
+      });
+    } else {
+      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+      window.print();
+    }
   };
 
-  // چاپ خودکار در صورت فراخوانی با ?auto=1
-  if (new URLSearchParams(location.search).get('auto') === '1') {
+  // پردازش خودکار پارامترهای auto=1 و download=1
+  var urlParams = new URLSearchParams(location.search);
+  if (urlParams.get('download') === '1' || location.search.indexOf('download=1') !== -1) {
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () {
+        setTimeout(window.frSavePdf, 500);
+      });
+    } else {
+      setTimeout(window.frSavePdf, 800);
+    }
+  } else if (urlParams.get('auto') === '1' || location.search.indexOf('auto=1') !== -1) {
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(function () {
         setTimeout(function () { window.print(); }, 400);

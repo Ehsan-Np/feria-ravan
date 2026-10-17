@@ -1180,6 +1180,15 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.5.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۰. نگارش ۴٫۶٫۰: ارتقای موتور دانلود مستقیم فایل PDF، پایدارسازی دکمه کارنامه و تضمین عدم بروز خطای ۵۰۰
+        // ---------------------------------------------------------------------
+        try {
+            if (DB::setting('report_pdf_download_mode', null) === null) {
+                DB::setSetting('report_pdf_download_mode', 'direct');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.6.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
