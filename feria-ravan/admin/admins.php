@@ -14,16 +14,20 @@ $act = (string)($_POST['act'] ?? '');
 if ($act === 'add') {
     $uname = mb_substr(trim((string)($_POST['username'] ?? '')), 0, 60);
     $name  = mb_substr(trim((string)($_POST['display_name'] ?? '')), 0, 120);
+    $mob   = clean_mobile(trim((string)($_POST['mobile'] ?? '')));
+    $email = trim((string)($_POST['email'] ?? ''));
     $pass  = (string)($_POST['password'] ?? '');
     $rid   = (int)($_POST['role_id'] ?? 0);
     if (!preg_match('/^[a-zA-Z0-9_.\-]{3,60}$/', $uname)) { flash('نام کاربری معتبر نیست (انگلیسی، حداقل ۳ کاراکتر).', 'err'); redirect(SITE_URL . '/admin/admins.php'); }
     if (mb_strlen($pass) < 8) { flash('رمز باید حداقل ۸ کاراکتر باشد.', 'err'); redirect(SITE_URL . '/admin/admins.php'); }
     $dup = DB::val("SELECT id FROM " . DB::t('admins') . " WHERE username=?", [$uname]);
     if ($dup) { flash('این نام کاربری تکراری است.', 'err'); redirect(SITE_URL . '/admin/admins.php'); }
+    if ($mob !== '' && !valid_mobile($mob)) { flash('شماره موبایل وارد شده معتبر نیست.', 'err'); redirect(SITE_URL . '/admin/admins.php'); }
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) { flash('ایمیل وارد شده معتبر نیست.', 'err'); redirect(SITE_URL . '/admin/admins.php'); }
     if ($rid > 0 && !DB::val("SELECT id FROM " . DB::t('admin_roles') . " WHERE id=?", [$rid])) $rid = 0;
-    DB::run("INSERT INTO " . DB::t('admins') . " (username,password_hash,display_name,mobile,email,avatar,role,role_id,status)
-             VALUES (?,?,?,NULL,NULL,NULL,'support',?, 'active')",
-            [$uname, password_hash($pass, PASSWORD_ARGON2ID), $name !== '' ? $name : $uname, $rid ?: null]);
+    DB::run("INSERT INTO " . DB::t('admins') . " (username,password,password_hash,display_name,mobile,email,avatar,role,role_id,status)
+             VALUES (?,?,?,?,?,?,NULL,'support',?, 'active')",
+            [$uname, password_hash($pass, PASSWORD_ARGON2ID), password_hash($pass, PASSWORD_ARGON2ID), $name !== '' ? $name : $uname, $mob ?: null, $email ?: null, $rid ?: null]);
     log_activity('admin_add_admin', 'admin', (int)$adm['id'], ['user' => $uname]);
     flash('مدیر جدید ساخته شد ✅');
     redirect(SITE_URL . '/admin/admins.php');
@@ -124,15 +128,17 @@ echo flash();
   <?php endif; ?>
   <form method="post" class="fr-grid cols-2" style="align-items:end">
     <?= csrf_field() ?><input type="hidden" name="act" value="add">
-    <div class="fr-field"><label>نام کاربری (انگلیسی)</label><input class="fr-input" name="username" required style="direction:ltr" maxlength="60" placeholder="<?= $fromUser ? 'مثلاً ' . e($fromUser['mobile']) : '' ?>"></div>
+    <div class="fr-field"><label>نام کاربری (انگلیسی) *</label><input class="fr-input" name="username" required style="direction:ltr" maxlength="60" placeholder="<?= $fromUser ? 'مثلاً ' . e($fromUser['mobile']) : '' ?>"></div>
     <div class="fr-field"><label>نام نمایشی</label><input class="fr-input" name="display_name" maxlength="120" value="<?= $fromUser ? e(trim(($fromUser['first_name'] ?? '') . ' ' . ($fromUser['last_name'] ?? ''))) : '' ?>"></div>
-    <div class="fr-field"><label>رمز عبور (حداقل ۸ کاراکتر)</label><input class="fr-input" type="password" name="password" required minlength="8"></div>
+    <div class="fr-field"><label>شماره موبایل (جهت ورود OTP و بازیابی رمز)</label><input class="fr-input" name="mobile" style="direction:ltr;text-align:right" inputmode="numeric" maxlength="11" placeholder="09xxxxxxxxx" value="<?= $fromUser ? e($fromUser['mobile'] ?? '') : '' ?>"></div>
+    <div class="fr-field"><label>ایمیل</label><input class="fr-input" name="email" type="email" style="direction:ltr;text-align:right" placeholder="admin@example.com"></div>
+    <div class="fr-field"><label>رمز عبور (حداقل ۸ کاراکتر) *</label><input class="fr-input" type="password" name="password" required minlength="8"></div>
     <div class="fr-field"><label>نقش</label>
       <select class="fr-select" name="role_id">
         <option value="0">پشتیبان (پیش‌فرض قدیمی)</option>
         <?php foreach ($roleMap as $rid => $rt): ?><option value="<?= (int)$rid ?>"><?= e($rt) ?></option><?php endforeach; ?>
       </select></div>
-    <div><button class="fr-btn">ساخت مدیر ✅</button></div>
+    <div style="grid-column: 1 / -1"><button class="fr-btn">ساخت مدیر ✅</button></div>
   </form>
 </div>
 <?php admin_layout_end(); ?>

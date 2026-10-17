@@ -612,7 +612,7 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}otps` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `mobile` VARCHAR(11) NOT NULL,
   `code` VARCHAR(10) NOT NULL,
-  `purpose` ENUM('register','login','reset','mobile_change') NOT NULL DEFAULT 'login',
+  `purpose` VARCHAR(32) NOT NULL DEFAULT 'login',
   `expires_at` DATETIME NOT NULL,
   `used_at` DATETIME NULL,
   `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,

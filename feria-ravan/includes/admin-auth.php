@@ -2,9 +2,14 @@
 /**
  * ============================================================================
  *  احراز هویت مدیران — جدا از سشن کاربران، با Rate-Limit و لاگ کامل
+ *  ─ ورود با رمز عبور (نام کاربری / موبایل / ایمیل)
+ *  ─ ورود با رمز یک‌بارمصرف پیامکی (Admin OTP Login)
+ *  ─ بازیابی و تغییر رمز عبور مدیران با پیامک (Admin Password Reset)
  * ============================================================================
  */
 declare(strict_types=1);
+
+require_once __DIR__ . '/auth.php';
 
 /** مدیر جاری */
 function current_admin(): ?array
@@ -64,40 +69,46 @@ function require_admin(array $roles = ['superadmin','super','manager','admin','s
     redirect(SITE_URL . '/admin/login.php?back=' . urlencode($_SERVER['REQUEST_URI'] ?? ''));
 }
 
-/** لاگین مدیر */
-function admin_login(string $username, string $password): array
+/** یافتن رکورد مدیر بر اساس نام کاربری، موبایل یا ایمیل */
+function admin_find_by_identity(string $identity): ?array
 {
-    if (!rate_limit('admin_login:' . $username, 8, 900)) {
-        return ['ok'=>false,'message'=>'تلاش‌های ناموفق زیاد؛ ۱۵ دقیقه بعد تلاش کنید.'];
-    }
+    $clean = trim($identity);
+    if ($clean === '') return null;
+    $cleanMob = clean_mobile($clean);
     try {
-        $a = DB::one('SELECT * FROM ' . DB::t('admins') . ' WHERE username=?', [$username]);
+        return DB::one(
+            'SELECT * FROM ' . DB::t('admins') . '
+             WHERE (username = ?
+                OR (mobile = ? AND mobile IS NOT NULL AND mobile != "")
+                OR (email = ? AND email IS NOT NULL AND email != ""))
+             ORDER BY (status = "active") DESC, id ASC LIMIT 1',
+            [$clean, $cleanMob, $clean]
+        );
     } catch (Throwable $e) {
-        $a = null;
+        return null;
     }
-    if (!$a || (isset($a['status']) && $a['status'] !== 'active')) {
-        log_activity('admin_login_fail', null, null, ['user'=>$username]);
-        return ['ok'=>false,'message'=>'نام کاربری یا رمز اشتباه است.'];
-    }
-    $hash = (string)($a['password_hash'] ?? ($a['password'] ?? ''));
-    if ($hash === '' || !password_verify($password, $hash)) {
-        log_activity('admin_login_fail', null, null, ['user'=>$username]);
-        return ['ok'=>false,'message'=>'نام کاربری یا رمز اشتباه است.'];
-    }
+}
+
+/** برقراری نشست مدیریت و ثبت لاگ‌های امنیتی */
+function do_admin_login(array $a, string $method = 'password'): void
+{
     if (session_status() === PHP_SESSION_ACTIVE) @session_regenerate_id(true);
     $_SESSION['admin_id'] = (int)$a['id'];
     try {
-        DB::insert('sessions', ['id'=>session_id(),'admin_id'=>$a['id'],'ip'=>client_ip_bin(),
-            'user_agent'=>substr($_SERVER['HTTP_USER_AGENT']??'',0,255),'device'=>client_device()]);
+        DB::insert('sessions', [
+            'id'         => session_id(),
+            'admin_id'   => $a['id'],
+            'ip'         => client_ip_bin(),
+            'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+            'device'     => client_device(),
+        ]);
     } catch (Throwable $e) {}
     try {
         DB::run('UPDATE ' . DB::t('admins') . ' SET last_login_at=NOW() WHERE id=?', [$a['id']]);
     } catch (Throwable $e) {
         try { DB::run('UPDATE ' . DB::t('admins') . ' SET last_login=NOW() WHERE id=?', [$a['id']]); } catch (Throwable $e2) {}
     }
-    // نسخهٔ ۱٫۶: پنل مدیریت و پنل کاربری کاملاً جدا هستند — ورود مدیر فقط سشن مدیر می‌سازد
-    // و مدیر برای استفاده از امکانات کاربری، جداگانه و با موبایل/رمز خودش وارد سایت می‌شود.
-    // اتصال خودکار حساب کاربری متناظر به نشست مدیر جهت دسترسی بدون مانع به پنل کاربری
+    // اتصال خودکار حساب کاربری متناظر به نشست مدیر جهت دسترسی به پنل کاربری
     try {
         if (!empty($a['user_id'])) {
             $uRow = DB::one('SELECT id FROM ' . DB::t('users') . " WHERE id=? AND status='active'", [$a['user_id']]);
@@ -110,19 +121,237 @@ function admin_login(string $username, string $password): array
             }
         }
     } catch (Throwable $e) {}
-    log_activity('admin_login', 'admin', (int)$a['id']);
-    return ['ok'=>true];
+    log_activity($method === 'otp' ? 'admin_login_otp' : 'admin_login', 'admin', (int)$a['id']);
+}
+
+/** لاگین مدیر با نام کاربری، موبایل یا ایمیل و رمز عبور */
+function admin_login(string $identity, string $password): array
+{
+    $cleanIdent = trim($identity);
+    if (!rate_limit('admin_login:' . $cleanIdent, 8, 900)) {
+        return ['ok' => false, 'message' => 'تلاش‌های ناموفق زیاد؛ ۱۵ دقیقه بعد تلاش کنید.'];
+    }
+    $a = admin_find_by_identity($cleanIdent);
+    if (!$a || (isset($a['status']) && $a['status'] !== 'active')) {
+        log_activity('admin_login_fail', null, null, ['user' => $cleanIdent]);
+        return ['ok' => false, 'message' => 'نام کاربری یا رمز اشتباه است.'];
+    }
+    $hash = (string)($a['password_hash'] ?? ($a['password'] ?? ''));
+    if ($hash === '' || !password_verify($password, $hash)) {
+        log_activity('admin_login_fail', null, null, ['user' => $cleanIdent]);
+        return ['ok' => false, 'message' => 'نام کاربری یا رمز اشتباه است.'];
+    }
+    do_admin_login($a, 'password');
+    return ['ok' => true, 'redirect' => SITE_URL . '/admin/dashboard.php'];
+}
+
+/** ارسال کد تأیید ورود پیامکی مدیر (گام ۱ ورود OTP) */
+function admin_otp_login_send(string $identity): array
+{
+    $identity = trim($identity);
+    if ($identity === '') {
+        return ['ok' => false, 'message' => 'لطفاً شماره موبایل یا نام کاربری مدیر را وارد فرمایید.'];
+    }
+    $a = admin_find_by_identity($identity);
+    if (!$a) {
+        return ['ok' => false, 'message' => 'مدیری با این مشخصات یافت نشد.'];
+    }
+    if (isset($a['status']) && $a['status'] !== 'active') {
+        return ['ok' => false, 'message' => 'حساب این مدیر غیرفعال یا مسدود است؛ با مدیر ارشد تماس بگیرید.'];
+    }
+    $mobile = clean_mobile((string)($a['mobile'] ?? ''));
+    if (!valid_mobile($mobile)) {
+        return ['ok' => false, 'message' => 'شماره موبایل برای این حساب کاربری ثبت نشده است؛ جهت ورود با نام کاربری و رمز اقدام نمایید.'];
+    }
+    if (!rate_limit('admin_otp_send:' . $mobile, 5, 600)) {
+        return ['ok' => false, 'message' => 'تعداد درخواست‌های کد بیش از حد مجاز است؛ لطفاً چند دقیقه دیگر تلاش کنید.'];
+    }
+
+    $res = otp_send($mobile, 'admin_login');
+    if (!$res['ok']) {
+        return $res;
+    }
+
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+    $_SESSION['pending_admin_otp_login'] = [
+        'admin_id' => (int)$a['id'],
+        'mobile'   => $mobile,
+        'exp'      => time() + 300,
+    ];
+
+    $masked = substr($mobile, 0, 4) . '***' . substr($mobile, -4);
+    return [
+        'ok'            => true,
+        'step'          => 2,
+        'mobile'        => $mobile,
+        'masked_mobile' => $masked,
+        'ttl'           => $res['ttl'] ?? 120,
+        'debug_code'    => $res['debug_code'] ?? null,
+        'message'       => 'کد تأیید ورود مدیریت به شمارهٔ ' . $masked . ' پیامک شد 📩',
+    ];
+}
+
+/** تأیید کد و ورود مدیر (گام ۲ ورود OTP) */
+function admin_otp_login_verify(string $code, ?string $mobile = null): array
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+    $pending = $_SESSION['pending_admin_otp_login'] ?? null;
+    $targetMobile = $mobile ? clean_mobile($mobile) : clean_mobile((string)($pending['mobile'] ?? ''));
+
+    if (!$targetMobile || !valid_mobile($targetMobile)) {
+        return ['ok' => false, 'message' => 'نشست ورود منقضی شده است؛ لطفاً مجدداً درخواست کد ارسال فرمایید.'];
+    }
+
+    if (!rate_limit('admin_otp_verify:' . $targetMobile, 8, 600)) {
+        return ['ok' => false, 'message' => 'تلاش‌های ناموفق بیش از حد مجاز است؛ لطفاً کمی بعد تلاش کنید.'];
+    }
+
+    $v = otp_verify($targetMobile, $code, 'admin_login');
+    if (!$v['ok']) {
+        return $v;
+    }
+
+    $adminId = (int)($pending['admin_id'] ?? 0);
+    $admin = null;
+    if ($adminId > 0) {
+        $admin = DB::one('SELECT * FROM ' . DB::t('admins') . ' WHERE id=? AND status="active"', [$adminId]);
+    }
+    if (!$admin) {
+        $admin = DB::one('SELECT * FROM ' . DB::t('admins') . ' WHERE mobile=? AND status="active" ORDER BY id ASC LIMIT 1', [$targetMobile]);
+    }
+    if (!$admin) {
+        return ['ok' => false, 'message' => 'حساب کاربری فعال مدیر یافت نشد.'];
+    }
+
+    unset($_SESSION['pending_admin_otp_login']);
+    do_admin_login($admin, 'otp');
+
+    return [
+        'ok'       => true,
+        'message'  => 'ورود با موفقیت انجام شد ✅',
+        'redirect' => SITE_URL . '/admin/dashboard.php',
+    ];
+}
+
+/** ارسال کد تأیید بازیابی رمز عبور مدیر (گام ۱ ریست پسورد) */
+function admin_password_reset_send(string $identity): array
+{
+    $identity = trim($identity);
+    if ($identity === '') {
+        return ['ok' => false, 'message' => 'لطفاً نام کاربری، شماره موبایل یا ایمیل مدیر را وارد فرمایید.'];
+    }
+
+    $a = admin_find_by_identity($identity);
+    if (!$a) {
+        return ['ok' => false, 'message' => 'حساب مدیر فعالی با این مشخصات یافت نشد.'];
+    }
+    if (isset($a['status']) && $a['status'] !== 'active') {
+        return ['ok' => false, 'message' => 'حساب این مدیر غیرفعال یا مسدود است؛ لطفاً با مدیر ارشد تماس بگیرید.'];
+    }
+
+    $mobile = clean_mobile((string)($a['mobile'] ?? ''));
+    if (!valid_mobile($mobile)) {
+        return ['ok' => false, 'message' => 'شماره موبایل برای این حساب مدیر ثبت نشده است؛ جهت بازنشانی رمز با مدیر ارشد تماس بگیرید.'];
+    }
+
+    if (!rate_limit('admin_pwd_reset_send:' . $mobile, 5, 600)) {
+        return ['ok' => false, 'message' => 'تعداد درخواست‌های بازیابی بیش از حد مجاز است؛ لطفاً چند دقیقه دیگر تلاش فرمایید.'];
+    }
+
+    $res = otp_send($mobile, 'admin_reset');
+    if (!$res['ok']) {
+        return $res;
+    }
+
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+    $_SESSION['pending_admin_pwd_reset'] = [
+        'admin_id' => (int)$a['id'],
+        'mobile'   => $mobile,
+        'exp'      => time() + 600,
+    ];
+
+    $masked = substr($mobile, 0, 4) . '***' . substr($mobile, -4);
+    return [
+        'ok'            => true,
+        'step'          => 2,
+        'mobile'        => $mobile,
+        'masked_mobile' => $masked,
+        'ttl'           => $res['ttl'] ?? 120,
+        'debug_code'    => $res['debug_code'] ?? null,
+        'message'       => 'کد تأیید بازیابی رمز مدیر به شمارهٔ ' . $masked . ' پیامک شد 📩',
+    ];
+}
+
+/** تأیید کد و تغییر رمز عبور مدیر (گام ۲ ریست پسورد) */
+function admin_password_reset_verify(string $code, string $newPassword, string $newPasswordConfirm, ?string $identity = null): array
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+    $pending = $_SESSION['pending_admin_pwd_reset'] ?? null;
+
+    $adminId = 0;
+    $mobile = '';
+
+    if ($pending && ($pending['exp'] ?? 0) >= time()) {
+        $adminId = (int)($pending['admin_id'] ?? 0);
+        $mobile = (string)($pending['mobile'] ?? '');
+    }
+
+    // در صورت نبود سشن یا افت کوکی، امکان اعتبارسنجی با شناسه مدیر
+    if ((!$adminId || !$mobile) && !empty($identity)) {
+        $a = admin_find_by_identity($identity);
+        if ($a && isset($a['status']) && $a['status'] === 'active' && !empty($a['mobile'])) {
+            $adminId = (int)$a['id'];
+            $mobile = (string)$a['mobile'];
+        }
+    }
+
+    if (!$adminId || !$mobile) {
+        return ['ok' => false, 'message' => 'مهلت درخواست بازیابی به پایان رسیده است؛ لطفاً مجدداً درخواست کد دهید.'];
+    }
+
+    if (mb_strlen($newPassword) < 8) {
+        return ['ok' => false, 'message' => 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد.'];
+    }
+    if ($newPassword !== $newPasswordConfirm) {
+        return ['ok' => false, 'message' => 'رمز عبور جدید با تکرار آن یکسان نیست.'];
+    }
+
+    if (!rate_limit('admin_reset_verify:' . $mobile, 8, 600)) {
+        return ['ok' => false, 'message' => 'تلاش‌های ناموفق بیش از حد مجاز است؛ لطفاً کمی بعد تلاش فرمایید.'];
+    }
+
+    $v = otp_verify($mobile, $code, 'admin_reset');
+    if (!$v['ok']) {
+        return $v;
+    }
+
+    $hash = password_hash($newPassword, PASSWORD_ARGON2ID);
+    DB::update('admins', [
+        'password_hash' => $hash,
+        'password'      => $hash,
+    ], 'id=?', [$adminId]);
+
+    unset($_SESSION['pending_admin_pwd_reset']);
+    log_activity('admin_password_reset', 'admin', $adminId);
+
+    return [
+        'ok'       => true,
+        'message'  => 'رمز عبور مدیر با موفقیت به‌روزرسانی شد ✅ اکنون می‌توانید با رمز جدید وارد شوید.',
+        'redirect' => SITE_URL . '/admin/login.php',
+    ];
 }
 
 /** خروج مدیر */
 function admin_logout(): void
 {
-    if (!empty($_SESSION['admin_id'])) {
-        log_activity('admin_logout', 'admin', (int)$_SESSION['admin_id']);
-        DB::run('UPDATE ' . DB::t('sessions') . ' SET logout_at=NOW() WHERE id=? AND logout_at IS NULL', [session_id()]);
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        if (!empty($_SESSION['admin_id'])) {
+            log_activity('admin_logout', 'admin', (int)$_SESSION['admin_id']);
+            DB::run('UPDATE ' . DB::t('sessions') . ' SET logout_at=NOW() WHERE id=? AND logout_at IS NULL', [session_id()]);
+        }
+        $_SESSION = [];
+        @session_destroy();
     }
-    $_SESSION = [];
-    session_destroy();
 }
 
 /**
@@ -179,3 +408,4 @@ function export_xls(string $filename, string $title, array $headers, array $rows
     echo '</table></body></html>';
     exit;
 }
+

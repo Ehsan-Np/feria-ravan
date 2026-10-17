@@ -207,7 +207,7 @@ function ensure_otps_table(): void
           `mobile` VARCHAR(20) NOT NULL,
           `code` VARCHAR(10) NOT NULL,
           `code_hash` VARCHAR(255) NULL,
-          `purpose` VARCHAR(30) NOT NULL DEFAULT 'login',
+          `purpose` VARCHAR(32) NOT NULL DEFAULT 'login',
           `expires_at` DATETIME NOT NULL,
           `used_at` DATETIME NULL,
           `tries` TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -216,6 +216,8 @@ function ensure_otps_table(): void
           KEY `ix_mobile_purpose` (`mobile`, `purpose`),
           KEY `ix_expires` (`expires_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // خودترمیمی اسکیمای فیلد purpose جهت پشتیبانی از مقاصد جدید احراز هویت نظیر admin_login و admin_reset
+        DB::run("ALTER TABLE `{$p}otps` MODIFY `purpose` VARCHAR(32) NOT NULL DEFAULT 'login'");
     } catch (Throwable $e) {}
 }
 
@@ -271,8 +273,14 @@ function otp_send(string $mobile, string $purpose = 'login'): array
 
     DB::insert('otps', $otpData);
 
-    $sms = new Kavenegar();
-    $isSmsConfigured = $sms->isEnabled();
+    if (!class_exists('Kavenegar')) {
+        $kavPath = defined('FR_ROOT') ? FR_ROOT . '/core/Kavenegar.php' : dirname(__DIR__) . '/core/Kavenegar.php';
+        if (file_exists($kavPath)) {
+            require_once $kavPath;
+        }
+    }
+    $sms = class_exists('Kavenegar') ? new Kavenegar() : null;
+    $isSmsConfigured = $sms ? $sms->isEnabled() : false;
 
     $sent = false;
     if ($isSmsConfigured) {
