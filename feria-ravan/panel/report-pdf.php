@@ -140,7 +140,7 @@ $verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.p
 $qrSvg = fr_qr_svg($verifyUrl, 115);
 
 $docTitle = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode);
-if (isset($_GET['offline_html']) && $_GET['offline_html'] === '1') {
+if ((isset($_GET['offline_html']) && $_GET['offline_html'] === '1') || (isset($_GET['download_file']) && $_GET['download_file'] === '1')) {
     if (!headers_sent()) {
         header('Content-Type: text/html; charset=UTF-8');
         header('Content-Disposition: attachment; filename="' . $docTitle . '.html"');
@@ -494,15 +494,15 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
         ⚙️ تنظیمات ارائه‌دهنده
       </a>
     <?php endif; ?>
-    <button class="pr-btn-action pr-btn-download" onclick="window.frSavePdf()" title="دانلود و ذخیره مستقیم فایل PDF رسمی در ابعاد استاندارد A4">
+    <button class="pr-btn-action pr-btn-print" style="background:#1e3a6e;color:#fff;font-weight:600" onclick="window.frPrintReport()" title="چاپ مستقیم با پرینتر سیستم یا ذخیره پرینت استاندارد A4">
+      🖨️ چاپ با پرینتر (نسخه چاپی)
+    </button>
+    <button class="pr-btn-action pr-btn-download" style="background:#059669;color:#fff" onclick="window.frSavePdf()" title="دانلود و ذخیره مستقیم فایل PDF رسمی در ابعاد استاندارد A4">
       📥 دانلود فایل PDF کارنامه (A4)
     </button>
-    <a class="pr-btn-action" style="background:#059669;color:#fff" href="<?= e(SITE_URL . '/panel/report-pdf.php?attempt=' . (int)$at['id'] . '&download_file=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه">
+    <a class="pr-btn-action" style="background:#0284c7;color:#fff" href="<?= e(SITE_URL . '/panel/report-pdf.php?attempt=' . (int)$at['id'] . '&download_file=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه برای باز کردن یا چاپ آفلاین">
       💾 دریافت مستقیم فایل
     </a>
-    <button class="pr-btn-action pr-btn-print" onclick="window.print()" title="چاپ مستقیم با پرینتر سیستم">
-      🖨️ چاپ با پرینتر
-    </button>
     <a class="pr-btn-action pr-btn-back" href="<?= e($backUrl) ?>">
       ← بازگشت
     </a>
@@ -826,6 +826,42 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     qr.addEventListener('error', swap);
   }
 
+  // تبدیل کلیه نمودارهای Canvas به تصاویر وکتوری با رزولوشن دوبرابر
+  // جهت تضمین کیفیت برداری و رندر بی‌نقص در چاپ، html2pdf/html2canvas و بدون سفید شدن نمودارها
+  window.frConvertCanvases = function () {
+    var element = document.getElementById('reportSheet');
+    if (!element) return;
+    element.querySelectorAll('canvas').forEach(function (cv) {
+      try {
+        if (!cv.dataset.imgConverted) {
+          var dataUrl = cv.toDataURL('image/png', 1.0);
+          var img = document.createElement('img');
+          img.src = dataUrl;
+          img.style.width = '100%';
+          img.style.height = 'auto';
+          img.style.display = 'block';
+          img.className = cv.className;
+          cv.dataset.imgConverted = '1';
+          cv.style.display = 'none';
+          cv.parentNode.insertBefore(img, cv);
+        }
+      } catch (ce) {
+        console.warn('Canvas conversion notice:', ce);
+      }
+    });
+  };
+
+  // تبدیل خودکار بوم‌ها بلافاصله پس از رسم اولیه
+  setTimeout(window.frConvertCanvases, 250);
+
+  // متد چاپ مستقیم با پرینتر سیستم (نسخه چاپی)
+  window.frPrintReport = function () {
+    window.frConvertCanvases();
+    setTimeout(function () {
+      window.print();
+    }, 150);
+  };
+
   // متد ذخیره و دریافت مستقیم PDF استاندارد ISO A4
   window.frSavePdf = function () {
     var statusBox = document.getElementById('prPdfStatus');
@@ -848,26 +884,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
       return;
     }
 
-    // تبدیل کلیه نمودارهای Canvas به تصاویر وکتوری با رزولوشن دوبرابر
-    // جهت تضمین کیفیت برداری و رندر بی‌نقص در html2pdf/html2canvas بدون سفید شدن نمودارها
-    element.querySelectorAll('canvas').forEach(function (cv) {
-      try {
-        if (!cv.dataset.imgConverted) {
-          var dataUrl = cv.toDataURL('image/png', 1.0);
-          var img = document.createElement('img');
-          img.src = dataUrl;
-          img.style.width = '100%';
-          img.style.height = 'auto';
-          img.style.display = 'block';
-          img.className = cv.className;
-          cv.dataset.imgConverted = '1';
-          cv.style.display = 'none';
-          cv.parentNode.insertBefore(img, cv);
-        }
-      } catch (ce) {
-        console.warn('Canvas conversion notice:', ce);
-      }
-    });
+    window.frConvertCanvases();
 
     if (window.html2pdf) {
       var opt = {
@@ -906,14 +923,27 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     }
   };
 
-  // پردازش خودکار پارامترهای download=1 و auto=1 (دانلود مستقیم فایل PDF بدون باز کردن پرینت خشک سیستم)
+  // پردازش خودکار پارامترهای print=1 و download=1 و auto=1
   var urlParams = new URLSearchParams(location.search);
+  var isAutoPrint = urlParams.get('print') === '1' ||
+                    urlParams.get('action') === 'print' ||
+                    location.search.indexOf('print=1') !== -1 ||
+                    location.search.indexOf('action=print') !== -1;
+
   var isAutoDownload = urlParams.get('download') === '1' || urlParams.get('auto') === '1' ||
                        urlParams.get('download_file') === '1' ||
                        location.search.indexOf('download=1') !== -1 ||
                        location.search.indexOf('auto=1') !== -1;
 
-  if (isAutoDownload) {
+  if (isAutoPrint) {
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () {
+        setTimeout(window.frPrintReport, 400);
+      });
+    } else {
+      setTimeout(window.frPrintReport, 600);
+    }
+  } else if (isAutoDownload) {
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(function () {
         setTimeout(window.frSavePdf, 500);

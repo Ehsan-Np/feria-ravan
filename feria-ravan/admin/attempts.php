@@ -179,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* ══════════════════════════════════════════════════════════════════════════
    ۲) نمایش اختصاصی کارنامه و تحلیل مراجع (Detailed Analysis View)
    ══════════════════════════════════════════════════════════════════════════ */
-$viewAttemptId = (int)($_GET['report'] ?? ($_GET['view'] ?? 0));
+$viewAttemptId = (int)($_GET['report'] ?? ($_GET['view'] ?? ($_GET['attempt'] ?? 0)));
 if ($viewAttemptId > 0) {
     $at = DB::one('SELECT a.*, t.title AS test_title, t.slug AS test_slug, t.engine AS test_engine,
                           t.category AS test_category, t.price_full, t.price_sale,
@@ -219,8 +219,9 @@ if ($viewAttemptId > 0) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
         <a class="fr-btn ghost sm" href="<?= !empty($at['test_id']) ? 'attempts.php?test_id=' . (int)$at['test_id'] : 'attempts.php' ?>">← بازگشت به فهرست نتایج این آزمون (<?= e($at['test_title'] ?? '') ?>)</a>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'] . '&download=1')) ?>" target="_blank">📥 دریافت فایل PDF کارنامه</a>
-          <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $at['id'])) ?>" target="_blank" title="مشاهده سند رسمی کارنامه A4">📄 مشاهده نسخه A4</a>
+          <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&print=1') ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی کارنامه رسمی">🖨️ دریافت نسخه چاپی</a>
+          <a class="fr-btn sm" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&download=1') ?>" target="_blank">📥 دریافت فایل PDF کارنامه</a>
+          <a class="fr-btn sm ghost" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id']) ?>" target="_blank" title="مشاهده سند رسمی کارنامه A4">📄 مشاهده نسخه A4</a>
           <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $at['id'] ?>" target="_blank">📋 پرونده بالینی مشاور</a>
           <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $at['id'] ?>" target="_blank">📝 مشاهده و ویرایش پاسخ‌ها</a>
 
@@ -350,6 +351,20 @@ if ($viewAttemptId > 0) {
       <!-- رندر کامل کارنامه و تحلیل روان‌سنجی -->
       <div style="background:#fff;border-radius:18px;border:1px solid var(--border);padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.03)">
         <?= ReportBuilder::build($at, $uObj, $viewLevel, ['isAdmin' => true]) ?>
+      </div>
+
+      <!-- نوار دریافت نسخه چاپی و دانلود در انتهای کارنامه ادمین -->
+      <div class="fr-card" style="margin-top:20px;background:#f8fafc;border:1.5px solid #cbd5e1;padding:16px 20px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <b style="font-size:14px;color:#0f172a">🖨️ چاپ و خروجی رسمی کارنامه مراجع</b>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">دریافت نسخه چاپی یا دانلود فایل PDF با سربرگ کلینیک در ابعاد استاندارد A4</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&print=1') ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی کارنامه رسمی">🖨️ دریافت نسخه چاپی (A4)</a>
+          <a class="fr-btn sm" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&download=1') ?>" target="_blank">📥 دریافت فایل PDF کارنامه</a>
+          <a class="fr-btn sm ghost" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id']) ?>" target="_blank">📄 مشاهده برگه A4</a>
+          <button class="fr-btn sm ghost" onclick="window.print()">🖨️ چاپ مستقیم صفحه</button>
+        </div>
       </div>
     </div>
     <?php
@@ -644,10 +659,13 @@ echo flash();
                   <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">
                     📋 پرونده
                   </a>
-                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'] . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">
+                  <a class="fr-btn sm" style="background:#1e3a6e;color:#fff" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $a['id'] . '&print=1') ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی کارنامه رسمی">
+                    🖨️ نسخه چاپی
+                  </a>
+                  <a class="fr-btn sm ghost" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $a['id'] . '&download=1') ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">
                     📥 PDF
                   </a>
-                  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $a['id'])) ?>" target="_blank" title="مشاهده نسخه رسمی کارنامه A4">
+                  <a class="fr-btn sm ghost" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $a['id']) ?>" target="_blank" title="مشاهده نسخه رسمی کارنامه A4">
                     📄 برگه A4
                   </a>
                 <?php else: ?>

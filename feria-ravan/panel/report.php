@@ -66,18 +66,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (post('act') === 'inject_growth' ||
 render_header('گزارش تست روانشناسی');
 panel_layout($u, 'history');
 ?>
+<style>
+@media print {
+  body, html { background: #fff !important; color: #000 !important; font-size: 11pt !important; }
+  .panel-sidebar, .fr-sidebar, .panel-nav, .fr-topbar, .site-header, .site-footer, .no-print,
+  .fr-report-actions, .fr-alert, a.fr-btn, button.fr-btn { display: none !important; }
+  .panel-main, .panel-content, .container, main { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; box-shadow: none !important; }
+  .fr-card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; break-inside: avoid !important; page-break-inside: avoid !important; margin-bottom: 16px !important; }
+}
+</style>
 <?php
 $assocDyad = DB::one('SELECT id FROM ' . DB::t('dyads') . ' WHERE (attempt1_id=? OR attempt2_id=?) AND status="ready" ORDER BY id DESC LIMIT 1', [$attemptId, $attemptId]);
 if ($assocDyad): ?>
-<div class="fr-alert ok" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+<div class="fr-alert ok no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
   <span>✨ <b>تحلیل تطابق دونفره و زوجین</b> شما و همراهتان آماده مشاهده است!</span>
   <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="dyad-report.php?id=<?= (int)$assocDyad['id'] ?>">مشاهده گزارش تطابق دونفره ←</a>
 </div>
 <?php endif; ?>
-<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+<div class="fr-report-actions no-print" style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
   <a class="fr-btn ghost sm" href="history.php">→ بازگشت</a>
-  <a class="fr-btn sm" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank">📥 دریافت فایل PDF کارنامه (A4)</a>
-  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId)) ?>" target="_blank" title="مشاهده نسخه استاندارد A4 کارنامه">📄 مشاهده نسخه A4</a>
+  <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&print=1')) ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی رسمی کارنامه در ابعاد استاندارد A4">🖨️ دریافت نسخه چاپی کارنامه (A4)</a>
+  <a class="fr-btn sm" style="background:#059669;color:#fff" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">📥 دانلود فایل PDF</a>
+  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId)) ?>" target="_blank" title="مشاهده سند رسمی کارنامه A4">📄 مشاهده نسخه A4</a>
+  <button class="fr-btn sm ghost" onclick="window.print()" title="چاپ مستقیم این صفحه">🖨️ چاپ سریع صفحه</button>
   <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="dyad.php?action=new&attempt=<?= $attemptId ?>">👥 سنجش تطابق دونفره / زوجین</a>
   <a class="fr-btn ghost sm" href="barcode.php?attempt=<?= $attemptId ?>" target="_blank">▮▮▮ بارکد گزارش</a>
   <?php if ($at['mode'] === 'free'): ?>
@@ -123,5 +134,22 @@ if (!empty($at['custom_fields_json'])) {
 // در پنل کاربری، پروتکل‌های بالینی مداخله همواره از دسترس کاربران عادی پنهان می‌مانند
 $isViewerAdmin = (bool)(function_exists('current_admin') && current_admin());
 echo ReportBuilder::build($at, $u, (string)($at['mode'] ?? 'full'), ['isAdmin' => $isViewerAdmin]);
+?>
+
+<!-- نوار دریافت نسخه چاپی و دانلود در انتهای کارنامه -->
+<div class="fr-card no-print" style="margin-top:24px;background:#f8fafc;border:1.5px solid #cbd5e1;padding:18px 22px;border-radius:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+  <div>
+    <b style="font-size:15px;color:#0f172a">🖨️ دریافت و چاپ کارنامه رسمی آزمون</b>
+    <div style="font-size:12.5px;color:#64748b;margin-top:3px">شما می‌توانید کارنامه رسمی ارزیابی روان‌شناختی خود را با سربرگ معتبر در ابعاد استاندارد A4 دریافت، دانلود یا چاپ نمایید.</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&print=1')) ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی کارنامه رسمی در ابعاد استاندارد A4">🖨️ دریافت نسخه چاپی (A4)</a>
+    <a class="fr-btn sm" style="background:#059669;color:#fff" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">📥 دانلود فایل PDF</a>
+    <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId)) ?>" target="_blank" title="مشاهده نسخه استاندارد A4 کارنامه">📄 مشاهده برگه A4</a>
+    <button class="fr-btn sm ghost" onclick="window.print()" title="چاپ مستقیم این صفحه">🖨️ چاپ سریع صفحه</button>
+  </div>
+</div>
+
+<?php
 panel_layout_end();
 render_footer();

@@ -78,21 +78,21 @@ echo "=======================================================================\n\
 // ============================================================================
 echo "--- بخش ۱: نسخه ۴٫۹٫۰ و ساختار پایگاه داده ---\n";
 
-it('ثابت‌های FR_VERSION و FR_RELEASE در includes/version.php دقیقاً برابر 4.9.0 هستند', function() {
-    expectEq(FR_VERSION, '4.9.0', 'FR_VERSION must be 4.9.0');
-    expectEq(FR_RELEASE, '4.9.0', 'FR_RELEASE must be 4.9.0');
+it('ثابت‌های FR_VERSION و FR_RELEASE در includes/version.php حداقل برابر 4.9.0 هستند', function() {
+    expectTrue(version_compare(FR_VERSION, '4.9.0', '>='), 'FR_VERSION must be >= 4.9.0');
+    expectTrue(version_compare(FR_RELEASE, '4.9.0', '>='), 'FR_RELEASE must be >= 4.9.0');
 });
 
-it('تنظیمات پایگاه داده system_version و fr_version مقدار 4.9.0 را برمی‌گرداند', function() {
+it('تنظیمات پایگاه داده system_version و fr_version حداقل مقدار 4.9.0 را برمی‌گرداند', function() {
     $ver = DB::setting('system_version');
-    expectEq($ver, '4.9.0', "DB system_version must be 4.9.0, got: $ver");
+    expectTrue(version_compare($ver, '4.9.0', '>='), "DB system_version must be >= 4.9.0, got: $ver");
 });
 
-it('فایل config.php و sample_config به نسخه 4.9.0 ارجاع داده‌اند', function() {
+it('فایل config.php و sample_config به نسخه 4.9.0 یا بالاتر ارجاع داده‌اند', function() {
     $cfg = file_get_contents(FR_ROOT . '/config.php');
     $sample = file_get_contents(FR_ROOT . '/includes/config.sample.php');
-    expectTrue(str_contains($cfg, "'4.9.0'"), 'config.php must reference 4.9.0');
-    expectTrue(str_contains($sample, "'4.9.0'"), 'config.sample.php must reference 4.9.0');
+    expectTrue(str_contains($cfg, "'4.9."), 'config.php must reference 4.9.x');
+    expectTrue(str_contains($sample, "'4.9."), 'config.sample.php must reference 4.9.x');
 });
 
 it('فایل includes/update.php بلوک ارتقای نگارش 4.9.0 را دارد', function() {
@@ -102,13 +102,13 @@ it('فایل includes/update.php بلوک ارتقای نگارش 4.9.0 را د�
     expectTrue(str_contains($updater, "rubika_chat_id"), 'update.php must mention rubika columns');
 });
 
-it('فایل مهاجرت یکپارچه جدید database/migrations/v490_unified_migration.sql موجود و v480 حذف شده است', function() {
-    expectTrue(file_exists(FR_ROOT . '/database/migrations/v490_unified_migration.sql'), 'v490 migration file must exist');
+it('فایل مهاجرت یکپارچه جدید database/migrations موجود و v480 حذف شده است', function() {
+    expectTrue(file_exists(FR_ROOT . '/database/migrations/v491_unified_migration.sql'), 'v491 migration file must exist');
     expectTrue(!file_exists(FR_ROOT . '/database/migrations/v480_unified_migration.sql'), 'v480 migration file must be removed');
-    $sql = file_get_contents(FR_ROOT . '/database/migrations/v490_unified_migration.sql');
-    expectTrue(str_contains($sql, "'system_version', '4.9.0'"), 'v490 SQL must set system_version to 4.9.0');
-    expectTrue(str_contains($sql, "planner_moods"), 'v490 SQL must create planner_moods table');
-    expectTrue(str_contains($sql, "rubika_chat_id"), 'v490 SQL must add rubika columns');
+    $sql = file_get_contents(FR_ROOT . '/database/migrations/v491_unified_migration.sql');
+    expectTrue(str_contains($sql, "'system_version', '4.9.1'"), 'v491 SQL must set system_version to 4.9.1');
+    expectTrue(str_contains($sql, "planner_moods"), 'v491 SQL must create planner_moods table');
+    expectTrue(str_contains($sql, "rubika_chat_id"), 'v491 SQL must add rubika columns');
 });
 
 it('جدول fr_planner_moods در پایگاه داده ایجاد شده و ستون‌های استاندارد را دارد', function() {

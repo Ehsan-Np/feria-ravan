@@ -58,13 +58,22 @@ $growth = (array)($data['growth_contract'] ?? []);
 render_header('گزارش تطابق دونفره: ' . $u1['name'] . ' و ' . $u2['name']);
 panel_layout($u, 'history');
 ?>
+<style>
+@media print {
+  body, html { background: #fff !important; color: #000 !important; font-size: 11pt !important; }
+  .panel-sidebar, .fr-sidebar, .panel-nav, .fr-topbar, .site-header, .site-footer, .no-print,
+  .fr-report-actions, .fr-alert, a.fr-btn, button.fr-btn { display: none !important; }
+  .panel-main, .panel-content, .container, main { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; box-shadow: none !important; }
+  .fr-card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; break-inside: avoid !important; page-break-inside: avoid !important; margin-bottom: 16px !important; }
+}
+</style>
 <div style="max-width:920px;margin:0 auto">
 
   <!-- نوار ابزار بالا -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
     <a class="fr-btn ghost sm" href="dyad.php">→ بازگشت به پیوندها</a>
     <div style="display:flex;gap:8px">
-      <button class="fr-btn sm" onclick="window.print()">📄 چاپ / ذخیره PDF</button>
+      <button class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" onclick="window.print()">🖨️ چاپ / نسخه چاپی</button>
       <a class="fr-btn ghost sm" href="history.php">تاریخچه آزمون‌ها</a>
     </div>
   </div>

@@ -1242,6 +1242,14 @@ function fr_update_pipeline(bool $force = false): void
             if (DB::setting('planner_notify_channels', null) === null) DB::setSetting('planner_notify_channels', 'telegram,bale,rubika');
         } catch (Throwable $e) { error_log('feria: 4.9.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۴. نگارش ۴٫۹٫۱: بهینه‌سازی و تضمین ۱۰۰٪ دریافت و چاپ کارنامه رسمی (Print & PDF) در ابعاد استاندارد A4
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('system_version', '4.9.1');
+            DB::setSetting('fr_version', '4.9.1');
+        } catch (Throwable $e) { error_log('feria: 4.9.1 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
