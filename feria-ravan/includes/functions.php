@@ -411,7 +411,14 @@ function fr_panel_title(): string
 /** دریافت اسلاگ تمیز پنل کاربری (پیش‌فرض: panel) */
 function fr_panel_slug(): string
 {
-    $raw = trim((string)DB::setting('panel_url', '/panel/'));
+    if (!class_exists('DB', false) || !method_exists('DB', 'setting')) {
+        return 'panel';
+    }
+    try {
+        $raw = trim((string)DB::setting('panel_url', '/panel/'));
+    } catch (\Throwable $e) {
+        return 'panel';
+    }
     if ($raw === '') return 'panel';
     if (preg_match('#^https?://#i', $raw)) {
         $path = (string)parse_url($raw, PHP_URL_PATH);
@@ -1006,27 +1013,206 @@ if (!function_exists('fr_report_disclaimer')) {
 }
 
 /**
+ * تبدیل مسیر فایل یا آدرس تصویر به Data URI استاندارد جهت جلوگیری از Tainted Canvas و خطای CORS در تولید PDF
+ */
+if (!function_exists('fr_image_to_data_uri')) {
+    function fr_image_to_data_uri(?string $src): string
+    {
+        $src = trim((string)$src);
+        if ($src === '' || str_starts_with($src, 'data:')) {
+            return $src;
+        }
+
+        $filePath = null;
+        if (file_exists($src) && is_file($src)) {
+            $filePath = $src;
+        } else {
+            $pathOnly = ltrim(parse_url($src, PHP_URL_PATH) ?: $src, '/');
+            $candidates = [
+                FR_ROOT . '/' . $pathOnly,
+                dirname(FR_ROOT) . '/' . $pathOnly,
+            ];
+            foreach ($candidates as $cand) {
+                if (file_exists($cand) && is_file($cand)) {
+                    $filePath = $cand;
+                    break;
+                }
+            }
+        }
+
+        if ($filePath && is_file($filePath)) {
+            $mime = @mime_content_type($filePath) ?: 'image/png';
+            $data = @file_get_contents($filePath);
+            if ($data !== false && strlen($data) > 0) {
+                return 'data:' . $mime . ';base64,' . base64_encode($data);
+            }
+        }
+
+        return $src;
+    }
+}
+
+/**
+ * تولید بارکد QR استاندارد وکتور خالص SVG بدون هیچ‌گونه وابستگی به سرویس‌های خارجی
+ */
+if (!function_exists('fr_qr_svg')) {
+    function fr_qr_svg(string $text, int $size = 120): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+        $qrFile = FR_ROOT . '/includes/QRCode.php';
+        if (file_exists($qrFile)) {
+            require_once $qrFile;
+        }
+        if (class_exists('\\splitbrain\\phpQRCode\\QRCode')) {
+            try {
+                $rawSvg = \splitbrain\phpQRCode\QRCode::svg($text);
+                if ($rawSvg !== '') {
+                    return preg_replace('/<svg([^>]*)>/', '<svg$1 width="' . $size . '" height="' . $size . '" style="display:block;max-width:100%;height:auto">', $rawSvg, 1);
+                }
+            } catch (\Throwable $e) {
+                error_log('fr_qr_svg error: ' . $e->getMessage());
+            }
+        }
+        if (function_exists('barcode39_svg')) {
+            return barcode39_svg($text, $size > 60 ? 55 : 40);
+        }
+        return '';
+    }
+}
+
+/**
  * فیلترسازی و حذف بخش‌های محرمانه اتاق درمان و پروتکل‌های مداخله برای کاربران عادی
  * الزام حفاظتی: «🎯 راهنمای مداخلهٔ بالینی و پروتکل شواهدمحور» به هیچ وجه نباید در اختیار کاربر قرار گیرد
  * و تنها برای مدیران و مشاوران ارشد سایت قابل نمایش است.
+ *
+ * بازنویسی بنیادی در نسخهٔ ۴٫۷٫۰:
+ * استفاده از پردازشگر غیربازگشتی با شمارش متوازن تگ‌های تو در تو (Zero Backtracking Parser)
+ * جهت ریشه‌کن کردن خطای تهی شدن کارنامه (0 bytes) ناشی از سقف pcre.backtrack_limit در آزمون‌های طولانی
  */
 if (!function_exists('fr_filter_clinical_interventions')) {
     function fr_filter_clinical_interventions(string $html, bool $isAdmin = false): string
     {
-        if ($isAdmin) {
+        if ($isAdmin || $html === '') {
             return $html;
         }
 
-        // ۱) حذف کامل بلوک‌های با کلاس deep-interv
-        $clean = preg_replace('/<div[^>]*class=[\x22\x27][^\x22\x27]*deep-interv[^\x22\x27]*[\x22\x27][^>]*>.*?<\/div>/usi', '', $html);
+        // بررسی سریع وجود کلیدواژه‌های مداخله؛ در صورت عدم وجود، بدون پردازش اضافی بازگردانده می‌شود
+        if (!str_contains($html, 'deep-interv') &&
+            !str_contains($html, 'clinical-intervention') &&
+            !str_contains($html, 'راهنمای مداخله') &&
+            !str_contains($html, 'پروتکل مداخله')) {
+            return $html;
+        }
 
-        // ۲) حذف پاراگراف‌ها یا بخش‌های دارای عنوان راهنمای مداخله
-        $clean = preg_replace('/<(?:p|div|section|li)[^>]*>.*?<b[^>]*>.*?(?:راهنمای\s*مداخله|پروتکل\s*مداخله).*?<\/b>.*?<\/(?:p|div|section|li)>/usi', '', (string)$clean);
+        // ۱) حذف کانتینرهای با کلاس deep-interv و clinical-intervention با شمارش متوازن تگ‌های باز و بسته
+        $markers = [
+            'class="deep-interv"',
+            "class='deep-interv'",
+            'deep-interv',
+            'data-section="clinical-intervention"',
+            "data-section='clinical-intervention'",
+            'clinical-intervention',
+        ];
 
-        // ۳) حذف کادرهای مشخص شده با data-section="clinical-intervention"
-        $clean = preg_replace('/<div[^>]*data-section=[\x22\x27]clinical-intervention[\x22\x27][^>]*>.*?<\/div>/usi', '', (string)$clean);
+        foreach ($markers as $marker) {
+            $offset = 0;
+            while (($pos = stripos($html, $marker, $offset)) !== false) {
+                $sub = substr($html, 0, $pos);
+                $divPos = strrpos($sub, '<div');
+                $secPos = strrpos($sub, '<section');
+                $liPos  = strrpos($sub, '<li');
+                $tagStarts = array_filter([$divPos, $secPos, $liPos], static fn($p) => $p !== false);
+                if (empty($tagStarts)) {
+                    $offset = $pos + strlen($marker);
+                    continue;
+                }
+                $startPos = max($tagStarts);
+                if ($startPos === $divPos) {
+                    $openTag = '<div'; $closeTag = '</div>';
+                } elseif ($startPos === $secPos) {
+                    $openTag = '<section'; $closeTag = '</section>';
+                } else {
+                    $openTag = '<li'; $closeTag = '</li>';
+                }
+                $openLen = strlen($openTag);
+                $closeLen = strlen($closeTag);
+                $depth = 0;
+                $i = $startPos;
+                $len = strlen($html);
+                $endPos = false;
+                while ($i < $len) {
+                    if (substr($html, $i, $openLen) === $openTag) {
+                        $depth++;
+                        $i += $openLen;
+                    } elseif (substr($html, $i, $closeLen) === $closeTag) {
+                        $depth--;
+                        $i += $closeLen;
+                        if ($depth <= 0) {
+                            $endPos = $i;
+                            break;
+                        }
+                    } else {
+                        $i++;
+                    }
+                }
+                if ($endPos !== false) {
+                    $html = substr($html, 0, $startPos) . substr($html, $endPos);
+                    $offset = $startPos;
+                } else {
+                    $offset = $pos + strlen($marker);
+                }
+            }
+        }
 
-        return (string)$clean;
+        // ۲) حذف پاراگراف‌ها یا آیتم‌های لیستی که منحصراً حاوی راهنما یا پروتکل مداخله بالینی هستند
+        $cleanSimpleTag = static function(string $content, string $tag, array $keywords): string {
+            $offset = 0;
+            $openTag = '<' . $tag;
+            $closeTag = '</' . $tag . '>';
+            $closeLen = strlen($closeTag);
+
+            while ($offset < strlen($content)) {
+                $startPos = stripos($content, $openTag, $offset);
+                if ($startPos === false) break;
+
+                $endPos = stripos($content, $closeTag, $startPos);
+                if ($endPos === false) break;
+
+                $nextOpen = stripos($content, $openTag, $startPos + strlen($openTag));
+                if ($nextOpen !== false && $nextOpen < $endPos) {
+                    $offset = $nextOpen;
+                    continue;
+                }
+
+                $block = substr($content, $startPos, ($endPos + $closeLen) - $startPos);
+                $matches = false;
+                foreach ($keywords as $kw) {
+                    if (stripos($block, $kw) !== false) {
+                        $matches = true;
+                        break;
+                    }
+                }
+
+                if ($matches) {
+                    $content = substr($content, 0, $startPos) . substr($content, $endPos + $closeLen);
+                    $offset = $startPos;
+                } else {
+                    $offset = $endPos + $closeLen;
+                }
+            }
+            return $content;
+        };
+
+        if (str_contains($html, 'راهنمای مداخله') || str_contains($html, 'پروتکل مداخله')) {
+            $html = $cleanSimpleTag($html, 'p', ['راهنمای مداخله', 'پروتکل مداخله', 'پیشنهاد بالینی']);
+            $html = $cleanSimpleTag($html, 'section', ['راهنمای مداخله', 'پروتکل مداخله', 'پیشنهاد بالینی']);
+            $html = $cleanSimpleTag($html, 'li', ['راهنمای مداخله', 'پروتکل مداخله', 'پیشنهاد بالینی']);
+        }
+
+        return $html;
     }
 }
 

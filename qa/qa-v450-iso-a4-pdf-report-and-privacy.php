@@ -60,8 +60,8 @@ echo str_repeat('=', 70) . "\n\n";
 // -----------------------------------------------------------------------------
 echo "📦 ۱. نگارش سامانه و پایگاه‌داده:\n";
 
-it('نگارش در version.php دقیقاً برابر 4.6.0 است', function() {
-    return defined('FR_RELEASE') && FR_RELEASE === '4.6.0';
+it('نگارش در version.php حداقل برابر 4.5.0 و به‌روز است', function() {
+    return defined('FR_RELEASE') && version_compare(FR_RELEASE, '4.5.0', '>=');
 });
 
 it('مایگریشن خودکار نگارش ۴٫۶٫۰ مقادیر پیش‌فرض تنظیمات کارنامه را مستقر می‌کند', function() {

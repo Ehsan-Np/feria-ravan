@@ -89,8 +89,8 @@ $providerLicense  = fr_report_provider_license();
 $doctorName       = fr_report_doctor_name();
 $doctorTitle      = fr_report_doctor_title();
 $doctorLicense    = fr_report_doctor_license();
-$providerLogo     = fr_report_provider_logo();
-$providerStamp    = fr_report_provider_stamp();
+$providerLogo     = fr_image_to_data_uri(fr_report_provider_logo());
+$providerStamp    = fr_image_to_data_uri(fr_report_provider_stamp());
 $showSignature    = fr_report_show_signature_box();
 $providerPhone    = fr_report_provider_phone();
 $providerAddress  = fr_report_provider_address();
@@ -104,12 +104,16 @@ $completedTs = strtotime((string)($at['completed_at'] ?: ($at['started_at'] ?? '
 $completedFa = fa_num(jdate('l j F Y — ساعت H:i', $completedTs));
 $issueDateFa = fa_num(jdate('j F Y', $completedTs));
 
-// لینک استعلام اصالت کارنامه
+// لینک استعلام اصالت کارنامه و تولید بارکد QR وکتور محلی خالص (بدون وابستگی خارجی)
 $customQrLink = trim((string)DB::setting('report_qr_link', ''));
 $verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.php?attempt=' . (int)$at['id']);
-$qrSrc = 'https://chart.googleapis.com/chart?cht=qr&chl=' . rawurlencode($verifyUrl) . '&chs=160x160&choe=UTF-8&chld=L|1';
+$qrSvg = fr_qr_svg($verifyUrl, 115);
 
 $docTitle = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode);
+if (isset($_GET['download_file']) && $_GET['download_file'] === '1') {
+    header('Content-Type: text/html; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $docTitle . '.html"');
+}
 $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']) : fr_panel_url('report.php?attempt=' . (int)$at['id']);
 ?>
 <!DOCTYPE html>
@@ -461,6 +465,9 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     <button class="pr-btn-action pr-btn-download" onclick="window.frSavePdf()" title="دانلود و ذخیره فایل PDF با کیفیت برداری استاندارد A4">
       📥 دانلود فایل PDF (A4)
     </button>
+    <a class="pr-btn-action" style="background:#059669;color:#fff" href="<?= e($_SERVER['REQUEST_URI'] . (str_contains($_SERVER['REQUEST_URI'] ?? '', '?') ? '&' : '?') . 'download_file=1') ?>" title="دریافت مستقیم و آفلاین فایل سند کارنامه (HTML مستقل)">
+      💾 دریافت مستقیم فایل
+    </a>
     <button class="pr-btn-action pr-btn-print" onclick="window.print()" title="چاپ مستقیم سند">
       🖨️ چاپ مستقیم
     </button>
@@ -635,8 +642,9 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     <!-- بارکد و استعلام اصالت -->
     <?php if ($showQr): ?>
       <div class="pr-qr-section">
-        <img id="frQrImg" class="pr-qr-img" src="<?= e($qrSrc) ?>" alt="بارکد اصالت سنجی">
-        <span id="frQrFallback" style="display:none"><?= barcode39_svg($repCode, 52) ?></span>
+        <div id="frQrContainer" class="pr-qr-box" style="width:115px;height:115px;flex-shrink:0;background:#fff;padding:4px;border:1px solid #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <?= $qrSvg ?: barcode39_svg($repCode, 52) ?>
+        </div>
         <div style="font-size:11px;line-height:1.9">
           <b style="color:var(--pr-color);font-size:12px">🔏 اصالت‌سنجی رسمی کارنامه</b><br>
           کد رهگیری: <b style="color:#0f172a" dir="ltr"><?= e($repCode) ?></b><br>
@@ -804,8 +812,9 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
         margin:       [8, 8, 8, 8],
         filename:     <?= json_encode($docTitle . '.pdf', JSON_UNESCAPED_UNICODE) ?>,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
       };
       html2pdf().set(opt).from(element).save().then(function () {
         if (btn) {
@@ -813,6 +822,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
           setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 2500);
         }
       }).catch(function (e) {
+        console.warn('html2pdf warning, fallback to print:', e);
         if (btn) { btn.innerHTML = origText; btn.disabled = false; }
         window.print();
       });

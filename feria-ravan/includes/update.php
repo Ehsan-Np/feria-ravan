@@ -1189,6 +1189,18 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.6.0 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۱. نگارش ۴٫۷٫۰: حل ریشه‌ای خطای دریافت فایل تحلیل کارنامه، بارکد SVG محلی و پشتیبانی از دریافت مستقیم سند
+        // ---------------------------------------------------------------------
+        try {
+            if (DB::setting('report_download_fallback', null) === null) {
+                DB::setSetting('report_download_fallback', '1');
+            }
+            if (DB::setting('report_qr_engine', null) === null) {
+                DB::setSetting('report_qr_engine', 'local_svg');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.7.0 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

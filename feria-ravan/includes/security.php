@@ -74,7 +74,7 @@ function csrf_check(): bool
 /** اگر CSRF نامعتبر بود، قطع اجرا */
 function csrf_guard(): void
 {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
         // درخواست‌های احراز هویت اولیه ورود (ارسال OTP، تأیید و ورود) با ریت‌لیمیت دیتابیسی امن شده‌اند و نباید با نوسان سشن مسدود شوند
         if (str_contains($uri, '/api/auth.php') || str_ends_with($uri, 'auth.php')) {

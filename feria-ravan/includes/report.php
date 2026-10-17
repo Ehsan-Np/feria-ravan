@@ -115,10 +115,12 @@ final class ReportBuilder
         // تأمین و الحاق راهنمای مداخله بالینی منحصراً برای مدیران سامانه (در صورت عدم وجود در قالب باند)
         if ($isFull && self::$isAdmin && !str_contains($body, 'deep-interv')) {
             $anyTpl = $tplMap[$code . '|any'][0] ?? null;
-            if ($anyTpl && !empty($anyTpl['body']) && preg_match('/<div[^>]*class=[\x22\x27][^\x22\x27]*deep-interv[^\x22\x27]*[\x22\x27][^>]*>.*?<\/div>/usi', $anyTpl['body'], $im)) {
-                $body .= $im[0];
-            } elseif ($spec && !empty($spec['body']) && preg_match('/<div[^>]*class=[\x22\x27][^\x22\x27]*deep-interv[^\x22\x27]*[\x22\x27][^>]*>.*?<\/div>/usi', $spec['body'], $im)) {
-                $body .= $im[0];
+            if ($anyTpl && !empty($anyTpl['body'])) {
+                $extr = self::extractDeepInterv($anyTpl['body']);
+                if ($extr) $body .= $extr;
+            } elseif ($spec && !empty($spec['body'])) {
+                $extr = self::extractDeepInterv($spec['body']);
+                if ($extr) $body .= $extr;
             }
         }
 
@@ -435,6 +437,35 @@ final class ReportBuilder
             $html = fr_filter_clinical_interventions($html, self::$isAdmin);
         }
         return $html;
+    }
+
+    /**
+     * استخراج ایمن بلوک مداخله بالینی با شمارش متوازن تگ‌های باز و بسته
+     */
+    public static function extractDeepInterv(string $html): ?string
+    {
+        $pos = stripos($html, 'deep-interv');
+        if ($pos === false) return null;
+        $start = strrpos(substr($html, 0, $pos), '<div');
+        if ($start === false) return null;
+        $depth = 0;
+        $i = $start;
+        $len = strlen($html);
+        while ($i < $len) {
+            if (substr($html, $i, 4) === '<div') {
+                $depth++;
+                $i += 4;
+            } elseif (substr($html, $i, 6) === '</div>') {
+                $depth--;
+                $i += 6;
+                if ($depth <= 0) {
+                    return substr($html, $start, $i - $start);
+                }
+            } else {
+                $i++;
+            }
+        }
+        return null;
     }
 
     /** نام فارسی موتور برای کادر شفافیت (۱٫۸: تشخیص خانوادهٔ mslikert بر اساس اسلاگ) */
