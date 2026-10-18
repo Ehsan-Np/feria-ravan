@@ -30,6 +30,8 @@ final class CarnetPdfBuilder
      */
     public static function build(int $attemptId, bool $isAdmin = false): string
     {
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(180);
         $engine = function_exists('DB::setting') ? (string)DB::setting('report_pdf_engine', 'auto') : 'auto';
 
         // در صورت انتخاب دستی TCPDF در تنظیمات
@@ -69,6 +71,8 @@ final class CarnetPdfBuilder
             '🛡' => '▣', '👤' => '▣', '📄' => '▣', '📥' => '▼',
             '🔄' => '↺', '➕' => '+', '🌿' => '❀', '👑' => '★',
             '🎨' => '▣', '🌊' => '≈', '🔏' => '▣', '🔒' => '▣',
+            '🖨️' => '▣', '🖨' => '▣', '💾' => '▣', '⚙️' => '▣',
+            '⚙' => '▣', '🏷️' => '▣', '🏷' => '▣', '👁️' => '▣', '👁' => '▣',
         ];
         $html = strtr($html, $map);
         return preg_replace('/[\x{1F300}-\x{1F9FF}]/u', '•', $html) ?? $html;

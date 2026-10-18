@@ -148,6 +148,7 @@ if (($view = (int)($_GET['report'] ?? 0))) {
         }
         admin_layout($adm, 'users', 'مشاهده تحلیل — ' . user_fullname($u));
         echo '<a class="fr-btn ghost sm" href="user-view.php?id='.$id.'">→ بازگشت به پرونده</a> ';
+        echo '<a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:700" href="' . e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&print=1') . '" target="_blank" title="مشاهده و چاپ نسخه رسمی کارنامه در ابعاد استاندارد A4">🖨️ دریافت نسخه چاپی (A4)</a> ';
         echo '<a class="fr-btn sm" style="background:#059669;color:#fff;font-weight:700" href="' . e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&download=1') . '" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه در ابعاد استاندارد A4">📥 دریافت فایل PDF کارنامه</a><br><br>';
         echo ReportBuilder::build($at, $u, (string)($at['mode'] ?? 'full'), ['isAdmin' => true]);
         admin_layout_end(); exit;
@@ -335,7 +336,8 @@ $botChans = [
         <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $a['id'] ?>" target="_blank" title="مشاهده و ویرایش سؤالات و پاسخ‌های کاربر در برگهٔ جدید">📝 پاسخ‌ها ↗</a>
         <?php if ($a['status']!=='in_progress'): ?>
         <a class="fr-btn sm" href="user-view.php?id=<?= $id ?>&report=<?= $a['id'] ?>" target="_blank">👁 کارنامه مراجع</a>
-        <a class="fr-btn sm ghost" style="color:#059669;border-color:#059669;font-weight:600" href="<?= SITE_URL ?>/admin/report-pdf.php?attempt=<?= $a['id'] ?>&download=1" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه">📥 دریافت فایل PDF</a>
+        <a class="fr-btn sm" style="background:#1e3a6e;color:#fff" href="<?= SITE_URL ?>/admin/report-pdf.php?attempt=<?= $a['id'] ?>&print=1" target="_blank" title="مشاهده و چاپ نسخه چاپی کارنامه A4">🖨️ نسخه چاپی</a>
+        <a class="fr-btn sm ghost" style="color:#059669;border-color:#059669;font-weight:600" href="<?= SITE_URL ?>/admin/report-pdf.php?attempt=<?= $a['id'] ?>&download=1" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه">📥 دریافت PDF</a>
         <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">📋 پرونده بالینی مشاور</a>
         <form method="post" style="display:inline" onsubmit="return confirm('لینک گزارش برای کاربر پیامک شود؟')">
           <?= csrf_field() ?><input type="hidden" name="act" value="sms_report">

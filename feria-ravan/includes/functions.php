@@ -1075,6 +1075,25 @@ if (!function_exists('fr_image_to_data_uri')) {
             }
         }
 
+        // اگر آدرس ریموت باشد و فایل محلی نباشد، برای جلوگیری از هنگ و خطای موقت Dompdf با تایم‌اوت کوتاه بررسی می‌کنیم
+        if (str_starts_with($src, 'http://') || str_starts_with($src, 'https://')) {
+            $ctx = stream_context_create(['http' => ['timeout' => 1.5], 'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+            $remoteData = @file_get_contents($src, false, $ctx);
+            if ($remoteData !== false && strlen($remoteData) > 0) {
+                $mime = 'image/png';
+                if (function_exists('finfo_open')) {
+                    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                    if ($finfo) {
+                        $m = finfo_buffer($finfo, $remoteData);
+                        if ($m) $mime = $m;
+                        finfo_close($finfo);
+                    }
+                }
+                return 'data:' . $mime . ';base64,' . base64_encode($remoteData);
+            }
+            return ''; // در صورت در دسترس نبودن تصویر ریموت، آدرس خام رد نمی‌کنیم تا Dompdf تایم‌اوت نشود
+        }
+
         return $src;
     }
 }

@@ -31,6 +31,7 @@ function fr_session_start(): void
 /** هدرهای امنیتی — روی همهٔ خروجی‌ها */
 function fr_security_headers(): void
 {
+    if (headers_sent()) return;
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: SAMEORIGIN');                 // ضد Clickjacking
     // ارسال origin برای سازگاری کامل با الزامات اعتبارسنجی نماد اعتماد الکترونیکی (اینماد)، ساماندهی و درگاه‌ها

@@ -219,6 +219,7 @@ if ($viewAttemptId > 0) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px">
         <a class="fr-btn ghost sm" href="<?= !empty($at['test_id']) ? 'attempts.php?test_id=' . (int)$at['test_id'] : 'attempts.php' ?>">← بازگشت به فهرست نتایج این آزمون (<?= e($at['test_title'] ?? '') ?>)</a>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:700" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&print=1') ?>" target="_blank" title="مشاهده و چاپ نسخه رسمی کارنامه مراجع در ابعاد استاندارد A4">🖨️ نسخه چاپی کارنامه (A4)</a>
           <a class="fr-btn sm" style="background:#059669;color:#fff;font-weight:700" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&download=1') ?>" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه رسمی در ابعاد استاندارد A4">📥 دریافت فایل PDF کارنامه</a>
           <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $at['id'] ?>" target="_blank">📋 پرونده بالینی مشاور</a>
           <a class="fr-btn sm ghost" href="attempt-answers.php?attempt=<?= $at['id'] ?>" target="_blank">📝 مشاهده و ویرایش پاسخ‌ها</a>
@@ -354,10 +355,11 @@ if ($viewAttemptId > 0) {
       <!-- نوار دریافت فایل PDF کارنامه در انتهای گزارش ادمین -->
       <div class="fr-card" style="margin-top:20px;background:#f8fafc;border:1.5px solid #cbd5e1;padding:16px 20px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
         <div>
-          <b style="font-size:14px;color:#0f172a">📥 خروجی رسمی فایل PDF کارنامه مراجع</b>
-          <div style="font-size:12px;color:#64748b;margin-top:2px">دانلود مستقیم فایل معتبر PDF با سربرگ کلینیک و اطلاعات کامل روان‌سنجی در ابعاد استاندارد A4</div>
+          <b style="font-size:14px;color:#0f172a">🖨️ چاپ و خروجی رسمی کارنامه مراجع</b>
+          <div style="font-size:12px;color:#64748b;margin-top:2px">مشاهده و چاپ کارنامه استاندارد A4 با سربرگ کلینیک یا دانلود مستقیم فایل تمام‌رنگی PDF</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:700" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&print=1') ?>" target="_blank" title="مشاهده و چاپ نسخه رسمی کارنامه در ابعاد استاندارد A4">🖨️ دریافت نسخه چاپی (A4)</a>
           <a class="fr-btn sm" style="background:#059669;color:#fff;font-weight:700" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $at['id'] . '&download=1') ?>" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه">📥 دریافت فایل PDF کارنامه</a>
         </div>
       </div>
@@ -653,6 +655,9 @@ echo flash();
                   </a>
                   <a class="fr-btn sm" style="background:#4338ca;color:#fff" href="clinical-case.php?attempt=<?= $a['id'] ?>" target="_blank" title="خلاصه پرونده بالینی و تشخیصی مشاور">
                     📋 پرونده
+                  </a>
+                  <a class="fr-btn sm" style="background:#1e3a6e;color:#fff" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $a['id'] . '&print=1') ?>" target="_blank" title="مشاهده و چاپ نسخه چاپی کارنامه رسمی در ابعاد استاندارد A4">
+                    🖨️ نسخه چاپی
                   </a>
                   <a class="fr-btn sm ghost" style="color:#059669;border-color:#059669;font-weight:600" href="<?= e(SITE_URL . '/admin/report-pdf.php?attempt=' . $a['id'] . '&download=1') ?>" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه">
                     📥 دریافت فایل PDF

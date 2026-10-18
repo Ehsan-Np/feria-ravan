@@ -1267,10 +1267,20 @@ function fr_update_pipeline(bool $force = false): void
         try {
             DB::setSetting('system_version', '4.9.3');
             DB::setSetting('fr_version', '4.9.3');
-            DB::setSetting('report_pdf_download_mode', 'direct_binary_pdf');
             require_once __DIR__ . '/snotify.php';
             fr_snotify_ensure_schema();
         } catch (Throwable $e) { error_log('feria: 4.9.3 migration: ' . $e->getMessage()); }
+
+        // ---------------------------------------------------------------------
+        // ۱۷. نگارش ۴٫۹٫۶: بازگردانی قطعی نسخه چاپی کارنامه (A4)، ریشه‌کنی خطای موقت و ادغام پایدار چاپ و PDF
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('system_version', '4.9.6');
+            DB::setSetting('fr_version', '4.9.6');
+            if (DB::setting('report_pdf_download_mode', null) === null || DB::setting('report_pdf_download_mode') === 'direct_binary_pdf') {
+                DB::setSetting('report_pdf_download_mode', 'dual_action');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.9.6 migration: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);

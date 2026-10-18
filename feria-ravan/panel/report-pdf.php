@@ -149,9 +149,12 @@ $isPdfDownload = (!empty($_GET['download']) && $_GET['download'] === '1')
               || (!empty($_GET['download_file']) && $_GET['download_file'] === '1');
 
 if ($isPdfDownload && empty($_GET['print'])) {
+    @ini_set('memory_limit', '512M');
+    @set_time_limit(180);
     require_once __DIR__ . '/../core/CarnetPdfBuilder.php';
     try {
         $pdfData = CarnetPdfBuilder::build((int)$at['id'], $isAdmin);
+        while (ob_get_level() > 0) { @ob_end_clean(); }
         if (!headers_sent()) {
             header('Content-Type: application/pdf');
             header('Content-Disposition: attachment; filename="' . $docTitle . '.pdf"; filename*=UTF-8\'\'' . rawurlencode($docTitle . '.pdf'));
@@ -159,11 +162,12 @@ if ($isPdfDownload && empty($_GET['print'])) {
             header('Cache-Control: private, max-age=0, must-revalidate');
             header('Pragma: public');
         }
-        while (ob_get_level() > 0) { @ob_end_clean(); }
         echo $pdfData;
         exit;
     } catch (\Throwable $pe) {
         error_log('Carnet PDF direct stream error: ' . $pe->getMessage());
+        flash('خطا در دریافت مستقیم فایل باینری PDF؛ نسخه استاندارد چاپی A4 در دسترس است.', 'warn');
+        redirect(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&print=1');
     }
 }
 
@@ -598,8 +602,14 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
         ⚙️ تنظیمات ارائه‌دهنده
       </a>
     <?php endif; ?>
+    <button class="pr-btn-action pr-btn-print" style="background:#1e3a6e;color:#fff;font-weight:700;font-size:13px" onclick="window.frPrintReport()" title="چاپ مستقیم کارنامه با پرینتر سیستم در ابعاد استاندارد بین‌المللی A4">
+      🖨️ چاپ با پرینتر (نسخه چاپی)
+    </button>
     <a class="pr-btn-action pr-btn-download" style="background:#059669;color:#fff;font-weight:700;font-size:13px" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&download=1') ?>" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه رسمی در ابعاد استاندارد A4">
-      📥 دریافت فایل PDF کارنامه
+      📥 دانلود فایل PDF کارنامه (A4)
+    </a>
+    <a class="pr-btn-action" style="background:#0284c7;color:#fff;font-weight:600;font-size:13px" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&download_file=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه برای باز کردن یا چاپ آفلاین">
+      💾 دریافت مستقیم فایل
     </a>
     <a class="pr-btn-action pr-btn-back" href="<?= e($backUrl) ?>">
       ← بازگشت

@@ -932,10 +932,11 @@ $tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوت
     <div class="fr-field">
       <label>حالت پیش‌فرض دکمه دریافت کارنامه:</label>
       <select class="fr-select" name="report_pdf_download_mode">
-        <option value="direct_pdf" <?= $s('report_pdf_download_mode','direct_pdf')==='direct_pdf'?'selected':'' ?>>دانلود مستقیم فایل PDF استاندارد A4 (پیش‌فرض) ✅</option>
-        <option value="interactive" <?= $s('report_pdf_download_mode')==='interactive'?'selected':'' ?>>مشاهده سند A4 در صفحه جدید با دکمه‌های پرینت و دانلود</option>
+        <option value="dual_action" <?= in_array($s('report_pdf_download_mode','dual_action'), ['dual_action','direct_binary_pdf'], true) ? 'selected' : '' ?>>ارائه همزمان نسخه چاپی A4 و دانلود فایل PDF (توصیه‌شده و جامع) ✅</option>
+        <option value="direct_pdf" <?= $s('report_pdf_download_mode')==='direct_pdf'?'selected':'' ?>>دانلود مستقیم فایل PDF کارنامه (A4)</option>
+        <option value="interactive" <?= $s('report_pdf_download_mode')==='interactive'?'selected':'' ?>>مشاهده برگه چاپی A4 با نوار ابزار چاپ و ذخیره</option>
       </select>
-      <small class="hint">رفتار سیستم هنگام کلیک مراجع یا مدیر روی دکمه دریافت فایل کارنامه</small>
+      <small class="hint">رفتار سامانه هنگام کلیک مراجع یا مدیر روی دکمه‌های کارنامه و چاپ تحلیل</small>
     </div>
   </div>
 
