@@ -72,14 +72,33 @@ if (isset($_GET['export'])) {
  | فهرست با فیلتر
  * ==========================================================================*/
 consult_release_expired_holds();
-$fService = (int)($_GET['service'] ?? 0);
-$fStatus  = (string)($_GET['status'] ?? '');
+$fService  = (int)($_GET['service'] ?? 0);
+$fStatus   = (string)($_GET['status'] ?? '');
+$fDateFrom = trim((string)($_GET['from'] ?? ($_GET['from_date'] ?? '')));
+$fDateTo   = trim((string)($_GET['to'] ?? ($_GET['to_date'] ?? '')));
+
 $where = '1=1'; $params = [];
 if ($fService) { $where .= ' AND a.service_id=?'; $params[] = $fService; }
 if (in_array($fStatus, ['pending_payment','booked','done','canceled','noshow'], true)) {
     $where .= ' AND a.status=?'; $params[] = $fStatus;
 }
 if (($focus = (int)($_GET['appt'] ?? 0)) > 0) { $where .= ' AND a.id=?'; $params[] = $focus; }
+
+// فیلتر بازه زمانی تاریخ شمسی
+if ($fDateFrom !== '') {
+    $gFrom = jalali_to_mysql(en_num($fDateFrom));
+    if ($gFrom) {
+        $where .= ' AND s.starts_at >= ?';
+        $params[] = $gFrom . ' 00:00:00';
+    }
+}
+if ($fDateTo !== '') {
+    $gTo = jalali_to_mysql(en_num($fDateTo));
+    if ($gTo) {
+        $where .= ' AND s.starts_at <= ?';
+        $params[] = $gTo . ' 23:59:59';
+    }
+}
 
 $rows = DB::all('SELECT a.*, s.starts_at, s.ends_at, sv.title AS service_title, c.name AS cname,
                         u.first_name, u.last_name, u.mobile, o.payable, o.status AS order_status
@@ -90,6 +109,19 @@ $rows = DB::all('SELECT a.*, s.starts_at, s.ends_at, sv.title AS service_title, 
                  JOIN ' . DB::t('users') . ' u ON u.id=a.user_id
                  LEFT JOIN ' . DB::t('orders') . ' o ON o.id=a.order_id
                  WHERE ' . $where . ' ORDER BY s.starts_at DESC LIMIT 300', $params);
+
+// محاسبه مبالغ تراکنش‌ها
+$totalPaid = 0;
+$totalPayable = 0;
+foreach ($rows as $r) {
+    if ($r['payable'] !== null) {
+        $totalPayable += (int)$r['payable'];
+        if ($r['order_status'] === 'paid') {
+            $totalPaid += (int)$r['payable'];
+        }
+    }
+}
+
 $services = DB::all('SELECT id, title FROM ' . DB::t('consult_services') . ' ORDER BY sort, id');
 $stFa = ['pending_payment'=>['در انتظار پرداخت','warn'],'booked'=>['قطعی ✅','ok'],'done'=>['انجام‌شد','purple'],
          'canceled'=>['لغوشده','err'],'noshow'=>['عدم حضور','err']];
@@ -107,22 +139,35 @@ echo flash();
 <!-- فیلترها -->
 <div class="fr-card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
   <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <select class="fr-select" name="service" style="max-width:220px">
+    <select class="fr-select" name="service" style="max-width:200px">
       <option value="0">همهٔ خدمات</option>
       <?php foreach ($services as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $fService===(int)$s['id']?'selected':'' ?>><?= e($s['title']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select class="fr-select" name="status" style="max-width:180px">
+    <select class="fr-select" name="status" style="max-width:160px">
       <option value="">همهٔ وضعیت‌ها</option>
       <?php foreach ($stFa as $k=>[$t,$c]): ?>
       <option value="<?= $k ?>" <?= $fStatus===$k?'selected':'' ?>><?= $t ?></option>
       <?php endforeach; ?>
     </select>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:12px;color:var(--muted)">از:</span>
+      <input class="fr-input sm" name="from" data-jdate placeholder="۱۴۰۵/۰۱/۰۱" value="<?= e($fDateFrom) ?>" style="max-width:115px;direction:ltr;text-align:center">
+      <span style="font-size:12px;color:var(--muted)">تا:</span>
+      <input class="fr-input sm" name="to" data-jdate placeholder="۱۴۰۵/۱۲/۲۹" value="<?= e($fDateTo) ?>" style="max-width:115px;direction:ltr;text-align:center">
+    </div>
     <button class="fr-btn sm ghost">فیلتر</button>
     <a class="fr-btn sm ghost" href="consult-bookings.php">حذف فیلتر</a>
   </form>
-  <span style="margin-right:auto;color:var(--muted);font-size:12.5px"><?= fa_num(count($rows)) ?> نوبت</span>
+  <div style="margin-right:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px">
+    <span style="color:var(--muted)">تعداد: <b><?= fa_num(count($rows)) ?></b> نوبت</span>
+    <?php if ($totalPaid > 0): ?>
+      <span style="background:#ecfdf5;color:#065f46;padding:4px 10px;border-radius:8px;border:1px solid #a7f3d0;font-size:12px">
+        واریزی قطعی: <b><?= toman($totalPaid) ?></b>
+      </span>
+    <?php endif; ?>
+  </div>
 </div>
 
 <div class="fr-card">
@@ -143,7 +188,7 @@ echo flash();
       <td style="font-size:12.5px"><b><?= e($r['service_title']) ?></b><br><small style="color:var(--muted)"><?= e($r['cname']) ?></small></td>
       <td style="white-space:nowrap;font-size:12.5px">
         <?= fa_num(jdate('l j F Y', $ts)) ?><br>
-        <b style="direction:ltr;display:inline-block"><?= fa_num(date('H:i', $ts)) ?> — <?= fa_num(date('H:i', strtotime($r['ends_at']))) ?></b>
+        <b style="direction:ltr;display:inline-block"><?= fa_num(jdate('H:i', $ts)) ?> — <?= fa_num(jdate('H:i', strtotime($r['ends_at']))) ?></b>
         <?php if ($ts < time() && $r['status']==='booked'): ?><br><span class="fr-chip warn">گذشته — ثبت نتیجه</span><?php endif; ?>
       </td>
       <td><span class="fr-chip info"><?= $r['mode']==='online' ? '💻 آنلاین' : '🏢 حضوری' ?></span></td>

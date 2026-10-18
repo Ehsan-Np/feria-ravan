@@ -39,7 +39,10 @@ if ($act === 'month' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!$service) json_out(['ok'=>false,'message'=>'خدمت یافت نشد.']);
     consult_release_expired_holds();
     [$jy0, $jm0] = fr_jnow();          // ماه جاری شمسی (ASCII، نه خروجی فارسی jdate)
-    $jy = (int)($in['jy'] ?? $jy0); $jm = (int)($in['jm'] ?? $jm0);
+    $jy = (int)en_num((string)($in['jy'] ?? $jy0));
+    $jm = (int)en_num((string)($in['jm'] ?? $jm0));
+    if ($jy < 1300 || $jy > 1500) { $jy = $jy0; }
+    if ($jm < 1 || $jm > 12) { $jm = $jm0; }
     // محدودهٔ مجاز مرور: ماه جاری تا ۶ ماه آینده
     $key0 = $jy0 * 12 + $jm0; $key = $jy * 12 + $jm;
     if ($key < $key0 || $key > $key0 + 6) { $jy = $jy0; $jm = $jm0; }
@@ -54,7 +57,12 @@ if ($act === 'slots' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!rate_limit('consult_slots', 120, 600)) json_out(['ok'=>false,'message'=>'تعداد درخواست زیاد است؛ کمی بعد تلاش کنید.']);
     $service = consult_service($svId);
     if (!$service) json_out(['ok'=>false,'message'=>'خدمت یافت نشد.']);
-    $date = (string)($in['date'] ?? '');
+    $date = trim(en_num((string)($in['date'] ?? '')));
+    // اگر کاربر یا کلاینت تاریخ را در قالب شمسی فرستاده بود، به میلادی دیتابیس تبدیل کن
+    if (preg_match('#^(13|14)\d{2}[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])$#', $date)) {
+        $gDate = jalali_to_mysql($date);
+        if ($gDate) $date = $gDate;
+    }
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) json_out(['ok'=>false,'message'=>'تاریخ نامعتبر است.']);
     if (consult_is_holiday($date)) json_out(['ok'=>true,'slots'=>[],'message'=>'این روز تعطیل است.']);
     json_out(['ok'=>true,'slots'=>consult_day_slots($svId, $date)]);

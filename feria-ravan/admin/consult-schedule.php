@@ -34,7 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sid = (int)post('service_id'); $w = (int)post('weekday');
         $st  = en_num((string)post('start_time')); $en = en_num((string)post('end_time'));
         if (!DB::val('SELECT id FROM ' . DB::t('consult_services') . ' WHERE id=?', [$sid])) { flash('خدمت نامعتبر است.', 'err'); redirect(SITE_URL . '/admin/consult-schedule.php'); }
-        if ($w < 0 || $w > 6 || !preg_match('/^\d{1,2}:\d{2}$/', $st) || !preg_match('/^\d{1,2}:\d{2}$/', $en) || $st >= $en) {
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $st, $sm)) { $st = sprintf('%02d:%02d', (int)$sm[1], (int)$sm[2]); }
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $en, $em)) { $en = sprintf('%02d:%02d', (int)$em[1], (int)$em[2]); }
+        if ($w < 0 || $w > 6 || !preg_match('/^\d{2}:\d{2}$/', $st) || !preg_match('/^\d{2}:\d{2}$/', $en) || $st >= $en) {
             flash('ساعت شروع/پایان معتبر نیست (نمونه: 16:00 تا 20:00).', 'err');
         } else {
             DB::insert('consult_schedules', ['service_id'=>$sid,'weekday'=>$w,'start_time'=>$st . ':00','end_time'=>$en . ':00','active'=>1]);
@@ -225,10 +227,10 @@ echo flash();
           <select class="fr-select" name="weekday">
             <?php foreach ($wdFa as $w=>$fa): ?><option value="<?= $w ?>"><?= $fa ?></option><?php endforeach; ?>
           </select></div>
-        <div class="fr-field" style="margin:0;width:110px"><label>از ساعت</label>
-          <input class="fr-input" name="start_time" placeholder="۱۶:۰۰" style="direction:ltr;text-align:center"></div>
-        <div class="fr-field" style="margin:0;width:110px"><label>تا ساعت</label>
-          <input class="fr-input" name="end_time" placeholder="۲۰:۰۰" style="direction:ltr;text-align:center"></div>
+        <div class="fr-field" style="margin:0;width:120px"><label>از ساعت (۲۴ساعته)</label>
+          <input class="fr-input" data-t24 maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" name="start_time" placeholder="16:00" style="direction:ltr;text-align:center"></div>
+        <div class="fr-field" style="margin:0;width:120px"><label>تا ساعت (۲۴ساعته)</label>
+          <input class="fr-input" data-t24 maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" name="end_time" placeholder="20:00" style="direction:ltr;text-align:center"></div>
         <button class="fr-btn sm">➕ افزودن</button>
       </form>
       <?php if (!$rules): ?>
@@ -317,7 +319,7 @@ echo flash();
         <?= csrf_field() ?>
         <input type="hidden" name="act" value="add_holiday">
         <div class="fr-field" style="margin:0;width:140px"><label>تاریخ شمسی</label>
-          <input class="fr-input" name="jdate" placeholder="۱۴۰۵/۰۶/۱۵" style="direction:ltr;text-align:center"></div>
+          <input class="fr-input" data-jdate maxlength="10" name="jdate" placeholder="۱۴۰۵/۰۶/۱۵" style="direction:ltr;text-align:center"></div>
         <div class="fr-field" style="margin:0;flex:1;min-width:120px"><label>عنوان (اختیاری)</label>
           <input class="fr-input" name="title" placeholder="تعطیلی رسمی / جلسهٔ داخلی"></div>
         <button class="fr-btn sm">➕ افزودن</button>

@@ -11,9 +11,17 @@
   const $  = (s, c) => (c || document).querySelector(s);
   const $$ = (s, c) => Array.from((c || document).querySelectorAll(s));
 
-  /* اعداد فارسی */
+  /* اعداد فارسی و لاتین */
   const FA = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+  const FA_STR = '۰۱۲۳۴۵۶۷۸۹', AR_STR = '٠١٢٣٤٥٦٧٨٩';
   window.faNum = n => String(n).replace(/\d/g, d => FA[d]);
+  window.enNum = function (s) {
+    if (s == null) return '';
+    return String(s).replace(/[۰-۹٠-٩]/g, function (ch) {
+      var i = FA_STR.indexOf(ch); if (i > -1) return String(i);
+      i = AR_STR.indexOf(ch); return i > -1 ? String(i) : ch;
+    });
+  };
 
   /* ── سازگاری ۱: توکن CSRF را در صورت مسدودبودن اسکریپت inline (سیاست CSP در حالت تولید)
         از متا تگ بخوان — رفع باگ محیط production ── */
@@ -517,20 +525,35 @@
 })();
 
 /* ============================================================================
- | نسخهٔ ۲٫۴ — ساعت‌های ۲۴ ساعته (t24): ماسک خودکار HH:MM مستقل از لوکیل مرورگر
- | ورودی: <input data-t24> — نمایش نوبت‌ها: [data-t24-wrap][data-t24-count="#idSelect"]
+ | نسخهٔ ۲٫۵ — موتور نرمالایزر ورودی‌ها و ساعت‌های ۲۴ ساعته (t24 + jdate)
+ | تبدیل آنی ارقام فارسی/عربی به لاتین و ماسک استاندارد مستقل از لوکال مرورگر
  * ========================================================================== */
 (function () {
   'use strict';
-  var FA = '۰۱۲۳۴۵۶۷۸۹', AR = '٠١٢٣٤٥٦٧٨٩';
+  var FA_STR = '۰۱۲۳۴۵۶۷۸۹', AR_STR = '٠١٢٣٤٥٦٧٨٩';
   function toEn(s) {
+    if (window.enNum) return window.enNum(s);
     return String(s == null ? '' : s).replace(/[۰-۹٠-٩]/g, function (ch) {
-      var i = FA.indexOf(ch); if (i > -1) return String(i);
-      i = AR.indexOf(ch); return i > -1 ? String(i) : ch;
+      var i = FA_STR.indexOf(ch); if (i > -1) return String(i);
+      i = AR_STR.indexOf(ch); return i > -1 ? String(i) : ch;
     });
   }
+
+  /* ۱) ماسک و نرمالایزر ساعت‌های ۲۴ ساعته (HH:MM) */
   function initT24() {
-    document.querySelectorAll('input[data-t24]').forEach(function (inp) {
+    var selectors = [
+      'input[data-t24]',
+      'input[name="start_time"]',
+      'input[name="end_time"]',
+      'input[name="time_note"]',
+      'input[name="remind_time"]',
+      'input[name="remind_at"]'
+    ].join(',');
+
+    document.querySelectorAll(selectors).forEach(function (inp) {
+      if (inp.dataset.t24Inited === '1') return;
+      inp.dataset.t24Inited = '1';
+
       function clean(v, final) {
         v = toEn(v).replace(/[^0-9]/g, '').slice(0, 4);
         var h = v.slice(0, 2), m = v.slice(2);
@@ -540,6 +563,7 @@
         if (final && m.length === 1) m = m + '0';
         return h + (v.length > 2 || (final && h && m) ? ':' + m : (v.length === 2 && !final ? ':' : ''));
       }
+
       inp.addEventListener('input', function () {
         var p = this.selectionStart;
         this.value = clean(this.value, false);
@@ -547,6 +571,7 @@
       });
       inp.addEventListener('blur', function () { this.value = clean(this.value, true); });
     });
+
     document.querySelectorAll('[data-t24-wrap]').forEach(function (wrap) {
       var sel = document.querySelector(wrap.getAttribute('data-t24-count'));
       if (!sel) return;
@@ -559,10 +584,75 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initT24);
-  } else {
+  /* ۲) ماسک و نرمالایزر تاریخ شمسی (YYYY/MM/DD) */
+  function initJDateNormalizer() {
+    var dateSelectors = [
+      'input[data-jdate]',
+      'input[name*="jdate"]',
+      'input[name="day_custom"]',
+      'input[name="jyear"]',
+      'input[name="from"]',
+      'input[name="to"]',
+      'input[name*="from_date"]',
+      'input[name*="to_date"]'
+    ].join(',');
+
+    document.querySelectorAll(dateSelectors).forEach(function (inp) {
+      if (inp.dataset.jdateInited === '1') return;
+      inp.dataset.jdateInited = '1';
+
+      function cleanJDate(v) {
+        v = toEn(v).replace(/[^0-9/.\-]/g, '').replace(/[\-.]/g, '/');
+        var parts = v.split('/');
+        if (parts.length === 1 && parts[0].length >= 4) {
+          var y = parts[0].slice(0, 4);
+          var rest = parts[0].slice(4);
+          if (rest.length > 2) {
+            return y + '/' + rest.slice(0, 2) + '/' + rest.slice(2, 4);
+          } else if (rest.length > 0) {
+            return y + '/' + rest;
+          }
+        }
+        return v;
+      }
+
+      inp.addEventListener('input', function () {
+        this.value = cleanJDate(this.value);
+      });
+      inp.addEventListener('blur', function () {
+        this.value = toEn(this.value);
+      });
+    });
+  }
+
+  /* ۳) تبدیل خودکار تمام ارقام فارسی به لاتین هنگام ارسال فرم‌ها */
+  function initFormDigitNormalizer() {
+    document.querySelectorAll('form').forEach(function (form) {
+      if (form.dataset.numNormalizer === '1') return;
+      form.dataset.numNormalizer = '1';
+      form.addEventListener('submit', function () {
+        form.querySelectorAll('input:not([type="password"]):not([type="hidden"]), select').forEach(function (inp) {
+          var name = (inp.name || '').toLowerCase();
+          if (name.includes('date') || name.includes('time') || name.includes('year') || name.includes('day') || name.includes('remind') || inp.dataset.t24 || inp.dataset.jdate) {
+            if (inp.value && typeof inp.value === 'string') {
+              inp.value = toEn(inp.value);
+            }
+          }
+        });
+      });
+    });
+  }
+
+  function initAllNormalizers() {
     initT24();
+    initJDateNormalizer();
+    initFormDigitNormalizer();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAllNormalizers);
+  } else {
+    initAllNormalizers();
   }
 
   /* ── دکمهٔ خودکار و هوشمند بازگشت به بالای صفحه (Back to Top) ── */

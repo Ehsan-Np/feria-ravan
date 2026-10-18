@@ -1282,6 +1282,17 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.9.6 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۸. نگارش ۴٫۹٫۷: ایزوله‌سازی بارکد، فال‌بک بومی barcode39_svg، نرمالایزر ارقام و اصلاح تقویم شمسی
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('system_version', '4.9.7');
+            DB::setSetting('fr_version', '4.9.7');
+            if (DB::setting('report_qr_show', null) === null) {
+                DB::setSetting('report_qr_show', '1');
+            }
+        } catch (Throwable $e) { error_log('feria: 4.9.7 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

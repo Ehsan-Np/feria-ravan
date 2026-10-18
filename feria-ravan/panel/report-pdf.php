@@ -20,6 +20,45 @@ require_once __DIR__ . '/../includes/report.php';
 require_once __DIR__ . '/../core/Analyzer.php';
 fr_bootstrap();
 
+/**
+ * تابع نرمالایزر داده‌های عددی: تبدیل بازگشتی ارقام فارسی و عربی به ارقام استاندارد لاتین/انگلیسی
+ * جهت جلوگیری قطعی از خطای NaN در اسکریپت‌های بوم (Canvas)، نمودارها و کانترها
+ */
+if (!function_exists('fr_normalize_chart_digits')) {
+    function fr_normalize_chart_digits(mixed $val): mixed
+    {
+        if (is_array($val)) {
+            $cleaned = [];
+            foreach ($val as $k => $v) {
+                $cleaned[$k] = fr_normalize_chart_digits($v);
+            }
+            return $cleaned;
+        }
+        if (is_string($val)) {
+            if (preg_match('/[۰-۹٠-٩]/u', $val)) {
+                $en = en_num($val);
+                if (is_numeric(trim($en))) {
+                    return str_contains($en, '.') ? (float)$en : (int)$en;
+                }
+                return $en;
+            }
+            if (is_numeric(trim($val))) {
+                return str_contains($val, '.') ? (float)$val : (int)$val;
+            }
+        }
+        return $val;
+    }
+}
+
+// نرمال‌سازی متغیرهای نشست (Session) جهت پاکسازی مقادیر نمرات و آزمون‌ها از ارقام غیرلاتین
+if (!empty($_SESSION)) {
+    foreach ($_SESSION as $sk => $sv) {
+        if (is_array($sv) || (is_string($sv) && preg_match('/[۰-۹٠-٩]/u', $sv))) {
+            $_SESSION[$sk] = fr_normalize_chart_digits($sv);
+        }
+    }
+}
+
 $adm = function_exists('current_admin') ? current_admin() : null;
 $u   = function_exists('current_user') ? current_user() : null;
 
@@ -84,6 +123,9 @@ if (!$at || $at['status'] === 'in_progress') {
     redirect(fr_panel_url('history.php'));
 }
 
+// نرمال‌سازی عمیق تمام فیلدهای رکورد تلاش جهت تبدیل ارقام به انگلیسی برای اسکریپت نمودارها
+$at = fr_normalize_chart_digits($at);
+
 if (!$targetUser) {
     $targetUser = [
         'id'            => (int)($at['user_id'] ?? 0),
@@ -106,7 +148,7 @@ $clientBirthDate = (string)($targetUser['birth_date'] ?? $at['birth_date'] ?? ''
 $clientAge = '';
 if ($clientBirthDate !== '' && preg_match('/^(\d{4})/', $clientBirthDate, $bm)) {
     $by = (int)$bm[1];
-    $cy = (int)jdate('Y');
+    $cy = (int)en_num(jdate('Y'));
     if ($by > 1300 && $by <= $cy) {
         $clientAge = (string)($cy - $by) . ' سال';
     }
@@ -127,17 +169,81 @@ $providerAddress  = fr_report_provider_address();
 $providerWebsite  = fr_report_provider_website();
 $headerColor      = fr_report_header_color();
 $disclaimer       = fr_report_disclaimer();
-$showQr           = fr_report_show_qr();
+
+// خواندن گارد امنیتی (Guarded) تنظیمات بارکد QR و پیوند اعتبارسنجی
+$showQr = true;
+try {
+    $qrSetting = null;
+    if (function_exists('getSetting')) {
+        $qrSetting = getSetting('report_qr_show');
+    }
+    if ($qrSetting === null && class_exists('DB')) {
+        $qrSetting = DB::setting('report_qr_show', null);
+    }
+    if ($qrSetting !== null) {
+        $showQr = !in_array(strtolower(trim((string)$qrSetting)), ['0', 'false', 'off', 'no'], true);
+    } elseif (function_exists('fr_report_show_qr')) {
+        $showQr = (bool)fr_report_show_qr();
+    }
+} catch (\Throwable $te) {
+    $showQr = true;
+}
 
 $repCode = (string)($at['rep_code'] ?? ('FR-' . $at['id']));
 $completedTs = strtotime((string)($at['completed_at'] ?: ($at['started_at'] ?? ''))) ?: time();
 $completedFa = fa_num(jdate('l j F Y — ساعت H:i', $completedTs));
 $issueDateFa = fa_num(jdate('j F Y', $completedTs));
 
-// لینک استعلام اصالت کارنامه و تولید بارکد QR وکتور محلی خالص (بدون وابستگی خارجی)
-$customQrLink = trim((string)DB::setting('report_qr_link', ''));
-$verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.php?attempt=' . (int)$at['id']);
-$qrSvg = fr_qr_svg($verifyUrl, 115);
+// پیوند اعتبارسنجی کارنامه با اعتبارسنجی آدرس معتبر
+$verifyUrl = '';
+try {
+    $customQrLink = null;
+    if (function_exists('getSetting')) {
+        $customQrLink = getSetting('report_qr_link');
+    }
+    if (($customQrLink === null || trim((string)$customQrLink) === '') && class_exists('DB')) {
+        $customQrLink = DB::setting('report_qr_link', '');
+    }
+    $customQrLink = trim((string)($customQrLink ?? ''));
+    if ($customQrLink !== '' && (filter_var($customQrLink, FILTER_VALIDATE_URL) || str_starts_with($customQrLink, 'http://') || str_starts_with($customQrLink, 'https://'))) {
+        $verifyUrl = $customQrLink;
+    } else {
+        $verifyUrl = SITE_URL . '/panel/report.php?attempt=' . (int)$at['id'];
+    }
+} catch (\Throwable $te) {
+    $verifyUrl = SITE_URL . '/panel/report.php?attempt=' . (int)($at['id'] ?? 0);
+}
+
+// ایزوله‌سازی کامل لایه تولید بارکد با try/catch ایمن و فال‌بک خودکار به barcode39_svg() محلی همراه با کپشن Feria.ir
+$barcodeOutput = '';
+if ($showQr) {
+    try {
+        if (function_exists('fr_qr_svg')) {
+            $barcodeOutput = fr_qr_svg($verifyUrl, 105);
+        }
+        if ($barcodeOutput === '' && class_exists('\\splitbrain\\phpQRCode\\QRCode')) {
+            $barcodeOutput = \splitbrain\phpQRCode\QRCode::svg($verifyUrl);
+        }
+    } catch (\Throwable $qe) {
+        error_log('QR generation warning: ' . $qe->getMessage());
+        $barcodeOutput = '';
+    }
+
+    // در صورت عدم دسترسی به API یا بروز هرگونه استثنا، فوراً روی تابع آفلاین و بومی barcode39_svg() سوئیچ می‌شود
+    if ($barcodeOutput === '') {
+        try {
+            if (function_exists('barcode39_svg')) {
+                $barcodeOutput = barcode39_svg($repCode, 44)
+                    . '<div class="pr-barcode-caption" style="font-size:10px;font-weight:700;color:#475569;margin-top:3px;letter-spacing:1px;text-align:center" dir="ltr">Feria.ir</div>';
+            }
+        } catch (\Throwable $be) {
+            error_log('barcode39_svg fallback notice: ' . $be->getMessage());
+            $barcodeOutput = '<div style="font-size:11px;font-weight:700;color:#0f172a;text-align:center" dir="ltr">'
+                . htmlspecialchars($repCode)
+                . '<br><span style="font-size:9.5px;color:#64748b">Feria.ir</span></div>';
+        }
+    }
+}
 
 $docTitle = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode);
 
@@ -711,6 +817,9 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
       Analyzer::scoreAttempt((int)$at['id']);
       $results = Analyzer::getResults((int)$at['id']);
   }
+  if (!empty($results)) {
+      $results = fr_normalize_chart_digits($results);
+  }
   if (!empty($results)):
   ?>
   <div class="avoid-break" style="margin-bottom:18px">
@@ -788,8 +897,8 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     <!-- بارکد و استعلام اصالت -->
     <?php if ($showQr): ?>
       <div class="pr-qr-section">
-        <div id="frQrContainer" class="pr-qr-box" style="width:115px;height:115px;flex-shrink:0;background:#fff;padding:4px;border:1px solid #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden">
-          <?= $qrSvg ?: barcode39_svg($repCode, 52) ?>
+        <div id="frQrContainer" class="pr-qr-box" style="width:115px;min-height:115px;flex-shrink:0;background:#fff;padding:6px;border:1px solid #cbd5e1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;text-align:center">
+          <?= $barcodeOutput ?>
         </div>
         <div style="font-size:11px;line-height:1.9">
           <b style="color:var(--pr-color);font-size:12px">🔏 اصالت‌سنجی رسمی کارنامه</b><br>
@@ -852,6 +961,14 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
    ══════════════════════════════════════════════════════════════════ */
 (function () {
   function faN(n) { return String(Math.round(n)).replace(/\d/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'[d]; }); }
+  function toNum(v) {
+    if (v == null) return 0;
+    if (typeof v === 'number') return isNaN(v) ? 0 : v;
+    var s = String(v).replace(/[۰-۹]/g, function (d) { return '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)]; })
+                     .replace(/[٠-٩]/g, function (d) { return '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]; });
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
   function prep(cnv) {
     var ctx = cnv.getContext('2d');
     var cssW = cnv.offsetWidth || 700, cssH = cnv.offsetHeight || 260;
@@ -864,7 +981,7 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     var p = prep(cnv), ctx = p.ctx, w = p.w, h = p.h;
     var padL = 14, padR = 40, padT = 30, padB = 34;
     var xs = cfg.labels.length, ix = function (i) { return padL + (w - padL - padR) * i / Math.max(1, xs - 1); };
-    var iy = function (v) { return h - padB - (h - padT - padB) * Math.max(0, Math.min(100, v)) / 100; };
+    var iy = function (v) { return h - padB - (h - padT - padB) * Math.max(0, Math.min(100, toNum(v))) / 100; };
     ctx.strokeStyle = '#efecf8'; ctx.lineWidth = 1;
     ctx.fillStyle = '#94a3b8'; ctx.font = '10px ' + FONT; ctx.textAlign = 'left';
     for (var gi = 0; gi <= 5; gi++) {
@@ -877,9 +994,10 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     cfg.series.forEach(function (s) {
       ctx.strokeStyle = s.color; ctx.lineWidth = 2.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.beginPath();
-      s.values.forEach(function (v, i) { i ? ctx.lineTo(ix(i), iy(v)) : ctx.moveTo(ix(i), iy(v)); });
+      var vals = (s.values || []).map(toNum);
+      vals.forEach(function (v, i) { i ? ctx.lineTo(ix(i), iy(v)) : ctx.moveTo(ix(i), iy(v)); });
       ctx.stroke();
-      s.values.forEach(function (v, i) {
+      vals.forEach(function (v, i) {
         ctx.beginPath(); ctx.arc(ix(i), iy(v), 4.4, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
         ctx.beginPath(); ctx.arc(ix(i), iy(v), 3.2, 0, 7); ctx.fillStyle = s.color; ctx.fill();
         ctx.fillStyle = '#1e293b'; ctx.font = 'bold 9.5px ' + FONT; ctx.textAlign = 'center';
@@ -897,18 +1015,19 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     var labelW = 150, padR = 14, padL = 50;
     var x0 = labelW, x1 = w - padL - padR;
     bars.forEach(function (b, i) {
+      var val = toNum(b.value);
       var y = 10 + i * rowH, bh = rowH * 0.52;
       ctx.fillStyle = '#1e293b'; ctx.font = 'bold 10.5px ' + FONT; ctx.textAlign = 'right';
       ctx.fillText(b.label, labelW - 8, y + bh - 2);
       ctx.fillStyle = '#f1f5f9';
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x0, y, x1 - x0, bh, bh / 2); ctx.fill(); }
       else ctx.fillRect(x0, y, x1 - x0, bh);
-      var bw = Math.max(3, (x1 - x0) * Math.min(100, b.value) / 100);
+      var bw = Math.max(3, (x1 - x0) * Math.min(100, val) / 100);
       ctx.fillStyle = b.color;
       if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x0, y, bw, bh, bh / 2); ctx.fill(); }
       else ctx.fillRect(x0, y, bw, bh);
       ctx.fillStyle = '#475569'; ctx.font = 'bold 9.5px ' + FONT; ctx.textAlign = 'left';
-      ctx.fillText(faN(b.value) + '٪' + (b.band ? ' — ' + b.band : ''), x0 + bw + 6, y + bh - 2);
+      ctx.fillText(faN(val) + '٪' + (b.band ? ' — ' + b.band : ''), x0 + bw + 6, y + bh - 2);
     });
   }
 

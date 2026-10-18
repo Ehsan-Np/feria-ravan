@@ -55,11 +55,43 @@ function fa_num($n): string
 /** تبدیل ارقام فارسی/عربی به انگلیسی (پردازش ورودی کاربر) */
 function en_num($n): string
 {
-    return str_replace(
-        array_merge(FR_DIGITS_FA, ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩']),
-        FR_DIGITS_EN,
-        (string)$n
-    );
+    static $from = null;
+    static $to = null;
+    if ($from === null) {
+        $from = array_merge(FR_DIGITS_FA, ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩']);
+        $to   = array_merge(FR_DIGITS_EN, FR_DIGITS_EN);
+    }
+    return str_replace($from, $to, (string)$n);
+}
+
+/**
+ * تابع نرمالایزر داده‌های عددی: تبدیل بازگشتی ارقام فارسی و عربی به ارقام استاندارد لاتین/انگلیسی
+ * جهت جلوگیری قطعی از خطای NaN در اسکریپت‌های بوم (Canvas)، نمودارها و کانترها
+ */
+if (!function_exists('fr_normalize_chart_digits')) {
+    function fr_normalize_chart_digits(mixed $val): mixed
+    {
+        if (is_array($val)) {
+            $cleaned = [];
+            foreach ($val as $k => $v) {
+                $cleaned[$k] = fr_normalize_chart_digits($v);
+            }
+            return $cleaned;
+        }
+        if (is_string($val)) {
+            if (preg_match('/[۰-۹٠-٩]/u', $val)) {
+                $en = en_num($val);
+                if (is_numeric(trim($en))) {
+                    return str_contains($en, '.') ? (float)$en : (int)$en;
+                }
+                return $en;
+            }
+            if (is_numeric(trim($val))) {
+                return str_contains($val, '.') ? (float)$val : (int)$val;
+            }
+        }
+        return $val;
+    }
 }
 
 /**
@@ -169,6 +201,26 @@ function jdate(string $format = 'j F Y', $ts = null): string
         'A' => date('A', $ts) === 'AM' ? 'صبح' : 'عصر',
     ]);
     return fa_num($out);
+}
+
+/**
+ * تابع مبدل و قالب‌بندی تاریخ شمسی سازگار با سیستم جلالی پروژه (نام مستعار jdate)
+ */
+if (!function_exists('fr_pdate')) {
+    function fr_pdate(string $format = 'j F Y', $ts = null): string
+    {
+        return jdate($format, $ts);
+    }
+}
+
+/**
+ * دریافت تاریخ شمسی با ارقام انگلیسی/لاتین جهت محاسبات، پارامترهای URL و APIها
+ */
+if (!function_exists('jdate_en')) {
+    function jdate_en(string $format = 'Y/m/d', $ts = null): string
+    {
+        return en_num(jdate($format, $ts));
+    }
 }
 
 /**

@@ -151,7 +151,7 @@ final class CarnetPdfBuilder
         $clientAge = '—';
         if (!empty($at['birth_date']) && preg_match('/^(\d{4})/', (string)$at['birth_date'], $bm)) {
             $by = (int)$bm[1];
-            $cy = (int)jdate('Y');
+            $cy = (int)en_num(jdate('Y'));
             if ($by > 1300 && $by <= $cy) {
                 $clientAge = (string)($cy - $by) . ' سال';
             }
@@ -184,10 +184,26 @@ final class CarnetPdfBuilder
         $rawStamp = function_exists('fr_report_provider_stamp') ? fr_report_provider_stamp() : '';
         $stampUri = function_exists('fr_image_to_data_uri') ? fr_image_to_data_uri($rawStamp) : '';
 
-        // بارکد QR اصالت‌سنجی سند
+        // بارکد QR اصالت‌سنجی سند با فال‌بک بومی barcode39_svg
         $customQrLink = trim((string)DB::setting('report_qr_link', ''));
-        $verifyUrl = $customQrLink !== '' ? $customQrLink : (SITE_URL . '/panel/report.php?attempt=' . (int)$at['id']);
-        $qrSvg = function_exists('fr_qr_svg') ? fr_qr_svg($verifyUrl, 84) : '';
+        $verifyUrl = ($customQrLink !== '' && (filter_var($customQrLink, FILTER_VALIDATE_URL) || str_starts_with($customQrLink, 'http')))
+            ? $customQrLink
+            : (SITE_URL . '/panel/report.php?attempt=' . (int)$at['id']);
+        $qrSvg = '';
+        if ($showQr) {
+            try {
+                $qrSvg = function_exists('fr_qr_svg') ? fr_qr_svg($verifyUrl, 84) : '';
+            } catch (\Throwable $qe) {
+                $qrSvg = '';
+            }
+            if ($qrSvg === '' && function_exists('barcode39_svg')) {
+                try {
+                    $qrSvg = barcode39_svg($repCode, 40);
+                } catch (\Throwable $be) {
+                    $qrSvg = '';
+                }
+            }
+        }
         $qrUri = ($qrSvg !== '') ? ('data:image/svg+xml;base64,' . base64_encode($qrSvg)) : '';
 
         // ساخت بدنه کامل گزارش با نمرات، نوارهای مقیاس و تفسیرها
@@ -543,7 +559,7 @@ final class CarnetPdfBuilder
         $clientAge = '—';
         if (!empty($at['birth_date']) && preg_match('/^(\d{4})/', (string)$at['birth_date'], $bm)) {
             $by = (int)$bm[1];
-            $cy = (int)jdate('Y');
+            $cy = (int)en_num(jdate('Y'));
             if ($by > 1300 && $by <= $cy) {
                 $clientAge = (string)($cy - $by) . ' سال';
             }

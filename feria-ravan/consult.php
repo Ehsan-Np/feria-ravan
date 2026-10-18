@@ -143,9 +143,10 @@ if (($slotId = (int)($_GET['slot'] ?? 0)) > 0) {
                   " WHERE id=? AND service_id=? AND status='open' AND starts_at>NOW()", [$slotId, (int)$service['id']]);
     if ($sl) {
         $ts = strtotime($sl['starts_at']);
+        [$jyR, $jmR, $jdR] = g2j((int)date('Y', $ts), (int)date('m', $ts), (int)date('d', $ts));
         $resume = [
             'slot'=>(int)$sl['id'], 'time'=>date('H:i', $ts),
-            'jy'=>(int)jdate('Y', $ts), 'jm'=>(int)jdate('n', $ts), 'jd'=>(int)jdate('j', $ts),
+            'jy'=>$jyR, 'jm'=>$jmR, 'jd'=>$jdR,
             'gday'=>date('Y-m-d', $ts),
             'mode'=>in_array(($_GET['mode'] ?? ''), ['online','inperson'], true) ? $_GET['mode'] : null,
         ];

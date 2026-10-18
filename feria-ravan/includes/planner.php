@@ -194,7 +194,7 @@ function fr_planner_valid_dt(?string $dt): ?string
     $dt = str_replace('T', ' ', en_num($dt));
 
     // اگر تاریخ در قالب شمسی باشد (مثلاً 1405/07/26 14:30)
-    if (preg_match('#^(13|14)\d{2}[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?#', $dt, $mj)) {
+    if (preg_match('#^((?:13|14)\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12][0-9]|3[01])\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?#', $dt, $mj)) {
         $gDay = jalali_to_mysql($mj[1] . '/' . $mj[2] . '/' . $mj[3]);
         if ($gDay) {
             $h = (int)$mj[4]; $i = (int)$mj[5]; $s = isset($mj[6]) ? (int)$mj[6] : 0;
@@ -218,6 +218,17 @@ function fr_planner_update(int $userId, int $taskId, array $f): bool
     $pri0 = (string)($f['priority'] ?? 'normal');
     $pri = in_array($pri0, ['low','normal','high'], true) ? $pri0 : 'normal';
 
+    $remindAt = null;
+    $rawRemind = trim((string)($f['remind_at'] ?? ''));
+    if ($rawRemind !== '') {
+        $rawRemind = en_num($rawRemind);
+        if (preg_match('/^(\d{1,2}):(\d{2})$/', $rawRemind, $tm)) {
+            $remindAt = sprintf('%s %02d:%02d:00', $day, (int)$tm[1], (int)$tm[2]);
+        } else {
+            $remindAt = fr_planner_valid_dt($rawRemind);
+        }
+    }
+
     DB::update('planner_tasks', [
         'title'       => $title,
         'day'         => $day,
@@ -225,7 +236,7 @@ function fr_planner_update(int $userId, int $taskId, array $f): bool
         'priority'    => $pri,
         'category'    => mb_substr(trim((string)($f['category'] ?? 'personal')), 0, 60) ?: 'personal',
         'note'        => mb_substr(trim((string)($f['note'] ?? '')), 0, 500),
-        'remind_at'   => fr_planner_valid_dt($f['remind_at'] ?? null),
+        'remind_at'   => $remindAt,
         'reminded_at' => null, // اگر ساعت یادآور تغییر کرد، امکان ارسال مجدد فعال شود
     ], 'id=?', [$taskId]);
     return true;

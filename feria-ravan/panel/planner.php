@@ -58,13 +58,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ۱) افزودن کار جدید با تاریخ شمسی ۱۴۰۵
     if ($act === 'add') {
         $rawDay = (string)($_POST['day'] ?? $today);
+        if ($rawDay === 'custom') {
+            $rawDay = (string)($_POST['day_custom'] ?? $today);
+        }
         $normDay = fr_planner_normalize_day($rawDay);
         $title = (string)($_POST['title'] ?? '');
         $timeNote = (string)($_POST['time_note'] ?? '');
         $priority = (string)($_POST['priority'] ?? 'normal');
         $category = (string)($_POST['category'] ?? 'personal');
         $note = (string)($_POST['note'] ?? '');
-        $remindAt = !empty($_POST['remind_at']) ? (string)$_POST['remind_at'] : null;
+
+        $remindAt = null;
+        $rawRemind = trim((string)($_POST['remind_at'] ?? ($_POST['remind_time'] ?? '')));
+        if ($rawRemind !== '') {
+            $rawRemind = en_num($rawRemind);
+            if (preg_match('/^(\d{1,2}):(\d{2})$/', $rawRemind, $tm)) {
+                $remindAt = sprintf('%s %02d:%02d:00', $normDay, (int)$tm[1], (int)$tm[2]);
+            } else {
+                $remindAt = fr_planner_valid_dt($rawRemind);
+            }
+        }
 
         $id = fr_planner_add((int)$u['id'], $normDay, $title, $timeNote, $priority, $category, $note, $remindAt);
         if ($id > 0) {
@@ -380,7 +393,7 @@ $TABS = [
             </div>
             <div>
               <label style="font-size:11.5px;color:#475569;margin-bottom:4px;display:block">ساعت شروع (قالب ۲۴ ساعته)</label>
-              <input class="fr-input" name="time_note" type="text" maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="08:30" dir="ltr" style="text-align:center">
+              <input class="fr-input" name="time_note" type="text" data-t24 maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="08:30" dir="ltr" style="text-align:center">
             </div>
             <div>
               <label style="font-size:11.5px;color:#475569;margin-bottom:4px;display:block">اولویت روان‌شناختی</label>
@@ -407,11 +420,11 @@ $TABS = [
                 <option value="<?= date('Y-m-d', strtotime('+2 days')) ?>">پس‌فردا: <?= fa_num(jdate('l j F ۱۴۰۵', strtotime('+2 days'))) ?></option>
                 <option value="custom">📅 انتخاب تاریخ شمسی دلخواه…</option>
               </select>
-              <input class="fr-input" name="day_custom" id="plDayCustom" placeholder="1405/07/26" dir="ltr" style="display:none;margin-top:6px;text-align:center">
+              <input class="fr-input" name="day_custom" id="plDayCustom" data-jdate maxlength="10" placeholder="1405/07/26" dir="ltr" style="display:none;margin-top:6px;text-align:center">
             </div>
             <div>
-              <label style="font-size:11.5px;color:#475569;margin-bottom:4px;display:block">🔔 ساعت یادآوری خودکار</label>
-              <input class="fr-input" type="datetime-local" name="remind_at" dir="ltr" title="در صورت تنظیم، سر موعد مشخص از تلگرام، بله، روبیکا یا پیامک یادآوری ارسال می‌شود">
+              <label style="font-size:11.5px;color:#475569;margin-bottom:4px;display:block">🔔 ساعت یادآوری (۲۴ ساعته)</label>
+              <input class="fr-input" type="text" data-t24 maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" name="remind_at" placeholder="08:30" dir="ltr" style="text-align:center" title="در صورت تنظیم، سر ساعت مشخص از تلگرام، بله، روبیکا یا پیامک یادآوری ارسال می‌شود">
             </div>
           </div>
 
@@ -1061,11 +1074,11 @@ if ($editId > 0):
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="pl-addgrid">
         <div class="fr-field">
           <label>تاریخ شمسی (مثلاً: <?= fa_num($todayShamsi) ?>)</label>
-          <input class="fr-input" name="day" dir="ltr" value="<?= e($etShamsi) ?>" style="text-align:center" placeholder="1405/07/26">
+          <input class="fr-input" data-jdate maxlength="10" name="day" dir="ltr" value="<?= e($etShamsi) ?>" style="text-align:center" placeholder="1405/07/26">
         </div>
         <div class="fr-field">
           <label>ساعت (۲۴ ساعته)</label>
-          <input class="fr-input" name="time_note" maxlength="5" dir="ltr" style="text-align:center" value="<?= e((string)$et['time_note']) ?>" placeholder="08:30">
+          <input class="fr-input" data-t24 maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" name="time_note" dir="ltr" style="text-align:center" value="<?= e((string)$et['time_note']) ?>" placeholder="08:30">
         </div>
       </div>
 
@@ -1094,8 +1107,8 @@ if ($editId > 0):
       </div>
 
       <div class="fr-field">
-        <label>🔔 ساعت یادآور</label>
-        <input class="fr-input" type="datetime-local" name="remind_at" dir="ltr" value="<?= e(!empty($et['remind_at']) ? str_replace(' ', 'T', substr((string)$et['remind_at'], 0, 16)) : '') ?>">
+        <label>🔔 ساعت یادآور (۲۴ ساعته)</label>
+        <input class="fr-input" type="text" data-t24 maxlength="5" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" name="remind_at" dir="ltr" style="text-align:center" placeholder="08:30" value="<?= e(!empty($et['remind_at']) ? substr(date('H:i', strtotime((string)$et['remind_at'])), 0, 5) : '') ?>">
       </div>
 
       <div style="display:flex;gap:10px;margin-top:14px">
