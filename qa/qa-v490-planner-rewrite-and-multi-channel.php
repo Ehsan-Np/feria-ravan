@@ -103,12 +103,12 @@ it('فایل includes/update.php بلوک ارتقای نگارش 4.9.0 را د�
 });
 
 it('فایل مهاجرت یکپارچه جدید database/migrations موجود و v480 حذف شده است', function() {
-    expectTrue(file_exists(FR_ROOT . '/database/migrations/v492_unified_migration.sql'), 'v492 migration file must exist');
+    expectTrue(file_exists(FR_ROOT . '/database/migrations/v493_unified_migration.sql'), 'v493 migration file must exist');
     expectTrue(!file_exists(FR_ROOT . '/database/migrations/v480_unified_migration.sql'), 'v480 migration file must be removed');
-    $sql = file_get_contents(FR_ROOT . '/database/migrations/v492_unified_migration.sql');
-    expectTrue(str_contains($sql, "'system_version', '4.9.2'"), 'v492 SQL must set system_version to 4.9.2');
-    expectTrue(str_contains($sql, "planner_moods"), 'v492 SQL must create planner_moods table');
-    expectTrue(str_contains($sql, "rubika_chat_id"), 'v492 SQL must add rubika columns');
+    $sql = file_get_contents(FR_ROOT . '/database/migrations/v493_unified_migration.sql');
+    expectTrue(str_contains($sql, "'system_version', '4.9.3'"), 'v493 SQL must set system_version to 4.9.3');
+    expectTrue(str_contains($sql, "planner_moods"), 'v493 SQL must create planner_moods table');
+    expectTrue(str_contains($sql, "rubika_chat_id"), 'v493 SQL must add rubika columns');
 });
 
 it('جدول fr_planner_moods در پایگاه داده ایجاد شده و ستون‌های استاندارد را دارد', function() {

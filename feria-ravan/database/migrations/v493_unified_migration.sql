@@ -1,6 +1,6 @@
 -- ============================================================================
 -- فریا روان (Feria Ravan) — اسکریپت تجمیعی و یکپارچه مهاجرت پایگاه‌داده
--- نگارش: ۴٫۹٫۲ (v4.9.2 Unified Migration)
+-- نگارش: ۴٫۹٫۳ (v4.9.3 Unified Migration)
 -- تجمیع تمامی تغییرات، جداول جدید، ستون‌ها، ایندکس‌ها و تنظیمات نگارش‌های سامانه
 -- ============================================================================
 
@@ -148,9 +148,9 @@ ALTER TABLE `{{prefix}}users`
 
 -- ۲٫۲. ستون‌های پیام‌رسان روبیکا در جدول مخاطبین
 ALTER TABLE `{{prefix}}contacts`
-  ADD COLUMN IF NOT EXISTS `rubika_chat_id` VARCHAR(100) DEFAULT NULL AFTER `bale_chat_id`,
-  ADD COLUMN IF NOT EXISTS `rubika_username` VARCHAR(60) DEFAULT NULL AFTER `bale_username`,
-  ADD COLUMN IF NOT EXISTS `rubika_ok` TINYINT(1) NOT NULL DEFAULT 0 AFTER `bale_ok`;
+  ADD COLUMN IF NOT EXISTS `rubika_chat_id` VARCHAR(100) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS `rubika_username` VARCHAR(60) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS `rubika_ok` TINYINT(1) NOT NULL DEFAULT 0;
 
 -- ۲٫۳. سازگاری ستون‌های کیف پول
 ALTER TABLE `{{prefix}}wallet_transactions`
@@ -238,11 +238,11 @@ VALUES
   ('planner_notify_channels', 'telegram,bale,rubika', 1)
 ON DUPLICATE KEY UPDATE `key`=`key`;
 
--- ۳٫۵. ثبت و تثبیت نگارش ۴٫۹٫۲ در تنظیمات سامانه
+-- ۳٫۵. ثبت و تثبیت نگارش ۴٫۹٫۳ در تنظیمات سامانه
 INSERT INTO `{{prefix}}settings` (`key`, `value`, `autoload`)
 VALUES 
-  ('fr_version', '4.9.2', 1),
-  ('system_version', '4.9.2', 1)
-ON DUPLICATE KEY UPDATE `value`='4.9.2';
+  ('fr_version', '4.9.3', 1),
+  ('system_version', '4.9.3', 1)
+ON DUPLICATE KEY UPDATE `value`='4.9.3';
 
 SET FOREIGN_KEY_CHECKS=1;

@@ -1261,6 +1261,15 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.9.2 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۶. نگارش ۴٫۹٫۳: تجمیع گزینه‌های کارنامه به دکمه واحد دریافت فایل PDF و تحویل قطعی باینری
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('system_version', '4.9.3');
+            DB::setSetting('fr_version', '4.9.3');
+            DB::setSetting('report_pdf_download_mode', 'direct_binary_pdf');
+        } catch (Throwable $e) { error_log('feria: 4.9.3 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);

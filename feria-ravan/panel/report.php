@@ -85,10 +85,7 @@ if ($assocDyad): ?>
 <?php endif; ?>
 <div class="fr-report-actions no-print" style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
   <a class="fr-btn ghost sm" href="history.php">→ بازگشت</a>
-  <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&print=1')) ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی رسمی کارنامه در ابعاد استاندارد A4">🖨️ دریافت نسخه چاپی کارنامه (A4)</a>
-  <a class="fr-btn sm" style="background:#059669;color:#fff" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">📥 دانلود فایل PDF</a>
-  <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId)) ?>" target="_blank" title="مشاهده سند رسمی کارنامه A4">📄 مشاهده نسخه A4</a>
-  <button class="fr-btn sm ghost" onclick="window.print()" title="چاپ مستقیم این صفحه">🖨️ چاپ سریع صفحه</button>
+  <a class="fr-btn sm" style="background:#059669;color:#fff;font-weight:700" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه رسمی در ابعاد استاندارد بین‌المللی A4">📥 دریافت فایل PDF کارنامه</a>
   <a class="fr-btn sm" style="background:#6d28d9;color:#fff" href="dyad.php?action=new&attempt=<?= $attemptId ?>">👥 سنجش تطابق دونفره / زوجین</a>
   <a class="fr-btn ghost sm" href="barcode.php?attempt=<?= $attemptId ?>" target="_blank">▮▮▮ بارکد گزارش</a>
   <?php if ($at['mode'] === 'free'): ?>
@@ -136,17 +133,14 @@ $isViewerAdmin = (bool)(function_exists('current_admin') && current_admin());
 echo ReportBuilder::build($at, $u, (string)($at['mode'] ?? 'full'), ['isAdmin' => $isViewerAdmin]);
 ?>
 
-<!-- نوار دریافت نسخه چاپی و دانلود در انتهای کارنامه -->
+<!-- نوار دریافت فایل PDF کارنامه در انتهای گزارش -->
 <div class="fr-card no-print" style="margin-top:24px;background:#f8fafc;border:1.5px solid #cbd5e1;padding:18px 22px;border-radius:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
   <div>
-    <b style="font-size:15px;color:#0f172a">🖨️ دریافت و چاپ کارنامه رسمی آزمون</b>
-    <div style="font-size:12.5px;color:#64748b;margin-top:3px">شما می‌توانید کارنامه رسمی ارزیابی روان‌شناختی خود را با سربرگ معتبر در ابعاد استاندارد A4 دریافت، دانلود یا چاپ نمایید.</div>
+    <b style="font-size:15px;color:#0f172a">📥 دریافت فایل PDF کارنامه رسمی آزمون</b>
+    <div style="font-size:12.5px;color:#64748b;margin-top:3px">شما می‌توانید کارنامه رسمی ارزیابی روان‌شناختی خود را با سربرگ معتبر در ابعاد استاندارد بین‌المللی A4 به صورت فایل PDF دریافت و ذخیره نمایید.</div>
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-    <a class="fr-btn sm" style="background:#1e3a6e;color:#fff;font-weight:600" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&print=1')) ?>" target="_blank" title="مشاهده و دریافت نسخه چاپی کارنامه رسمی در ابعاد استاندارد A4">🖨️ دریافت نسخه چاپی (A4)</a>
-    <a class="fr-btn sm" style="background:#059669;color:#fff" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank" title="دانلود مستقیم فایل PDF کارنامه">📥 دانلود فایل PDF</a>
-    <a class="fr-btn sm ghost" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId)) ?>" target="_blank" title="مشاهده نسخه استاندارد A4 کارنامه">📄 مشاهده برگه A4</a>
-    <button class="fr-btn sm ghost" onclick="window.print()" title="چاپ مستقیم این صفحه">🖨️ چاپ سریع صفحه</button>
+    <a class="fr-btn sm" style="background:#059669;color:#fff;font-weight:700" href="<?= e(fr_panel_url('report-pdf.php?attempt=' . $attemptId . '&download=1')) ?>" target="_blank" title="دانلود و دریافت مستقیم فایل PDF کارنامه رسمی در ابعاد استاندارد A4">📥 دریافت فایل PDF کارنامه</a>
   </div>
 </div>
 

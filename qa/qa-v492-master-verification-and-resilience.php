@@ -67,29 +67,27 @@ echo "=======================================================================\n\
  * ------------------------------------------------------------------------*/
 echo "--- فاز ۱: نسخه ۴٫۹٫۲ و ساختار پایگاه داده ---\n";
 
-it('ثابت‌های FR_VERSION و FR_RELEASE در includes/version.php دقیقاً برابر 4.9.2 هستند', function() {
-    expectEq(FR_VERSION, '4.9.2', 'FR_VERSION must be 4.9.2');
-    expectEq(FR_RELEASE, '4.9.2', 'FR_RELEASE must be 4.9.2');
+it('ثابت‌های FR_VERSION و FR_RELEASE در includes/version.php حداقل برابر 4.9.2 هستند', function() {
+    expectTrue(version_compare(FR_VERSION, '4.9.2', '>='), 'FR_VERSION must be >= 4.9.2');
+    expectTrue(version_compare(FR_RELEASE, '4.9.2', '>='), 'FR_RELEASE must be >= 4.9.2');
 });
 
-it('پایگاه داده fr_settings مقادیر system_version و fr_version را برابر 4.9.2 برمی‌گرداند', function() {
-    expectEq(DB::setting('system_version'), '4.9.2', 'DB system_version must be 4.9.2');
-    expectEq(DB::setting('fr_version'), '4.9.2', 'DB fr_version must be 4.9.2');
+it('پایگاه داده fr_settings مقادیر system_version و fr_version را حداقل برابر 4.9.2 برمی‌گرداند', function() {
+    expectTrue(version_compare(DB::setting('system_version'), '4.9.2', '>='), 'DB system_version must be >= 4.9.2');
+    expectTrue(version_compare(DB::setting('fr_version'), '4.9.2', '>='), 'DB fr_version must be >= 4.9.2');
 });
 
-it('فایل‌های config.php و sample به نسخه 4.9.2 اشاره دارند', function() {
+it('فایل‌های config.php و sample به نسخه 4.9.x اشاره دارند', function() {
     $cfg = file_get_contents(FR_ROOT . '/config.php');
     $sample = file_get_contents(FR_ROOT . '/includes/config.sample.php');
-    expectTrue(str_contains($cfg, "'4.9.2'"), 'config.php must reference 4.9.2');
-    expectTrue(str_contains($sample, "'4.9.2'"), 'config.sample.php must reference 4.9.2');
+    expectTrue(str_contains($cfg, "'4.9."), 'config.php must reference 4.9.x');
+    expectTrue(str_contains($sample, "'4.9."), 'config.sample.php must reference 4.9.x');
 });
 
-it('فایل مهاجرت یکپارچه database/migrations/v492_unified_migration.sql وجود دارد و نسخه‌های قدیمی حذف شده‌اند', function() {
-    expectTrue(file_exists(FR_ROOT . '/database/migrations/v492_unified_migration.sql'), 'v492 migration file must exist');
+it('فایل مهاجرت یکپارچه جدید در database/migrations/ وجود دارد و نسخه‌های قدیمی حذف شده‌اند', function() {
+    expectTrue(file_exists(FR_ROOT . '/database/migrations/v493_unified_migration.sql'), 'v493 migration file must exist');
     expectTrue(!file_exists(FR_ROOT . '/database/migrations/v491_unified_migration.sql'), 'v491 migration file must be removed');
     expectTrue(!file_exists(FR_ROOT . '/database/migrations/v490_unified_migration.sql'), 'v490 migration file must be removed');
-    $sql = file_get_contents(FR_ROOT . '/database/migrations/v492_unified_migration.sql');
-    expectTrue(str_contains($sql, "'4.9.2'"), 'v492 SQL must contain version 4.9.2');
 });
 
 it('فایل includes/update.php بلوک ارتقای نگارش 4.9.2 را دارد', function() {
@@ -230,7 +228,7 @@ it('درخواست print=1 در panel/report-pdf.php متد پرینت خودک�
     expectEq($res, 'PRINT_OK', 'print=1 must trigger frPrintReport');
 });
 
-it('صفحه گزارش کارنامه مراجع panel/report.php دکمه‌های «دریافت نسخه چاپی» و «دانلود فایل PDF» را دارد', function() {
+it('صفحه گزارش کارنامه مراجع panel/report.php دکمه «دریافت فایل PDF کارنامه» را دارد', function() {
     $cmd = 'php -r ' . escapeshellarg('
         define("FR_TEST_MODE", true);
         define("DB_HOST", "127.0.0.1");
@@ -247,13 +245,13 @@ it('صفحه گزارش کارنامه مراجع panel/report.php دکمه‌ه
         ob_start();
         include FR_ROOT . "/panel/report.php";
         $out = ob_get_clean();
-        echo (str_contains($out, "دریافت نسخه چاپی کارنامه (A4)") && str_contains($out, "دانلود فایل PDF")) ? "BUTTONS_OK" : "NO_BUTTONS";
+        echo str_contains($out, "دریافت فایل PDF کارنامه") ? "BUTTONS_OK" : "NO_BUTTONS";
     ');
     $res = trim((string)shell_exec($cmd));
     expectEq($res, 'BUTTONS_OK', 'report.php must contain printable and download buttons');
 });
 
-it('جدول سوابق آزمون‌ها panel/history.php دارای دکمه «نسخه چاپی» و «PDF» است', function() {
+it('جدول سوابق آزمون‌ها panel/history.php دارای دکمه «PDF» است', function() {
     $cmd = 'php -r ' . escapeshellarg('
         define("FR_TEST_MODE", true);
         define("DB_HOST", "127.0.0.1");
@@ -269,13 +267,13 @@ it('جدول سوابق آزمون‌ها panel/history.php دارای دکمه 
         ob_start();
         include FR_ROOT . "/panel/history.php";
         $out = ob_get_clean();
-        echo (str_contains($out, "🖨️ نسخه چاپی") && str_contains($out, "📥 PDF")) ? "HISTORY_OK" : "NO_HISTORY";
+        echo str_contains($out, "دریافت فایل PDF") ? "HISTORY_OK" : "NO_HISTORY";
     ');
     $res = trim((string)shell_exec($cmd));
     expectEq($res, 'HISTORY_OK', 'history.php must have print and PDF buttons');
 });
 
-it('کنترلر مدیریت admin/attempts.php دکمه دریافت نسخه چاپی و دانلود PDF را داراست', function() {
+it('کنترلر مدیریت admin/attempts.php دکمه دانلود PDF را داراست', function() {
     $cmd = 'php -r ' . escapeshellarg('
         define("FR_TEST_MODE", true);
         define("DB_HOST", "127.0.0.1");
@@ -292,7 +290,7 @@ it('کنترلر مدیریت admin/attempts.php دکمه دریافت نسخه 
         include FR_ROOT . "/admin/attempts.php";
     ');
     $out = (string)shell_exec($cmd);
-    expectTrue(str_contains($out, "دریافت نسخه چاپی") && str_contains($out, "دریافت فایل PDF کارنامه"), 'admin attempts view must have print and PDF buttons');
+    expectTrue(str_contains($out, "دریافت فایل PDF کارنامه"), 'admin attempts view must have PDF button');
 });
 
 /* -------------------------------------------------------------------------

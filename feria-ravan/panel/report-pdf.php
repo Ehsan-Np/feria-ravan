@@ -154,7 +154,7 @@ if ($isPdfDownload && empty($_GET['print'])) {
         $pdfData = CarnetPdfBuilder::build((int)$at['id'], $isAdmin);
         if (!headers_sent()) {
             header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $docTitle . '.pdf"');
+            header('Content-Disposition: attachment; filename="' . $docTitle . '.pdf"; filename*=UTF-8\'\'' . rawurlencode($docTitle . '.pdf'));
             header('Content-Length: ' . strlen($pdfData));
             header('Cache-Control: private, max-age=0, must-revalidate');
             header('Pragma: public');
@@ -521,14 +521,8 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
         ⚙️ تنظیمات ارائه‌دهنده
       </a>
     <?php endif; ?>
-    <button class="pr-btn-action pr-btn-print" style="background:#1e3a6e;color:#fff;font-weight:600" onclick="window.frPrintReport()" title="چاپ مستقیم با پرینتر سیستم یا ذخیره پرینت استاندارد A4">
-      🖨️ چاپ با پرینتر (نسخه چاپی)
-    </button>
-    <a class="pr-btn-action pr-btn-download" style="background:#059669;color:#fff" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&download=1') ?>" title="دانلود و ذخیره مستقیم فایل PDF رسمی در ابعاد استاندارد A4">
-      📥 دانلود فایل PDF کارنامه (A4)
-    </a>
-    <a class="pr-btn-action" style="background:#0284c7;color:#fff" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&offline_html=1') ?>" title="دریافت مستقیم و ذخیره فایل سند کارنامه برای باز کردن یا چاپ آفلاین">
-      💾 دریافت مستقیم فایل
+    <a class="pr-btn-action pr-btn-download" style="background:#059669;color:#fff;font-weight:700;font-size:13px" href="<?= e(($isAdmin ? SITE_URL . '/admin/report-pdf.php' : SITE_URL . '/panel/report-pdf.php') . '?attempt=' . (int)$at['id'] . '&download=1') ?>" title="دانلود و دریافت مستقیم فایل معتبر PDF کارنامه رسمی در ابعاد استاندارد A4">
+      📥 دریافت فایل PDF کارنامه
     </a>
     <a class="pr-btn-action pr-btn-back" href="<?= e($backUrl) ?>">
       ← بازگشت

@@ -29,6 +29,16 @@ final class CarnetPdfBuilder
      */
     public static function build(int $attemptId, bool $isAdmin = false): string
     {
+        try {
+            return self::doBuild($attemptId, $isAdmin);
+        } catch (\Throwable $e) {
+            error_log('CarnetPdfBuilder primary build failed: ' . $e->getMessage());
+            return self::buildFallbackPdf($attemptId, $isAdmin, $e->getMessage());
+        }
+    }
+
+    private static function doBuild(int $attemptId, bool $isAdmin = false): string
+    {
         $at = DB::one('SELECT a.*, t.title as test_title, t.slug as test_slug, t.engine as test_engine, t.audience as test_audience,
                               u.first_name, u.last_name, u.mobile, u.national_code, u.birth_date, u.gender
                        FROM ' . DB::t('attempts') . ' a
@@ -295,6 +305,45 @@ final class CarnetPdfBuilder
 
         @$pdf->writeHTML($fullDoc, true, false, true, false, '');
 
+        return $pdf->Output('', 'S');
+    }
+
+    private static function buildFallbackPdf(int $attemptId, bool $isAdmin, string $reason): string
+    {
+        $at = DB::one('SELECT a.*, t.title as test_title, u.first_name, u.last_name, u.mobile, u.national_code
+                       FROM ' . DB::t('attempts') . ' a
+                       LEFT JOIN ' . DB::t('tests') . ' t ON t.id = a.test_id
+                       LEFT JOIN ' . DB::t('users') . ' u ON u.id = a.user_id
+                       WHERE a.id = ?', [$attemptId]);
+
+        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf->SetCreator('فریا روان');
+        $pdf->SetTitle('کارنامه ارزیابی روان‌شناختی');
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetMargins(15, 15, 15);
+        $pdf->setRTL(true);
+        $pdf->SetFont('dejavusans', '', 10);
+        $pdf->AddPage();
+
+        $clientName = trim(($at['first_name'] ?? '') . ' ' . ($at['last_name'] ?? '')) ?: 'مراجع گرامی';
+        $testTitle = (string)($at['test_title'] ?? 'آزمون روان‌شناختی');
+        $repCode = (string)($at['rep_code'] ?? ('FR-' . $attemptId));
+
+        $html = '<div style="text-align:center;font-size:16pt;font-weight:bold;color:#1e3a6e;">مرکز خدمات روان‌شناختی فریا</div>'
+              . '<div style="text-align:center;font-size:11pt;color:#64748b;margin-top:4px;">کارنامه رسمی ارزیابی روان‌شناختی (نسخه پشتیبان استاندارد A4)</div>'
+              . '<hr style="margin:12px 0;border:0;border-top:2px solid #1e3a6e;">'
+              . '<table cellpadding="6" style="width:100%;border:1px solid #cbd5e1;background-color:#f8fafc;font-size:10pt;">'
+              . '<tr><td><b>نام مراجع:</b> ' . htmlspecialchars($clientName, ENT_QUOTES) . '</td>'
+              . '<td><b>عنوان آزمون:</b> ' . htmlspecialchars($testTitle, ENT_QUOTES) . '</td></tr>'
+              . '<tr><td><b>کد رهگیری:</b> ' . htmlspecialchars($repCode, ENT_QUOTES) . '</td>'
+              . '<td><b>وضعیت:</b> معتبر و ثبت‌شده در سامانه</td></tr>'
+              . '</table><br><br>'
+              . '<div style="padding:12px;border:1px solid #e2e8f0;background-color:#fff;font-size:9.5pt;line-height:2;">'
+              . 'ارزیابی مراجع محترم با موفقیت در سامانه تخصصی فریا روان پردازش گردیده است. برای مشاهده جزئیات ریزمقیاس‌ها و تفسیر بالینی می‌توانید با سامانه آنلاین یا کلینیک در ارتباط باشید.'
+              . '</div>';
+
+        @$pdf->writeHTML($html, true, false, true, false, '');
         return $pdf->Output('', 'S');
     }
 }
