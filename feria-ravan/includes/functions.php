@@ -1005,6 +1005,32 @@ if (!function_exists('fr_report_header_color')) {
     }
 }
 
+if (!function_exists('fr_report_accent_color')) {
+    function fr_report_accent_color(): string {
+        $v = trim((string)DB::setting('report_accent_color', ''));
+        return preg_match('/^#[0-9a-fA-F]{3,8}$/', $v) ? $v : '#7c3aed';
+    }
+}
+
+if (!function_exists('fr_report_chart_palette')) {
+    function fr_report_chart_palette(): string {
+        $v = trim((string)DB::setting('report_chart_palette', 'default'));
+        return in_array($v, ['default', 'ocean', 'emerald', 'royal'], true) ? $v : 'default';
+    }
+}
+
+if (!function_exists('fr_report_palette_colors')) {
+    function fr_report_palette_colors(): array {
+        $palette = fr_report_chart_palette();
+        return match($palette) {
+            'ocean'   => ['#1e3a8a', '#0284c7', '#0891b2', '#06b6d4', '#0369a1', '#2563eb', '#38bdf8'],
+            'emerald' => ['#065f46', '#059669', '#10b981', '#0d9488', '#047857', '#14b8a6', '#34d399'],
+            'royal'   => ['#4c1d95', '#6d28d9', '#7c3aed', '#8b5cf6', '#a855f7', '#581c87', '#c084fc'],
+            default   => ['#1e3a6e', '#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2', '#4338ca'],
+        };
+    }
+}
+
 if (!function_exists('fr_report_disclaimer')) {
     function fr_report_disclaimer(): string {
         $v = trim((string)DB::setting('report_disclaimer', ''));

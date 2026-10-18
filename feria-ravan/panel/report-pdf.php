@@ -454,20 +454,31 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     padding-top: 6px;
   }
 
-  /* ══ سازگاری با پرینت و ساخت PDF استاندارد A4 ══ */
+  /* ══ سازگاری با پرینت و ساخت PDF استاندارد A4 (برگرفته از 30-seconds-of-code) ══ */
   @media print {
+    *,
+    *::before,
+    *::after {
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
     @page {
       size: A4 portrait;
       margin: 10mm 12mm 12mm 12mm;
     }
     html, body {
       background: #fff !important;
-      color: #000 !important;
+      color: #0f172a !important;
       font-size: 10.5pt !important;
+      line-height: 1.6 !important;
+      margin: 0 !important;
+      padding: 0 !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
-    .pr-toolbar { display: none !important; }
+    .pr-toolbar, .no-print, header, footer, nav, aside, form, iframe, script {
+      display: none !important;
+    }
     .pr-sheet {
       width: 100% !important;
       min-height: 0 !important;
@@ -479,15 +490,81 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
     .fr-card {
       box-shadow: none !important;
       border: 1px solid #e2e8f0 !important;
-      margin-bottom: 14px !important;
-      break-inside: avoid !important;
+      border-radius: 8px !important;
+      margin-bottom: 12px !important;
+      padding: 12px 14px !important;
       page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      page-break-after: avoid !important;
+      break-after: avoid !important;
+    }
+    img {
+      max-width: 100% !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    thead {
+      display: table-header-group !important;
     }
     .avoid-break, .pr-demobox, .pr-attestation, .pr-disclaimer, .pr-table {
-      break-inside: avoid !important;
       page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
-    a { color: inherit !important; text-decoration: none !important; }
+    a, a:visited {
+      text-decoration: none !important;
+      color: inherit !important;
+    }
+    .fr-scalebar {
+      display: table !important;
+      width: 100% !important;
+      border-collapse: collapse !important;
+      margin-bottom: 8px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .fr-scalebar .lbl {
+      display: table-cell !important;
+      width: 32% !important;
+      vertical-align: middle !important;
+      font-size: 11px !important;
+      color: #1e293b !important;
+      text-align: right !important;
+      padding-left: 6px !important;
+    }
+    .fr-scalebar .track {
+      display: table-cell !important;
+      width: 50% !important;
+      vertical-align: middle !important;
+      height: 16px !important;
+      background-color: #e2e8f0 !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 999px !important;
+      overflow: hidden !important;
+      position: relative !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .fr-scalebar .fill {
+      display: block !important;
+      height: 16px !important;
+      border-radius: 999px !important;
+      min-width: 4px !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .fr-scalebar .val {
+      display: table-cell !important;
+      width: 18% !important;
+      vertical-align: middle !important;
+      font-size: 10.5px !important;
+      color: #475569 !important;
+      font-weight: 700 !important;
+      text-align: left !important;
+      padding-right: 6px !important;
+      direction: ltr !important;
+    }
   }
 
   .pr-canvas { display: block; width: 100%; }

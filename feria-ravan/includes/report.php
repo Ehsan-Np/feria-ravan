@@ -16,6 +16,8 @@
  * ============================================================================
  */
 declare(strict_types=1);
+require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/../core/Analyzer.php';
 require_once __DIR__ . '/../core/report-texts.php';
 require_once __DIR__ . '/../core/report-deep.php';
@@ -27,12 +29,35 @@ final class ReportBuilder
     /** نسخهٔ ۲٫۰ — حالت چاپ: نمودارهای مخصوص چاپ (خطی برای DISC / میله‌ای افقی برای بقیه) */
     private static bool $printMode = false;
 
+    /** نسخهٔ ۴٫۹٫۵ — حالت تولید مستقیم فایل PDF سروری */
+    private static bool $isPdf = false;
+
     /** نسخهٔ ۴٫۵٫۰ — دسترسی ادمین برای نمایش پروتکل‌های محرمانه مداخله بالینی */
     private static bool $isAdmin = false;
 
     public static function isAdmin(): bool
     {
         return self::$isAdmin;
+    }
+
+    public static function isPrintMode(): bool
+    {
+        return self::$printMode;
+    }
+
+    public static function isPdf(): bool
+    {
+        return self::$isPdf;
+    }
+
+    public static function setPrintMode(bool $v): void
+    {
+        self::$printMode = $v;
+    }
+
+    public static function setIsPdf(bool $v): void
+    {
+        self::$isPdf = $v;
     }
 
     /** کارت اعتباری توسعه‌دهنده — متن/لینک از تنظیمات (footer_credit_text / footer_credit_url) */
@@ -180,13 +205,22 @@ final class ReportBuilder
      */
     /**
      * ساخت HTML گزارش
-     * @param ?array $attempt ردیف آزمون
+     * @param array|int|null $attempt ردیف آزمون یا شناسه تلاش آزمون
      * @param ?array $user ردیف کاربر آزمون‌دهنده
      * @param ?string $level free|full
      * @param array $opts نسخهٔ ۲٫۰: ['print'=>true] → نمودار مخصوص چاپ + بدون کنواس‌های نمایشی
      */
-    public static function build(?array $attempt, ?array $user = null, ?string $level = 'full', array $opts = []): string
+    public static function build(array|int|null $attempt, ?array $user = null, ?string $level = 'full', array $opts = []): string
     {
+        if (is_int($attempt)) {
+            $attempt = DB::one('SELECT a.*, t.title as test_title, t.slug as test_slug, t.engine as test_engine, t.audience as test_audience,
+                                       u.first_name, u.last_name, u.mobile, u.national_code, u.birth_date, u.gender
+                                FROM ' . DB::t('attempts') . ' a
+                                LEFT JOIN ' . DB::t('tests') . ' t ON t.id = a.test_id
+                                LEFT JOIN ' . DB::t('users') . ' u ON u.id = a.user_id
+                                WHERE a.id = ?', [$attempt]);
+        }
+
         if (empty($attempt) || empty($attempt['id'])) {
             return '<div class="fr-alert err">شناسه آزمون موردنظر نامعتبر است یا یافت نشد.</div>';
         }
@@ -201,6 +235,7 @@ final class ReportBuilder
         $level = ($level === 'free') ? 'free' : 'full';
         $attempt['mode'] = $level;
         self::$printMode = !empty($opts['print']);
+        self::$isPdf     = !empty($opts['pdf']);
         self::$isAdmin   = isset($opts['isAdmin']) ? (bool)$opts['isAdmin'] : (bool)(function_exists('current_admin') && current_admin());
         $results = Analyzer::getResults((int)$attempt['id']);
         if (!$results && ($attempt['status'] ?? '') === 'completed') {
@@ -305,40 +340,48 @@ final class ReportBuilder
   <div class="fr-card">
     <h3><?= self::$printMode && $engine === 'disc' ? 'نمودار خطی نتایج DISC' : 'نمودار نتایج' ?></h3>
     <?php if (self::$printMode):
-        /* ── نسخهٔ ۲٫۰ — نمودار مخصوص چاپ: DISC = نمودار خطی | بقیه = میله‌ای افقی ── */
-        if ($engine === 'disc') {
-            $g = Analyzer::discGraphData((int)$attempt['id']);
-            $lbl = ['D' => 'D — غلبه', 'I' => 'I — نفوذ', 'S' => 'S — ثبات', 'C' => 'C — درستی'];
-            $prChart = ['type' => 'line', 'labels' => array_values($lbl), 'series' => [
-                ['name' => 'تطبیق‌یافته (بیشترین)', 'color' => '#7c3aed',
-                 'values' => array_map(fn($d) => (float)($g['most'][$d] ?? 0), array_keys($lbl))],
-                ['name' => 'طبیعی (کمترین)', 'color' => '#94a3b8',
-                 'values' => array_map(fn($d) => (float)($g['least'][$d] ?? 0), array_keys($lbl))],
-                ['name' => 'تلفیقی', 'color' => '#f59e0b',
-                 'values' => array_map(fn($d) => (float)($g['combined'][$d] ?? 0), array_keys($lbl))],
-            ]];
-        } else {
-            $prChart = ['type' => 'hbars', 'bars' => array_map(fn($r) => [
-                'label' => (string)($r['title_fa'] ?? $r['scale_code']),
-                'value' => (float)$r['percent'],
-                'color' => $r['color'] ?: '#1e3a6e',
-                'band'  => $bf[$r['band']] ?? '',
-            ], $results)];
+        /* ── نسخهٔ ۲٫۰ — نمودار مخصوص چاپ وب: DISC = نمودار خطی | بقیه = میله‌ای افقی ── */
+        if (!self::$isPdf) {
+            if ($engine === 'disc') {
+                $g = Analyzer::discGraphData((int)$attempt['id']);
+                $lbl = ['D' => 'D — غلبه', 'I' => 'I — نفوذ', 'S' => 'S — ثبات', 'C' => 'C — درستی'];
+                $prChart = ['type' => 'line', 'labels' => array_values($lbl), 'series' => [
+                    ['name' => 'تطبیق‌یافته (بیشترین)', 'color' => '#7c3aed',
+                     'values' => array_map(fn($d) => (float)($g['most'][$d] ?? 0), array_keys($lbl))],
+                    ['name' => 'طبیعی (کمترین)', 'color' => '#94a3b8',
+                     'values' => array_map(fn($d) => (float)($g['least'][$d] ?? 0), array_keys($lbl))],
+                    ['name' => 'تلفیقی', 'color' => '#f59e0b',
+                     'values' => array_map(fn($d) => (float)($g['combined'][$d] ?? 0), array_keys($lbl))],
+                ]];
+            } else {
+                $prChart = ['type' => 'hbars', 'bars' => array_map(fn($r) => [
+                    'label' => (string)($r['title_fa'] ?? $r['scale_code']),
+                    'value' => (float)$r['percent'],
+                    'color' => $r['color'] ?: '#1e3a6e',
+                    'band'  => $bf[$r['band']] ?? '',
+                ], $results)];
+            }
+            echo '<canvas class="pr-canvas" data-pr="' . e(json_encode($prChart, JSON_UNESCAPED_UNICODE)) . '" style="height:260px"></canvas>';
+            echo '<div class="pr-legend" data-pr-legend></div>';
         }
     ?>
-    <canvas class="pr-canvas" data-pr='<?= e(json_encode($prChart, JSON_UNESCAPED_UNICODE)) ?>'
-            style="height:260px"></canvas>
-    <div class="pr-legend" data-pr-legend></div>
     <?php else: ?>
     <canvas class="fr-chart" data-chart='<?= e(json_encode($chart, JSON_UNESCAPED_UNICODE)) ?>' data-opts='{"height":230}' style="height:230px"></canvas>
     <?php endif; ?>
-    <div style="margin-top:18px">
-      <?php foreach ($results as $r): ?>
+    <div style="margin-top:14px">
+      <?php 
+      $palette = function_exists('fr_report_palette_colors') ? fr_report_palette_colors() : ['#1e3a6e', '#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626'];
+      $idx = 0;
+      foreach ($results as $r): 
+          $pctVal = max(0, min(100, (float)($r['percent'] ?? 0)));
+          $scaleColor = !empty($r['color']) ? $r['color'] : ($palette[$idx % count($palette)]);
+          $idx++;
+      ?>
       <div class="fr-scalebar">
         <span class="lbl"><?= e($r['title_fa'] ?? $r['scale_code']) ?></span>
-        <span class="track"><span class="fill" data-w="<?= (float)$r['percent'] ?>%"
-              style="width:0;background:<?= e($r['color'] ?: '#1e3a6e') ?>"></span></span>
-        <span class="val"><?= fa_num($r['percent']) ?>٪ · <b style="color:<?= $bc[$r['band']] ?? '#888' ?>"><?= $bf[$r['band']] ?? '' ?></b></span>
+        <span class="track"><span class="fill" data-w="<?= $pctVal ?>%"
+              style="width:<?= $pctVal ?>%;background:<?= e($scaleColor) ?>;"></span></span>
+        <span class="val"><?= fa_num($pctVal) ?>٪ · <b style="color:<?= e($scaleColor) ?>"><?= $bf[$r['band']] ?? '' ?></b></span>
       </div>
       <?php endforeach; ?>
     </div>
@@ -414,8 +457,9 @@ final class ReportBuilder
     </ul>
   </div>
 
+  <?php if (!self::$printMode): ?>
   <!-- بخش برنامهٔ رشد پویا در پلنر روزانه (فاز ۳) -->
-  <div class="fr-card" style="background:#f5f3ff;border:1.5px solid #c4b5fd;margin-top:20px;border-radius:14px;padding:22px">
+  <div class="fr-card no-print" style="background:#f5f3ff;border:1.5px solid #c4b5fd;margin-top:20px;border-radius:14px;padding:22px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
       <div style="flex:1;min-width:280px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -428,7 +472,7 @@ final class ReportBuilder
       </div>
       <div>
         <form method="post" action="<?= fr_panel_url('report.php?attempt=' . (int)$attempt['id']) ?>" style="margin:0">
-          <?= csrf_field() ?>
+          <?= function_exists('csrf_field') ? csrf_field() : '' ?>
           <input type="hidden" name="act" value="inject_growth">
           <button class="fr-btn" style="background:#7c3aed">
             <?= !empty($attempt['growth_injected']) ? '🔄 به‌روزرسانی تمرین‌ها در پلنر روزانه ←' : '➕ افزودن تمرین‌های رشد به پلنر من ←' ?>
@@ -437,6 +481,7 @@ final class ReportBuilder
       </div>
     </div>
   </div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <?php if ($ft = DB::setting('report_footer', '')): ?>
@@ -542,10 +587,10 @@ final class ReportBuilder
     <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:2">
       گاردنر نه هوش را در سه خانوادهٔ بزرگ می‌شناسد؛ برتریِ یک خانواده یعنی ذهن شما از آن «دروازه» جهان را می‌فهمد:
     </p>
-    <?php foreach ($famStat as $fk => $avg): $f = $families[$fk]; ?>
+    <?php foreach ($famStat as $fk => $avg): $f = $families[$fk]; $avgVal = max(0, min(100, (float)$avg)); ?>
     <div class="fr-scalebar">
       <span class="lbl" style="min-width:120px">🧬 <?= e($f['title']) ?></span>
-      <span class="track"><span class="fill" data-w="<?= (float)$avg ?>%" style="width:0;background:linear-gradient(90deg,#1e3a6e,#3e5f9e)"></span></span>
+      <span class="track"><span class="fill" data-w="<?= $avgVal ?>%" style="width:<?= $avgVal ?>%;background:linear-gradient(90deg,#1e3a6e,#3e5f9e)"></span></span>
       <span class="val"><?= fa_num($avg) ?>٪</span>
     </div>
     <p style="font-size:12px;color:#525d7e;margin:2px 0 12px;line-height:1.9"><?= e($f['desc']) ?></p>
@@ -561,7 +606,7 @@ final class ReportBuilder
     <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px">
       این‌ها کانال‌های طبیعی یادگیری و عملکرد شما هستند؛ مسیری که با کمترین اصطکاک، بیشترین بازده را می‌دهد:
     </p>
-    <?php foreach (array_slice($codesDesc, 0, 3) as $i => $c): $r = $rows[$c]; ?>
+    <?php foreach (array_slice($codesDesc, 0, 3) as $i => $c): $r = $rows[$c]; $rPct = max(0, min(100, (float)($r['percent'] ?? 0))); ?>
     <div style="border:1.5px solid #eee8fb;border-radius:16px;padding:16px 18px;margin-bottom:12px;background:#fcfbff">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;
@@ -569,7 +614,7 @@ final class ReportBuilder
         <div style="flex:1;min-width:180px">
           <b style="font-size:14.5px"><?= fa_num($i + 1) ?>. <?= e($r['title_fa'] ?? $c) ?></b>
           <div class="fr-scalebar" style="margin:6px 0 0">
-            <span class="track"><span class="fill" data-w="<?= (float)$r['percent'] ?>%" style="width:0;background:<?= e($r['color'] ?: '#1e3a6e') ?>"></span></span>
+            <span class="track"><span class="fill" data-w="<?= $rPct ?>%" style="width:<?= $rPct ?>%;background:<?= e($r['color'] ?: '#1e3a6e') ?>"></span></span>
             <span class="val"><?= fa_num($r['percent']) ?>٪</span>
           </div>
         </div>
@@ -645,7 +690,7 @@ final class ReportBuilder
     </div>
     <div class="fr-scalebar" style="max-width:520px;margin:10px auto 0">
       <span class="track" style="position:relative">
-        <span class="fill" data-w="<?= $gauge ?>%" style="width:0;background:linear-gradient(90deg,#1e3a6e,#3e5f9e)"></span>
+        <span class="fill" data-w="<?= (float)$gauge ?>%" style="width:<?= (float)$gauge ?>%;background:linear-gradient(90deg,#1e3a6e,#3e5f9e)"></span>
       </span>
     </div>
     <p style="font-size:12.5px;line-height:2.1;color:#4a4370;margin:12px 0 0"><?= e(fr_eq_norm_note()) ?></p>

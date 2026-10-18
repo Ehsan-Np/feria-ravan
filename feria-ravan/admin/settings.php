@@ -40,12 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
         // نسخهٔ ۲٫۰: دیدگاهها + بارکد QR گزارش چاپی
         'reviews_auto_approve',
         'report_qr_link','report_qr_show',
-        // نسخهٔ ۴٫۵٫۰: اطلاعات ارائه‌دهنده، روانشناس ناظر، لوگو، مهر و تمپلیت استاندارد ISO A4 کارنامه
+        // نسخهٔ ۴٫۵٫۰ و ۴٫۹٫۴: اطلاعات ارائه‌دهنده، روانشناس ناظر، لوگو، مهر و تمپلیت استاندارد ISO A4 کارنامه و رنگ‌بندی چاپی
         'report_provider_name','report_provider_subtitle','report_provider_license',
         'report_doctor_name','report_doctor_title','report_doctor_license',
         'report_provider_logo','report_provider_stamp','report_show_signature_box',
         'report_provider_phone','report_provider_address','report_provider_website',
-        'report_header_color','report_disclaimer','report_show_qr','report_pdf_download_mode',
+        'report_header_color','report_accent_color','report_chart_palette','report_pdf_engine',
+        'report_disclaimer','report_show_qr','report_pdf_download_mode',
         // نسخهٔ ۲٫۱: برند فوتر + نمادها + برنامه‌ریز روزانه + پیام‌رسان‌ها + خبرنامه
         'logo_desc','footer_links_json','footer_links2_json',
         'footer_badge1_img','footer_badge1_url','footer_badge1_alt','footer_badge1_html',
@@ -68,6 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'save') {
             if (in_array($k, ['reviews_auto_approve','report_qr_show','report_show_signature_box','report_show_qr'], true)) { $v = $v === '1' ? '1' : '0'; }
             if ($k === 'report_header_color') {
                 $v = preg_match('/^#[0-9a-fA-F]{3,8}$/', $v) ? $v : '#1e3a6e';
+            }
+            if ($k === 'report_accent_color') {
+                $v = preg_match('/^#[0-9a-fA-F]{3,8}$/', $v) ? $v : '#7c3aed';
+            }
+            if ($k === 'report_chart_palette') {
+                $v = in_array($v, ['default', 'ocean', 'emerald', 'royal'], true) ? $v : 'default';
+            }
+            if ($k === 'report_pdf_engine') {
+                $v = in_array($v, ['auto', 'dompdf', 'tcpdf'], true) ? $v : 'auto';
             }
             if ($k === 'report_qr_link') {                       // فقط لینک http(s) سالم پذیرفته می‌شود
                 $v = trim($v);
@@ -866,19 +876,36 @@ $tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوت
       </select>
     </div>
     <div class="fr-field">
-      <label>رنگ تم و گرادیان سربرگ کارنامه:</label>
+      <label>رنگ سازمانی سربرگ کارنامه (Header Color):</label>
       <div style="display:flex;gap:10px;align-items:center">
         <input type="color" name="report_header_color" value="<?= e(fr_report_header_color()) ?>" style="width:48px;height:40px;border:none;border-radius:8px;cursor:pointer;padding:0">
         <input class="fr-input" value="<?= e(fr_report_header_color()) ?>" style="width:110px;direction:ltr" readonly>
-        <span style="font-size:12.5px;color:var(--muted)">رنگ سازمانی سربرگ و خطوط تزئینی کارنامه A4</span>
+        <span style="font-size:12.5px;color:var(--muted)">رنگ پس‌زمینه سربرگ کارنامه و تیترهای اصلی</span>
       </div>
+    </div>
+    <div class="fr-field">
+      <label>رنگ تأکیدی کارنامه (Accent Color):</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input type="color" name="report_accent_color" value="<?= e(fr_report_accent_color()) ?>" style="width:48px;height:40px;border:none;border-radius:8px;cursor:pointer;padding:0">
+        <input class="fr-input" value="<?= e(fr_report_accent_color()) ?>" style="width:110px;direction:ltr" readonly>
+        <span style="font-size:12.5px;color:var(--muted)">رنگ خطوط برجسته، نشان‌ها و مقیاس‌های شاخص</span>
+      </div>
+    </div>
+    <div class="fr-field">
+      <label>پالت رنگی نمودارها و نوارهای مقیاس (.fr-scalebar):</label>
+      <select class="fr-select" name="report_chart_palette">
+        <option value="default" <?= $s('report_chart_palette','default')==='default'?'selected':'' ?>>پالت استاندارد روان‌شناسی (سرمه‌ای، بنفش، سبز زمردی، نارنجی، سرخ) 🎨</option>
+        <option value="ocean" <?= $s('report_chart_palette')==='ocean'?'selected':'' ?>>پالت اقیانوسی (نیلی، فیروزه‌ای و آبی لاجوردی) 🌊</option>
+        <option value="emerald" <?= $s('report_chart_palette')==='emerald'?'selected':'' ?>>پالت سلامت و زمردی (سبز تیره، نعنایی و فیروزه‌ای) 🌿</option>
+        <option value="royal" <?= $s('report_chart_palette')==='royal'?'selected':'' ?>>پالت سلطنتی و لوکس (ارغوانی، بنفش و طلایی) 👑</option>
+      </select>
     </div>
   </div>
 </div>
 
 <!-- ── کارت ۴: تنظیمات اعتبارسنجی QR و سلب مسئولیت حقوقی ── -->
 <div class="fr-card">
-  <h3>▣ اعتبارسنجی بارکد QR و متن سلب مسئولیت</h3>
+  <h3>▣ اعتبارسنجی بارکد QR، موتور PDF و سلب مسئولیت</h3>
   <div class="fr-grid cols-2" style="margin-bottom:14px">
     <div class="fr-field">
       <label>نمایش بارکد QR در کارنامه:</label>
@@ -887,6 +914,15 @@ $tabs = [['brand','🎨 برندسازی و White-Label'],['footer','🦶 فوت
         <option value="0" <?= $s('report_show_qr','1')==='0'?'selected':'' ?>>پنهان شود</option>
       </select>
       <small class="hint">مراجعین می‌توانند با اسکن بارکد اصالت گزارش را استعلام کنند.</small>
+    </div>
+    <div class="fr-field">
+      <label>موتور رندر و تولید PDF (PDF Engine):</label>
+      <select class="fr-select" name="report_pdf_engine">
+        <option value="auto" <?= $s('report_pdf_engine','auto')==='auto'?'selected':'' ?>>هوشمند (موتور تمام‌رنگی Dompdf با پشتیبان TCPDF) 🚀</option>
+        <option value="dompdf" <?= $s('report_pdf_engine')==='dompdf'?'selected':'' ?>>موتور Dompdf (تمام‌رنگی، CSS3 پیشرفته، A4 استاندارد)</option>
+        <option value="tcpdf" <?= $s('report_pdf_engine')==='tcpdf'?'selected':'' ?>>موتور کلاسیک TCPDF</option>
+      </select>
+      <small class="hint">موتور Dompdf خروجی گرافیکی تمام‌رنگی و مطابق استانداردهای چاپ مدرن تولید می‌کند.</small>
     </div>
     <div class="fr-field">
       <label>نشانی اینترنتی داخل بارکد QR (اختیاری):</label>

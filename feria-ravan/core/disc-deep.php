@@ -314,7 +314,7 @@ function fr_disc_deep_chapters(array $attempt, array $test, array $results, bool
         <span class="fr-chip <?= $shift['ok'] ? 'ok' : 'err' ?>" style="font-size:11px"><?= fa_num($shift['idx']) ?> از <?= fa_num(100) ?></span>
       </div>
       <div class="fr-scalebar" style="margin:10px 0 8px">
-        <span class="track"><span class="fill" data-w="<?= (int)$shift['idx'] ?>%" style="width:0;background:<?= $shift['ok'] ? 'linear-gradient(90deg,#19a974,#0c7a4d)' : 'linear-gradient(90deg,#f59e0b,#e0393f)' ?>"></span></span>
+        <span class="track"><span class="fill" data-w="<?= (int)$shift['idx'] ?>%" style="width:<?= (int)$shift['idx'] ?>%;background:<?= $shift['ok'] ? '#059669' : '#d97706' ?>;background:<?= $shift['ok'] ? 'linear-gradient(90deg,#19a974,#0c7a4d)' : 'linear-gradient(90deg,#f59e0b,#e0393f)' ?>;"></span></span>
       </div>
       <p style="font-size:12.5px;line-height:2.1;color:#4a4370;margin:0"><?= e($shift['text']) ?></p>
     </div>
