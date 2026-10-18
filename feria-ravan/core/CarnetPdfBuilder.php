@@ -45,16 +45,21 @@ final class CarnetPdfBuilder
         }
 
         // حالت پیش‌فرض (auto یا dompdf): تولید با Dompdf با قابلیت Fallback به TCPDF
-        try {
-            return self::buildWithDompdf($attemptId, $isAdmin);
-        } catch (\Throwable $de) {
-            error_log('CarnetPdfBuilder Dompdf error, falling back to TCPDF: ' . $de->getMessage());
+        if (class_exists('\DOMDocument') && class_exists('\DOMXPath')) {
             try {
-                return self::buildWithTcpdf($attemptId, $isAdmin);
-            } catch (\Throwable $te) {
-                error_log('CarnetPdfBuilder TCPDF fallback error: ' . $te->getMessage());
-                return self::buildFallbackPdf($attemptId, $isAdmin, $te->getMessage());
+                return self::buildWithDompdf($attemptId, $isAdmin);
+            } catch (\Throwable $de) {
+                error_log('CarnetPdfBuilder Dompdf error, falling back to TCPDF: ' . $de->getMessage());
             }
+        } else {
+            error_log('CarnetPdfBuilder: DOMDocument/XML extension not available on server, falling back to TCPDF.');
+        }
+
+        try {
+            return self::buildWithTcpdf($attemptId, $isAdmin);
+        } catch (\Throwable $te) {
+            error_log('CarnetPdfBuilder TCPDF fallback error: ' . $te->getMessage());
+            return self::buildFallbackPdf($attemptId, $isAdmin, $te->getMessage());
         }
     }
 
@@ -483,7 +488,7 @@ final class CarnetPdfBuilder
 
         $options = new \Dompdf\Options();
         $options->set('isHtml5ParserEnabled', true);
-        $options->set('isRemoteEnabled', true);
+        $options->set('isRemoteEnabled', false);
         $options->set('defaultFont', 'DejaVu Sans');
         $options->set('chroot', [FR_ROOT, sys_get_temp_dir()]);
 

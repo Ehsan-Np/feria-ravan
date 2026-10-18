@@ -1075,7 +1075,14 @@ if (!function_exists('fr_image_to_data_uri')) {
             }
         }
 
-        // اگر آدرس ریموت باشد و فایل محلی نباشد، برای جلوگیری از هنگ و خطای موقت Dompdf با تایم‌اوت کوتاه بررسی می‌کنیم
+        // اگر آدرس به همین دامنه و سرور تعلق دارد اما فایلش روی دیسک پیدا نشد، هرگز درخواست لوپ‌بک HTTP نمی‌زنیم
+        $siteHost = parse_url(defined('SITE_URL') ? SITE_URL : '', PHP_URL_HOST);
+        $srcHost  = parse_url($src, PHP_URL_HOST);
+        if ($srcHost && $siteHost && strtolower((string)$srcHost) === strtolower((string)$siteHost)) {
+            return '';
+        }
+
+        // اگر آدرس ریموت خارجی باشد و فایل محلی نباشد، برای جلوگیری از هنگ و خطای موقت Dompdf با تایم‌اوت کوتاه بررسی می‌کنیم
         if (str_starts_with($src, 'http://') || str_starts_with($src, 'https://')) {
             $ctx = stream_context_create(['http' => ['timeout' => 1.5], 'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
             $remoteData = @file_get_contents($src, false, $ctx);

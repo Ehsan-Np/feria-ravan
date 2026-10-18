@@ -155,9 +155,11 @@ if ($isPdfDownload && empty($_GET['print'])) {
     try {
         $pdfData = CarnetPdfBuilder::build((int)$at['id'], $isAdmin);
         while (ob_get_level() > 0) { @ob_end_clean(); }
+        $asciiName = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode) . '.pdf';
+        $utf8Name  = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode) . '.pdf';
         if (!headers_sent()) {
             header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $docTitle . '.pdf"; filename*=UTF-8\'\'' . rawurlencode($docTitle . '.pdf'));
+            header('Content-Disposition: attachment; filename="' . $asciiName . '"; filename*=UTF-8\'\'' . rawurlencode($utf8Name));
             header('Content-Length: ' . strlen($pdfData));
             header('Cache-Control: private, max-age=0, must-revalidate');
             header('Pragma: public');
@@ -172,9 +174,11 @@ if ($isPdfDownload && empty($_GET['print'])) {
 }
 
 if (isset($_GET['offline_html']) && $_GET['offline_html'] === '1') {
+    $asciiHtmlName = 'Feria-Report-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode) . '.html';
+    $utf8HtmlName  = 'کارنامه-A4-' . preg_replace('/[^A-Za-z0-9\-]/', '', $repCode) . '.html';
     if (!headers_sent()) {
         header('Content-Type: text/html; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $docTitle . '.html"');
+        header('Content-Disposition: attachment; filename="' . $asciiHtmlName . '"; filename*=UTF-8\'\'' . rawurlencode($utf8HtmlName));
     }
 }
 $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']) : fr_panel_url('report.php?attempt=' . (int)$at['id']);
@@ -840,7 +844,6 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 </div>
 
 <script src="<?= SITE_URL ?>/assets/js/feria.js?v=<?= FR_VERSION ?>"></script>
-<script src="<?= SITE_URL ?>/assets/js/html2pdf.bundle.min.js?v=<?= FR_VERSION ?>"></script>
 <script>
 /* ══════════════════════════════════════════════════════════════════
    رسم باکیفیت و برداری نمودارهای اختصاصی چاپ ISO A4 روی Canvas
@@ -972,63 +975,12 @@ $backUrl = $isAdmin ? (SITE_URL . '/admin/attempts.php?report=' . (int)$at['id']
 
   // متد ذخیره و دریافت مستقیم PDF استاندارد ISO A4
   window.frSavePdf = function () {
-    var statusBox = document.getElementById('prPdfStatus');
-    if (statusBox) {
-      statusBox.style.display = 'flex';
-      statusBox.style.background = '#1e3a6e';
-      statusBox.innerHTML = '<span>⏳ در حال آماده‌سازی و ساخت فایل PDF کارنامه استاندارد A4... لطفاً شکیبا باشید.</span>';
-    }
-
-    var btn = document.querySelector('.pr-btn-download');
-    var origText = btn ? btn.innerHTML : '';
-    if (btn) {
-      btn.innerHTML = '⏳ در حال ساخت و دانلود PDF...';
-      btn.disabled = true;
-    }
-
-    var element = document.getElementById('reportSheet');
-    if (!element) {
-      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+    var dlLink = document.querySelector('.pr-btn-download');
+    if (dlLink && dlLink.href && dlLink.href.indexOf('download=1') !== -1) {
+      window.location.href = dlLink.href;
       return;
     }
-
-    window.frConvertCanvases();
-
-    if (window.html2pdf) {
-      var opt = {
-        margin:       [8, 8, 8, 8],
-        filename:     <?= json_encode($docTitle . '.pdf', JSON_UNESCAPED_UNICODE) ?>,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
-      html2pdf().set(opt).from(element).save().then(function () {
-        if (btn) {
-          btn.innerHTML = '✅ دریافت شد!';
-          setTimeout(function() { btn.innerHTML = origText; btn.disabled = false; }, 3000);
-        }
-        if (statusBox) {
-          statusBox.style.background = '#065f46';
-          statusBox.innerHTML = '<span>✅ فایل PDF کارنامه با موفقیت دانلود و ذخیره شد.</span>';
-          setTimeout(function() { statusBox.style.display = 'none'; }, 4000);
-        }
-      }).catch(function (e) {
-        console.error('html2pdf generation notice:', e);
-        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
-        if (statusBox) {
-          statusBox.style.background = '#991b1b';
-          statusBox.innerHTML = '<span>⚠️ خطا در ساخت خودکار فایل PDF. لطفاً در صورت تمایل از دکمه «چاپ با پرینتر» استفاده فرمایید.</span>';
-        }
-      });
-    } else {
-      if (btn) { btn.innerHTML = origText; btn.disabled = false; }
-      if (statusBox) {
-        statusBox.style.background = '#991b1b';
-        statusBox.innerHTML = '<span>⚠️ کتابخانه ساخت فایل PDF بارگذاری نشده است.</span>';
-      }
-    }
+    window.frPrintReport();
   };
 
   // پردازش خودکار پارامترهای print=1 و download=1 و auto=1
