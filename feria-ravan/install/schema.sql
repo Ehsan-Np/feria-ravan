@@ -55,8 +55,10 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}users` (
   `bank_card_last4` CHAR(4) DEFAULT NULL,
   `telegram_chat_id` VARCHAR(60) NULL,
   `bale_chat_id` VARCHAR(60) NULL,
+  `rubika_chat_id` VARCHAR(100) NULL,
   `tg_username` VARCHAR(60) NULL,
   `bale_username` VARCHAR(60) NULL,
+  `rubika_username` VARCHAR(60) NULL,
   `notif_prefs` VARCHAR(255) NULL,
   `extra` TEXT NULL,
   `last_login_at` DATETIME NULL,
@@ -1021,6 +1023,22 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}activity_logs` (
   KEY `ix_actor` (`actor_type`, `actor_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `{{prefix}}bot_connect_tokens` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `token` VARCHAR(32) NOT NULL,
+  `channel` VARCHAR(32) NOT NULL DEFAULT 'all',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'pending',
+  `chat_id` VARCHAR(100) NULL,
+  `username` VARCHAR(100) NULL,
+  `connected_channel` VARCHAR(32) NULL,
+  `connected_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` DATETIME NULL,
+  UNIQUE KEY `uq_token` (`token`),
+  KEY `ix_user` (`user_id`),
+  KEY `ix_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO `{{prefix}}settings` (`key`, `value`, `autoload`) VALUES
 ('site_title', 'فریا روان', 1),
@@ -1029,7 +1047,17 @@ INSERT IGNORE INTO `{{prefix}}settings` (`key`, `value`, `autoload`) VALUES
 ('footer_credit_url', 'https://feria.ir', 1),
 ('report_show_signature_box', '1', 1),
 ('report_show_qr', '1', 1),
-('report_header_color', '#1e3a6e', 1);
+('report_header_color', '#1e3a6e', 1),
+('report_pdf_download_mode', 'direct_pdf', 1),
+('report_download_fallback', '1', 1),
+('report_qr_engine', 'local_svg', 1),
+('rubika_bot_token', '', 1),
+('rubika_bot_username', '', 1),
+('rubika_api_url', 'https://botapi.rubika.ir/v1', 1),
+('telegram_proxy', '', 1),
+('telegram_api_url', 'https://api.telegram.org', 1),
+('bale_api_url', 'https://tapi.bale.ai', 1),
+('planner_notify_channels', 'telegram,bale,rubika', 1);
 
 
 INSERT IGNORE INTO `{{prefix}}tests` (`id`, `slug`, `title`, `short_desc`, `engine`, `audience`, `question_count`, `est_minutes`, `price_full`, `price_sale`, `free_enabled`, `sort_order`, `status`) VALUES

@@ -417,11 +417,23 @@ if ($infoMsg) echo '<div class="fr-alert info">' . e($infoMsg) . '</div>';
     <div class="fr-card" id="social" style="margin:0">
       <h3>📣 اطلاع‌رسانی در پیام‌رسان‌ها (تلگرام، بله و روبیکا)</h3>
       <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:2">
-        فقط <b>نام کاربری اکانت</b> خود در تلگرام، بله یا روبیکا را بنویسید؛ ما به‌صورت خودکار آن را به شناسهٔ چت متصل می‌کنیم.
-        پس از ثبت نام کاربری، به ربات پیام <b dir="ltr">/start</b> (یا کد نمایشی) را بفرستید تا اتصال کامل شود — همین! 🦢
+        جهت دریافت فوری کارنامه‌ها و نتایج آزمون‌ها و یادآورهای پلنر روزانه، پیام‌رسان دلخواه خود را متصل فرمایید:
       </p>
+
+      <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <b style="color:#4338ca;font-size:13px">🚀 فعال‌سازی هوشمند و فوری با یک کلیک</b>
+          <p style="margin:2px 0 0;font-size:12px;color:#475569">بدون نیاز به ثبت نام کاربری، مستقیماً وارد ربات شده و دکمه Start را بزنید.</p>
+        </div>
+        <a href="<?= SITE_URL ?>/bot-connect.php" class="fr-btn sm" style="background:#4338ca;color:#fff;font-weight:700">صفحهٔ اتصال اختصاصی من ↗</a>
+      </div>
+
       <?php if (isset($errors['social'])) echo '<div class="fr-alert err">' . e($errors['social']) . '</div>'; ?>
       <?php foreach ($SOC as $ch => $st): ?>
+      <?php
+        $myToken = fr_bot_generate_token((int)$u['id'], $ch);
+        $deepL   = fr_bot_get_channel_deep_link($ch, $myToken);
+      ?>
       <div class="soc-card">
         <div class="soc-head">
           <b><?= e($st['label']) ?></b>
@@ -435,12 +447,15 @@ if ($infoMsg) echo '<div class="fr-alert info">' . e($infoMsg) . '</div>';
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
           <?php if (!$st['connected']): ?>
+            <?php if ($deepL !== ''): ?>
+              <a href="<?= e($deepL) ?>" target="_blank" class="fr-btn sm ghost" style="color:var(--c-primary);border-color:var(--c-primary);font-size:11.5px">🚀 ورود مستقیم به ربات و Start ↗</a>
+            <?php endif; ?>
           <form method="post" style="display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center;margin:0">
             <?= csrf_field() ?>
             <input type="hidden" name="act" value="social_connect"><input type="hidden" name="channel" value="<?= e($ch) ?>">
             <input class="fr-input" name="username" dir="ltr" style="flex:1;min-width:180px;text-align:left" maxlength="32"
-                   value="<?= e($st['username'] ?: ($st['pending']['username'] ?? '')) ?>" placeholder="نام کاربری شما — مثل ali_mohammadi">
-            <button class="fr-btn sm">ثبت و اتصال 🔗</button>
+                   value="<?= e($st['username'] ?: ($st['pending']['username'] ?? '')) ?>" placeholder="یا نام کاربری شما (مثل ali_mohammadi)">
+            <button class="fr-btn sm">ثبت 🔗</button>
           </form>
           <?php else: ?>
           <form method="post" style="margin:0">

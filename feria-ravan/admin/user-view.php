@@ -4,11 +4,49 @@ declare(strict_types=1);
 require_once __DIR__ . '/boot.php';
 require_once __DIR__ . '/../includes/report.php';
 require_once __DIR__ . '/../includes/wallet.php';
+require_once __DIR__ . '/../includes/snotify.php';
 $adm = require_admin();
 
 $id = (int)($_GET['id'] ?? 0);
 $u  = DB::one("SELECT * FROM " . DB::t('users') . " WHERE id=?", [$id]);
 if (!$u) redirect(SITE_URL . '/admin/users.php');
+
+/* ارسال پیامک لینک فعال‌سازی و اتصال به ربات برای کاربر */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'sms_bot_link') {
+    $r = fr_bot_send_activation_sms($id);
+    flash($r['ok'] ? 'لینک فعال‌سازی ربات با موفقیت برای کاربر پیامک شد ✅' : ('خطا در ارسال پیامک: ' . ($r['message'] ?? '')), $r['ok'] ? 'ok' : 'err');
+    redirect(SITE_URL . '/admin/user-view.php?id=' . $id);
+}
+
+/* اتصال دستی چت‌آیدی یا نام کاربری ربات به حساب کاربر توسط مدیر */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'manual_bot_connect') {
+    $ch = (string)post('channel');
+    $cid = trim((string)post('chat_id'));
+    $un = trim((string)post('username'));
+    if ($cid !== '' || $un !== '') {
+        $ok = fr_bot_manual_bind($id, $ch, $cid, $un);
+        flash($ok ? 'اطلاعات اتصال پیام‌رسان با موفقیت ثبت شد ✅' : 'خطا در ثبت اطلاعات.', $ok ? 'ok' : 'err');
+    } else {
+        flash('لطفاً حداقل چت‌آیدی عددی یا نام کاربری را وارد نمایید.', 'err');
+    }
+    redirect(SITE_URL . '/admin/user-view.php?id=' . $id);
+}
+
+/* ارسال پیام تست از طریق ربات به کاربر */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'bot_test_send') {
+    $ch = (string)post('channel');
+    $r = fr_snotify_send_test($id, $ch);
+    flash($r['ok'] ? 'پیام تست به کاربر ارسال شد ✅' : ('خطا در ارسال: ' . ($r['message'] ?? '')), $r['ok'] ? 'ok' : 'err');
+    redirect(SITE_URL . '/admin/user-view.php?id=' . $id);
+}
+
+/* قطع اتصال ربات کاربر */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'bot_disconnect') {
+    $ch = (string)post('channel');
+    fr_snotify_disconnect($id, $ch);
+    flash('اتصال ' . (fr_snotify_channels()[$ch] ?? $ch) . ' قطع شد.', 'ok');
+    redirect(SITE_URL . '/admin/user-view.php?id=' . $id);
+}
 
 /* ارسال لینک دانلود/مشاهده گزارش با پیامک برای کاربر (بند ۱۶) */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('act') === 'sms_report') {
@@ -190,6 +228,95 @@ echo flash();
       <?php endforeach; ?>
       </tbody>
     </table>
+  </div>
+</div>
+
+<?php
+$botToken = fr_bot_generate_token($id);
+$actUrl   = fr_bot_get_activation_url($id);
+$tgDeep   = fr_bot_get_channel_deep_link('telegram', $botToken);
+$baleDeep = fr_bot_get_channel_deep_link('bale', $botToken);
+$rubikaDeep = fr_bot_get_channel_deep_link('rubika', $botToken);
+
+$botChans = [
+    'telegram' => ['name' => 'تلگرام', 'cid' => $u['telegram_chat_id'] ?? '', 'un' => $u['tg_username'] ?? ($u['telegram_username'] ?? ''), 'deep' => $tgDeep, 'color' => '#229ED9'],
+    'bale'     => ['name' => 'بله', 'cid' => $u['bale_chat_id'] ?? '', 'un' => $u['bale_username'] ?? '', 'deep' => $baleDeep, 'color' => '#10B981'],
+    'rubika'   => ['name' => 'روبیکا', 'cid' => $u['rubika_chat_id'] ?? '', 'un' => $u['rubika_username'] ?? '', 'deep' => $rubikaDeep, 'color' => '#8B5CF6'],
+];
+?>
+<div class="fr-card" style="margin-top:20px;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 4px 12px rgba(0,0,0,0.03)">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;border-bottom:1px solid #f1f5f9;padding-bottom:12px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:22px">🤖</span>
+      <h3 style="margin:0;font-size:1.08rem;font-weight:700">اتصال و فعال‌سازی ربات‌های پیام‌رسان (تلگرام، بله، روبیکا)</h3>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <form method="post" style="margin:0" onsubmit="return confirm('آیا پیامک حاوی لینک فعال‌سازی برای کاربر ارسال شود؟')">
+        <?= csrf_field() ?>
+        <input type="hidden" name="act" value="sms_bot_link">
+        <button class="fr-btn sm" style="background:#059669;color:#fff;font-weight:700" title="ارسال لینک صفحه فعال‌سازی اختصاصی با پیامک به تلفن همراه کاربر">📲 ارسال لینک فعال‌سازی با پیامک</button>
+      </form>
+      <button type="button" class="fr-btn sm ghost" onclick="navigator.clipboard.writeText('<?= e($actUrl) ?>');alert('لینک فعال‌سازی کاربر در کلیپ‌بورد کپی شد: <?= e($actUrl) ?>');">📋 کپی لینک فعال‌سازی</button>
+    </div>
+  </div>
+
+  <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12.5px">
+    <div>
+      <span style="color:#64748b">لینک اختصاصی صفحهٔ اتصال کاربر: </span>
+      <a href="<?= e($actUrl) ?>" target="_blank" style="font-family:monospace;direction:ltr;display:inline-block;color:#4338ca;font-weight:700"><?= e($actUrl) ?></a>
+    </div>
+    <div>
+      <span style="color:#64748b">کد اتصال (Token): </span>
+      <code style="background:#fff;border:1px solid #cbd5e1;padding:2px 8px;border-radius:6px;font-weight:700"><?= e($botToken) ?></code>
+    </div>
+  </div>
+
+  <div class="fr-grid cols-3" style="gap:14px">
+    <?php foreach ($botChans as $cKey => $c): ?>
+      <?php $isConn = !empty($c['cid']); ?>
+      <div style="border:1px solid <?= $isConn ? '#a7f3d0' : '#e2e8f0' ?>;background:<?= $isConn ? '#f0fdf4' : '#ffffff' ?>;border-radius:12px;padding:14px;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <strong style="font-size:13.5px;color:<?= $c['color'] ?>"><?= e($c['name']) ?></strong>
+          <span class="fr-chip <?= $isConn ? 'ok' : 'muted' ?>" style="font-size:11px"><?= $isConn ? '🟢 متصل' : '⚪ غیرفعال' ?></span>
+        </div>
+        <?php if ($isConn): ?>
+          <div style="font-size:11.5px;color:#334155;margin-bottom:6px">شناسه چت: <code style="font-family:monospace"><?= e($c['cid']) ?></code></div>
+          <?php if (!empty($c['un'])): ?>
+            <div style="font-size:11.5px;color:#334155;margin-bottom:10px">نام کاربری: <code>@<?= e($c['un']) ?></code></div>
+          <?php endif; ?>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <form method="post" style="margin:0;flex:1">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="bot_test_send">
+              <input type="hidden" name="channel" value="<?= $cKey ?>">
+              <button class="fr-btn sm" style="width:100%;font-size:11px;padding:4px 8px">💬 ارسال تست</button>
+            </form>
+            <form method="post" style="margin:0" onsubmit="return confirm('اتصال کاربر به این پیام‌رسان قطع شود؟')">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="bot_disconnect">
+              <input type="hidden" name="channel" value="<?= $cKey ?>">
+              <button class="fr-btn sm danger" style="font-size:11px;padding:4px 8px" title="قطع اتصال">✕</button>
+            </form>
+          </div>
+        <?php else: ?>
+          <div style="font-size:11.5px;color:#64748b;margin-bottom:10px">هنوز متصل نشده است.</div>
+          <?php if (!empty($c['deep'])): ?>
+            <a href="<?= e($c['deep']) ?>" target="_blank" class="fr-btn sm ghost" style="display:block;text-align:center;font-size:11px;padding:4px 8px;margin-bottom:8px">🚀 پیوند مستقیم ربات ↗</a>
+          <?php endif; ?>
+          <details style="font-size:11.5px;color:#4338ca">
+            <summary style="cursor:pointer;font-weight:600">✏️ اتصال دستی چت‌آیدی</summary>
+            <form method="post" style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+              <?= csrf_field() ?>
+              <input type="hidden" name="act" value="manual_bot_connect">
+              <input type="hidden" name="channel" value="<?= $cKey ?>">
+              <input class="fr-input" name="chat_id" placeholder="شناسه چت (عددی)" style="font-size:11px;direction:ltr" required>
+              <input class="fr-input" name="username" placeholder="نام کاربری (اختیاری)" style="font-size:11px;direction:ltr">
+              <button class="fr-btn sm" style="font-size:11px">ثبت و اتصال</button>
+            </form>
+          </details>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
   </div>
 </div>
 

@@ -1268,6 +1268,8 @@ function fr_update_pipeline(bool $force = false): void
             DB::setSetting('system_version', '4.9.3');
             DB::setSetting('fr_version', '4.9.3');
             DB::setSetting('report_pdf_download_mode', 'direct_binary_pdf');
+            require_once __DIR__ . '/snotify.php';
+            fr_snotify_ensure_schema();
         } catch (Throwable $e) { error_log('feria: 4.9.3 migration: ' . $e->getMessage()); }
 
         /* نگارش جدید ثبت شود */

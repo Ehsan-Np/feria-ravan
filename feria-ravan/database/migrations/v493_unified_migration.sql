@@ -137,6 +137,24 @@ CREATE TABLE IF NOT EXISTS `{{prefix}}planner_moods` (
   KEY `ix_user_day` (`user_id`, `day`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ۱٫۶. جدول توکن‌ها و لینک‌های اتصال هوشمند کاربران به ربات‌های اطلاع‌رسانی
+CREATE TABLE IF NOT EXISTS `{{prefix}}bot_connect_tokens` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `token` VARCHAR(32) NOT NULL,
+  `channel` VARCHAR(32) NOT NULL DEFAULT 'all',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'pending',
+  `chat_id` VARCHAR(100) NULL,
+  `username` VARCHAR(100) NULL,
+  `connected_channel` VARCHAR(32) NULL,
+  `connected_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` DATETIME NULL,
+  UNIQUE KEY `uq_token` (`token`),
+  KEY `ix_user` (`user_id`),
+  KEY `ix_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ----------------------------------------------------------------------------
 -- ۲. سازگاری ستون‌ها و ارتقای ساختار جداول موجود (Safe DDL)
 -- ----------------------------------------------------------------------------

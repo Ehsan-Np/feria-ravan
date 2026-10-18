@@ -16,8 +16,16 @@ require_once __DIR__ . '/includes/functions.php';
 $mid = (int)($_GET['m'] ?? 0);
 $idx = (int)($_GET['i'] ?? 0);
 $sig = (string)($_GET['s'] ?? '');
+$bot = trim((string)($_GET['bot'] ?? ''));
 
 $home = rtrim(SITE_URL, '/') . '/';
+
+// هدایت کوتاه اتصال سریع ربات
+if ($bot !== '') {
+    header('Location: ' . rtrim(SITE_URL, '/') . '/bot-connect.php?token=' . urlencode($bot), true, 302);
+    exit;
+}
+
 if ($mid <= 0 || $sig === '') { header('Location: ' . $home, true, 302); exit; }
 
 try {

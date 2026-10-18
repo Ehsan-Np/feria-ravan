@@ -93,6 +93,237 @@ function fr_snotify_test_message(string $channel, string $userName = ''): string
 }
 
 /**
+ * تولید یا بازیابی توکن یکتا و فعال اتصال برای کاربر
+ */
+function fr_bot_generate_token(int $userId, string $channel = 'all'): string
+{
+    fr_snotify_ensure_schema();
+    try {
+        $existing = DB::one("SELECT token FROM " . DB::t('bot_connect_tokens') . "
+                             WHERE user_id=? AND status='pending' AND (expires_at IS NULL OR expires_at > NOW())
+                             ORDER BY id DESC LIMIT 1", [$userId]);
+        if ($existing && !empty($existing['token'])) {
+            return (string)$existing['token'];
+        }
+
+        // توکن تمیز ۱۰ نویسه‌ای: FR + ۸ کاراکتر هگز بزرگ
+        $token = 'FR' . strtoupper(bin2hex(random_bytes(4)));
+        DB::insert('bot_connect_tokens', [
+            'user_id'    => $userId,
+            'token'      => $token,
+            'channel'    => $channel,
+            'status'     => 'pending',
+            'expires_at' => date('Y-m-d H:i:s', time() + 14 * 86400),
+        ]);
+        return $token;
+    } catch (\Throwable $e) {
+        error_log('fr_bot_generate_token error: ' . $e->getMessage());
+        return 'FR' . strtoupper(substr(md5((string)$userId . (string)time()), 0, 8));
+    }
+}
+
+/** دریافت نشانی صفحه وب اتصال هوشمند به ربات برای ارسال به کاربر */
+function fr_bot_get_activation_url(int $userId, string $channel = 'all'): string
+{
+    $token = fr_bot_generate_token($userId, $channel);
+    $url = rtrim(SITE_URL, '/') . '/bot-connect.php?token=' . urlencode($token);
+    if ($channel !== 'all' && in_array($channel, ['telegram', 'bale', 'rubika'], true)) {
+        $url .= '&ch=' . $channel;
+    }
+    return $url;
+}
+
+/** دریافت پیوند دیپ‌لینک مستقیم به اپلیکیشن ربات پیام‌رسان */
+function fr_bot_get_channel_deep_link(string $channel, string $token): string
+{
+    $token = trim($token);
+    $bot = match($channel) {
+        'telegram' => ltrim((string)DB::setting('telegram_bot_username', ''), '@'),
+        'bale'     => ltrim((string)DB::setting('bale_bot_username', ''), '@'),
+        'rubika'   => ltrim((string)DB::setting('rubika_bot_username', ''), '@'),
+        default    => '',
+    };
+
+    if ($bot === '') return '';
+
+    return match($channel) {
+        'telegram' => 'https://t.me/' . rawurlencode($bot) . ($token !== '' ? '?start=' . rawurlencode($token) : ''),
+        'bale'     => 'https://ble.ir/' . rawurlencode($bot) . ($token !== '' ? '?start=' . rawurlencode($token) : ''),
+        'rubika'   => 'https://rubika.ir/' . rawurlencode($bot) . ($token !== '' ? '?start=' . rawurlencode($token) : ''),
+        default    => '',
+    };
+}
+
+/**
+ * فعال‌سازی و اتصال قطعی کاربر به ربات هنگام ارسال پیام یا زدن استارت
+ * @return array ['ok' => bool, 'user_id' => int, 'message' => string]
+ */
+function fr_bot_activate(string $tokenOrCode, string $channel, string $chatId, ?string $username = null, ?string $firstName = null): array
+{
+    fr_snotify_ensure_schema();
+    $chatId = trim($chatId);
+    if ($chatId === '') return ['ok' => false, 'message' => 'chat_id_empty'];
+    if (!isset(fr_snotify_channels()[$channel])) return ['ok' => false, 'message' => 'invalid_channel'];
+
+    [$cidCol, $unCol] = fr_snotify_cols($channel);
+    $cleanToken = strtoupper(trim(preg_replace('/^(\/start(?:@\w+)?\s+)/i', '', $tokenOrCode)));
+    $username = $username ? ltrim(trim($username), '@') : null;
+
+    $targetUserId = 0;
+    $matchedToken = null;
+
+    // ۱. بررسی بر اساس جدول توکن‌های اتصال هوشمند
+    if ($cleanToken !== '') {
+        $row = DB::one("SELECT * FROM " . DB::t('bot_connect_tokens') . " WHERE token=? LIMIT 1", [$cleanToken]);
+        if ($row && !empty($row['user_id'])) {
+            $targetUserId = (int)$row['user_id'];
+            $matchedToken = $row;
+        }
+    }
+
+    // ۲. بررسی پشتیبان با نام کاربری یا کد اتصال در social_links
+    if (!$targetUserId && $cleanToken !== '') {
+        try {
+            $sl = DB::one("SELECT user_id FROM " . DB::t('social_links') . " WHERE connect_code=? LIMIT 1", [$cleanToken]);
+            if ($sl && !empty($sl['user_id'])) {
+                $targetUserId = (int)$sl['user_id'];
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    // ۳. بررسی بر اساس نام کاربری در صورت ثبت قبلی
+    if (!$targetUserId && $username !== null && $username !== '') {
+        $uRow = DB::one("SELECT id FROM " . DB::t('users') . " WHERE $unCol=? LIMIT 1", [$username]);
+        if ($uRow) {
+            $targetUserId = (int)$uRow['id'];
+        }
+    }
+
+    // ۴. بررسی بر اساس شماره موبایل اگر کاربر شماره خود را فرستاده باشد
+    if (!$targetUserId && preg_match('/^(?:0|\+?98)?(9\d{9})$/', preg_replace('/[^\d]/', '', $tokenOrCode), $mm)) {
+        $mob = '0' . $mm[1];
+        $uMob = DB::one("SELECT id FROM " . DB::t('users') . " WHERE mobile=? LIMIT 1", [$mob]);
+        if ($uMob) {
+            $targetUserId = (int)$uMob['id'];
+        }
+    }
+
+    if (!$targetUserId) {
+        return ['ok' => false, 'message' => 'token_or_user_not_found'];
+    }
+
+    $user = DB::one("SELECT * FROM " . DB::t('users') . " WHERE id=?", [$targetUserId]);
+    if (!$user) return ['ok' => false, 'message' => 'user_not_found'];
+
+    // ذخیره در جدول کاربران
+    $updateData = [$cidCol => $chatId];
+    if ($username !== null && $username !== '') {
+        $updateData[$unCol] = $username;
+    }
+    DB::update('users', $updateData, 'id=?', [$targetUserId]);
+
+    // به‌روزرسانی جدول توکن‌ها
+    try {
+        if ($matchedToken) {
+            DB::update('bot_connect_tokens', [
+                'status'            => 'connected',
+                'chat_id'           => $chatId,
+                'username'          => $username,
+                'connected_channel' => $channel,
+                'connected_at'      => date('Y-m-d H:i:s'),
+            ], 'id=?', [$matchedToken['id']]);
+        } else {
+            DB::run("UPDATE " . DB::t('bot_connect_tokens') . "
+                     SET status='connected', chat_id=?, username=?, connected_channel=?, connected_at=NOW()
+                     WHERE user_id=? AND status='pending'", [$chatId, $username, $channel, $targetUserId]);
+        }
+    } catch (\Throwable $e) {}
+
+    // همگام‌سازی با جدول مخاطبین در صورت وجود
+    if (!empty($user['mobile'])) {
+        try {
+            $cOkCol = match($channel) { 'telegram' => 'tg_ok', 'bale' => 'bale_ok', 'rubika' => 'rubika_ok', default => '' };
+            $cIdCol = match($channel) { 'telegram' => 'tg_chat_id', 'bale' => 'bale_chat_id', 'rubika' => 'rubika_chat_id', default => '' };
+            if ($cOkCol !== '' && $cIdCol !== '') {
+                DB::run("UPDATE " . DB::t('contacts') . " SET $cIdCol=?, $cOkCol=1 WHERE mobile=?", [$chatId, (string)$user['mobile']]);
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    // ارسال پیام تأیید خوش‌آمدگویی از طریق همان بات
+    $userName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: 'کاربر گرامی';
+    $siteTitle = (string)DB::setting('site_title', 'فریا روان');
+    $channelLabel = fr_snotify_channels()[$channel] ?? $channel;
+    $welcomeMsg = "✅ اتصال شما به ربات اطلاع‌رسانی {$channelLabel} فریا روان با موفقیت برقرار شد!\n\n" .
+                  "سلام {$userName} عزیز 🦢\n" .
+                  "از این لحظه به بعد یادآورهای روزانه، نتیجه آزمون‌ها، کارنامه‌ها و برنامه‌های شما در این پیام‌رسان به‌صورت خودکار و سر وقت تقدیم حضورتان می‌شود.";
+
+    [, $sender] = fr_snotify_driver($channel);
+    [$sentOk, $sendResp] = $sender($chatId, $welcomeMsg);
+    fr_snotify_log($targetUserId, $channel, 'bot_activated', $welcomeMsg, (bool)$sentOk, $sentOk ? '' : (is_string($sendResp) ? $sendResp : ''));
+
+    if (function_exists('log_activity')) {
+        log_activity('bot_activated', 'user', $targetUserId, ['channel' => $channel, 'chat_id' => $chatId]);
+    }
+
+    return [
+        'ok'      => true,
+        'user_id' => $targetUserId,
+        'channel' => $channel,
+        'name'    => $userName,
+        'message' => 'اتصال ربات با موفقیت فعال گردید.',
+    ];
+}
+
+/** اتصال دستی چت‌آیدی یا نام کاربری توسط مدیر */
+function fr_bot_manual_bind(int $userId, string $channel, string $chatId, ?string $username = null): bool
+{
+    if (!isset(fr_snotify_channels()[$channel])) return false;
+    [$cidCol, $unCol] = fr_snotify_cols($channel);
+    $data = [];
+    if (trim($chatId) !== '') $data[$cidCol] = trim($chatId);
+    if ($username !== null && trim($username) !== '') $data[$unCol] = ltrim(trim($username), '@');
+    if (empty($data)) return false;
+    DB::update('users', $data, 'id=?', [$userId]);
+    if (function_exists('log_activity')) {
+        log_activity('admin_manual_bot_bind', 'user', $userId, ['channel' => $channel, 'data' => $data]);
+    }
+    return true;
+}
+
+/** ارسال پیامک حاوی لینک فعال‌سازی ربات توسط مدیر برای کاربر */
+function fr_bot_send_activation_sms(int $userId, string $channel = 'all'): array
+{
+    $u = DB::one("SELECT * FROM " . DB::t('users') . " WHERE id=?", [$userId]);
+    if (!$u || empty($u['mobile'])) {
+        return ['ok' => false, 'message' => 'شماره تلفن کاربر یافت نشد.'];
+    }
+
+    $actUrl = fr_bot_get_activation_url($userId, $channel);
+    $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: 'کاربر گرامی';
+    $site = (string)DB::setting('site_title', 'فریا روان');
+
+    $msg = "سلام {$name} عزیز\n" .
+           "جهت دریافت خودکار یادآورها، کارنامه‌ها و برنامه‌های روزانه در پیام‌رسان دلخواه خود، روی لینک زیر بزنید:\n" .
+           "{$actUrl}\n" .
+           "{$site}";
+
+    require_once __DIR__ . '/../core/Kavenegar.php';
+    $kv = new Kavenegar();
+    $ok = $kv->send((string)$u['mobile'], $msg, 'bot_activation');
+
+    if (function_exists('log_activity')) {
+        log_activity('admin_sms_bot_activation', 'user', $userId, ['channel' => $channel, 'ok' => $ok]);
+    }
+
+    return [
+        'ok'      => $ok,
+        'url'     => $actUrl,
+        'message' => $ok ? 'پیامک لینک فعال‌سازی با موفقیت ارسال شد.' : 'ارسال پیامک با خطا مواجه شد؛ تنظیمات سامانه پیامک را بررسی کنید.',
+    ];
+}
+
+/**
  * شروع/تجدید اتصال: نام کاربری ذخیره و کد اتصال یکتا ساخته می‌شود.
  * خروجی: ['ok'=>bool,'code'=>..., 'deeplink'=>..., 'message'=>...]
  */
@@ -100,43 +331,21 @@ function fr_snotify_link_start(int $userId, string $channel, string $username): 
 {
     if (!isset(fr_snotify_channels()[$channel])) return ['ok' => false, 'message' => 'کانال نامعتبر است.'];
     $username = ltrim(trim($username), '@');
-    if (!fr_snotify_valid_username($username)) {
-        return ['ok' => false, 'message' => 'نام کاربری معتبر نیست؛ حروف انگلیسی و اعداد مجاز است (مثل ali_mohammadi).'];
-    }
     [$cidCol, $unCol] = fr_snotify_cols($channel);
 
-    /* بررسی عدم اتصال به حساب دیگر */
-    try {
-        $other = (int)DB::val("SELECT id FROM " . DB::t('users') . " WHERE $unCol=? AND id<>? LIMIT 1", [$username, $userId]);
-        if ($other > 0) return ['ok' => false, 'message' => 'این نام کاربری قبلاً به حساب کاربری دیگری متصل شده است.'];
-        DB::update('users', [$unCol => $username], 'id=?', [$userId]);
-    } catch (Throwable $e) {
-        // ممکن است ستون جدول با مایگریشن اضافه شود
+    if ($username !== '') {
+        try {
+            $other = (int)DB::val("SELECT id FROM " . DB::t('users') . " WHERE $unCol=? AND id<>? LIMIT 1", [$username, $userId]);
+            if ($other > 0) return ['ok' => false, 'message' => 'این نام کاربری قبلاً به حساب کاربری دیگری متصل شده است.'];
+            DB::update('users', [$unCol => $username], 'id=?', [$userId]);
+        } catch (\Throwable $e) {}
     }
 
-    $code = strtoupper(bin2hex(random_bytes(4)));   // ۸ نویسه یکتا
-    try {
-        $row = DB::one("SELECT id FROM " . DB::t('social_links') . " WHERE user_id=? AND channel=?", [$userId, $channel]);
-        if ($row) {
-            DB::run("UPDATE " . DB::t('social_links') . " SET username=?, connect_code=?, status='pending', created_at=NOW() WHERE id=?",
-                    [$username, $code, (int)$row['id']]);
-        } else {
-            DB::insert('social_links', ['user_id' => $userId, 'channel' => $channel, 'username' => $username,
-                                        'connect_code' => $code, 'status' => 'pending']);
-        }
-    } catch (Throwable $e) {}
-
+    $token = fr_bot_generate_token($userId, $channel);
+    $deep = fr_bot_get_channel_deep_link($channel, $token);
     [, , $botUser] = fr_snotify_driver($channel);
-    $botUser = ltrim($botUser, '@');
 
-    $deep = match($channel) {
-        'telegram' => $botUser !== '' ? 'https://t.me/' . $botUser . '?start=' . $code : '',
-        'bale'     => $botUser !== '' ? 'https://ble.ir/' . $botUser . '?start=' . $code : '',
-        'rubika'   => $botUser !== '' ? 'https://rubika.ir/' . $botUser . '?start=' . $code : '',
-        default    => '',
-    };
-
-    return ['ok' => true, 'code' => $code, 'deeplink' => $deep, 'bot' => $botUser];
+    return ['ok' => true, 'code' => $token, 'deeplink' => $deep, 'bot' => ltrim($botUser, '@')];
 }
 
 /** قطع اتصال کانال */
@@ -146,6 +355,7 @@ function fr_snotify_disconnect(int $userId, string $channel): void
     try {
         DB::update('users', [$cidCol => null, $unCol => null], 'id=?', [$userId]);
         DB::run("DELETE FROM " . DB::t('social_links') . " WHERE user_id=? AND channel=?", [$userId, $channel]);
+        DB::run("UPDATE " . DB::t('bot_connect_tokens') . " SET status='revoked' WHERE user_id=? AND (connected_channel=? OR channel=?)", [$userId, $channel, $channel]);
     } catch (Throwable $e) {}
 }
 
@@ -369,73 +579,72 @@ function fr_snotify_status(int $userId): array
     return $out;
 }
 
-/** خواندن getUpdates تلگرام و بله جهت اتصال خودکار نام کاربری به chat_id */
+/** خواندن getUpdates پیام‌رسان‌ها جهت اتصال خودکار کاربر به ربات */
 function fr_snotify_poll_updates(): array
 {
+    fr_snotify_ensure_schema();
     $stats = [
         'telegram' => ['updates' => 0, 'bound' => 0, 'err' => ''],
         'bale'     => ['updates' => 0, 'bound' => 0, 'err' => ''],
         'rubika'   => ['updates' => 0, 'bound' => 0, 'err' => ''],
     ];
 
-    foreach (['telegram' => 'tg', 'bale' => 'bale'] as $channel => $short) {
+    foreach (['telegram' => 'tg', 'bale' => 'bale', 'rubika' => 'rubika'] as $channel => $short) {
         [$enabled] = fr_snotify_driver($channel);
         if (!$enabled) continue;
         [$cidCol, $unCol] = fr_snotify_cols($channel);
         $offSetting = $short . '_update_offset';
         $offset = (int)DB::setting($offSetting, '0');
-        $klass  = $channel === 'telegram' ? 'Telegram' : 'Bale';
+        $klass  = match($channel) {
+            'telegram' => 'Telegram',
+            'bale'     => 'Bale',
+            'rubika'   => 'Rubika',
+        };
         require_once __DIR__ . '/../core/' . $klass . '.php';
 
-        [$ok, $res] = $klass::call('getUpdates', ['offset' => $offset, 'limit' => 50, 'timeout' => 0, 'allowed_updates' => ['message']]);
-        if (!$ok || !is_array($res)) { $stats[$channel]['err'] = 'poll_failed'; continue; }
-        $list = $res['result'] ?? [];
-        $max = $offset;
-
-        foreach ($list as $up) {
-            $uid = (int)($up['update_id'] ?? 0);
-            $max = max($max, $uid + 1);
-            $stats[$channel]['updates']++;
-            $msg = $up['message'] ?? null;
-            if (!$msg) continue;
-            $chatId = (string)($msg['chat']['id'] ?? '');
-            $from   = $msg['from'] ?? [];
-            $uname  = (string)($from['username'] ?? '');
-            $text   = trim((string)($msg['text'] ?? ''));
-            if ($chatId === '') continue;
-
-            // اتصال با کد یا نام کاربری
-            $code = '';
-            if (preg_match('#^/start(?:@\w+)?\s+([A-Fa-f0-9]{8})\b#u', $text, $m)) $code = strtoupper($m[1]);
-            elseif (preg_match('/^([A-Fa-f0-9]{8})$/', $text, $m2)) $code = strtoupper($m2[1]);
-
-            $link = null;
-            if ($code !== '') {
-                $link = DB::one("SELECT * FROM " . DB::t('social_links') . " WHERE channel=? AND connect_code=? AND status='pending' LIMIT 1", [$channel, $code]);
+        try {
+            [$ok, $res] = $klass::call('getUpdates', ['offset' => $offset, 'limit' => 50, 'timeout' => 0, 'allowed_updates' => ['message']]);
+            if (!$ok || !is_array($res)) {
+                $stats[$channel]['err'] = 'poll_failed';
+                continue;
             }
-            if (!$link && $uname !== '') {
-                $link = DB::one("SELECT * FROM " . DB::t('social_links') . " WHERE channel=? AND username=? AND status='pending' LIMIT 1", [$channel, $uname]);
-                if (!$link) {
-                    $uidByUn = (int)DB::val("SELECT id FROM " . DB::t('users') . " WHERE $unCol=? AND COALESCE($cidCol,'')='' LIMIT 1", [$uname]);
-                    if ($uidByUn > 0) $link = ['user_id' => $uidByUn, 'username' => $uname];
+            $list = $res['result'] ?? (isset($res['messages']) ? $res['messages'] : []);
+            $max = $offset;
+
+            foreach ($list as $up) {
+                $uid = (int)($up['update_id'] ?? ($up['id'] ?? 0));
+                if ($uid > 0) $max = max($max, $uid + 1);
+                $stats[$channel]['updates']++;
+                $msg = $up['message'] ?? $up;
+                if (!is_array($msg)) continue;
+                $chatId = (string)($msg['chat']['id'] ?? ($msg['chat_id'] ?? ($msg['from']['id'] ?? '')));
+                $from   = $msg['from'] ?? [];
+                $uname  = (string)($from['username'] ?? '');
+                $fname  = (string)($from['first_name'] ?? '');
+                $text   = trim((string)($msg['text'] ?? ($msg['message'] ?? '')));
+                if ($chatId === '') continue;
+
+                // استخراج توکن یا دستور استارت
+                $token = '';
+                if (preg_match('#^/start(?:@\w+)?\s+([A-Za-z0-9_-]+)#u', $text, $m)) {
+                    $token = trim($m[1]);
+                } elseif (preg_match('/^(FR[A-Fa-f0-9]{8}|[A-Fa-f0-9]{8})$/i', $text, $m2)) {
+                    $token = trim($m2[1]);
+                } else {
+                    $token = $text;
+                }
+
+                $actRes = fr_bot_activate($token, $channel, $chatId, $uname !== '' ? $uname : null, $fname);
+                if (!empty($actRes['ok'])) {
+                    $stats[$channel]['bound']++;
                 }
             }
-
-            if ($link) {
-                $targetUid = (int)$link['user_id'];
-                DB::update('users', [$cidCol => $chatId, $unCol => $uname !== '' ? $uname : ($link['username'] ?? null)], 'id=?', [$targetUid]);
-                DB::run("UPDATE " . DB::t('social_links') . " SET status='connected', chat_id=?, connected_at=NOW() WHERE user_id=? AND channel=?",
-                        [$chatId, $targetUid, $channel]);
-                $stats[$channel]['bound']++;
-
-                $first = (string)DB::val("SELECT first_name FROM " . DB::t('users') . " WHERE id=?", [$targetUid]);
-                $hello = fr_snotify_test_message($channel, $first);
-                [, $send2] = fr_snotify_driver($channel);
-                [$okS, $resp] = $send2($chatId, $hello);
-                fr_snotify_log($targetUid, $channel, 'connected', $hello, (bool)$okS, $okS ? '' : (is_string($resp) ? $resp : ''));
+            if ($max !== $offset) {
+                DB::setSetting($offSetting, (string)$max);
             }
+        } catch (\Throwable $e) {
+            $stats[$channel]['err'] = $e->getMessage();
         }
-        if ($max !== $offset) DB::setSetting($offSetting, (string)$max);
     }
     return $stats;
 }
@@ -590,6 +799,24 @@ function fr_snotify_ensure_schema(): void
             `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY `uq_user_day` (`user_id`, `day`),
             KEY `ix_user_day` (`user_id`, `day`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // جدول bot_connect_tokens برای لینک‌های اتصال و فعال‌سازی ربات‌ها توسط مدیر
+        DB::run("CREATE TABLE IF NOT EXISTS `{$p}bot_connect_tokens` (
+            `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            `user_id` BIGINT UNSIGNED NOT NULL,
+            `token` VARCHAR(32) NOT NULL,
+            `channel` VARCHAR(32) NOT NULL DEFAULT 'all',
+            `status` VARCHAR(32) NOT NULL DEFAULT 'pending',
+            `chat_id` VARCHAR(100) NULL,
+            `username` VARCHAR(100) NULL,
+            `connected_channel` VARCHAR(32) NULL,
+            `connected_at` DATETIME NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `expires_at` DATETIME NULL,
+            UNIQUE KEY `uq_token` (`token`),
+            KEY `ix_user` (`user_id`),
+            KEY `ix_status` (`status`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     } catch (Throwable $e) {

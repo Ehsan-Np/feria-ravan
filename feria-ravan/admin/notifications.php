@@ -65,6 +65,32 @@ if ($act === 'dispatch_now') {
     redirect(SITE_URL . '/admin/notifications.php');
 }
 
+/* ── دریافت و همگام‌سازی پیام‌ها و اتصال کاربران (Polling) ── */
+if ($act === 'poll_updates') {
+    $res = fr_snotify_poll_updates();
+    $totUpdates = ($res['telegram']['updates'] ?? 0) + ($res['bale']['updates'] ?? 0) + ($res['rubika']['updates'] ?? 0);
+    $totBound   = ($res['telegram']['bound'] ?? 0) + ($res['bale']['bound'] ?? 0) + ($res['rubika']['bound'] ?? 0);
+    flash("🔄 بررسی دریافت پیام‌ها انجام شد: " . fa_num($totUpdates) . " رویداد پیام خوانده شد و " . fa_num($totBound) . " کاربر جدید متصل شد ✅", 'ok');
+    redirect(SITE_URL . '/admin/notifications.php');
+}
+
+/* ── ثبت وب‌هوک پیام‌رسان‌ها ── */
+if ($act === 'set_webhooks') {
+    $hookBase = rtrim(SITE_URL, '/') . '/api/bot-webhook.php';
+    $messages = [];
+    require_once __DIR__ . '/../core/Telegram.php';
+    require_once __DIR__ . '/../core/Bale.php';
+
+    [$okTg, $respTg] = Telegram::call('setWebhook', ['url' => $hookBase . '?channel=telegram']);
+    $messages[] = 'تلگرام: ' . ($okTg ? 'وب‌هوک ست شد ✅' : ('خطا: ' . json_encode($respTg, JSON_UNESCAPED_UNICODE)));
+
+    [$okBale, $respBale] = Bale::call('setWebhook', ['url' => $hookBase . '?channel=bale']);
+    $messages[] = 'بله: ' . ($okBale ? 'وب‌هوک ست شد ✅' : ('خطا: ' . json_encode($respBale, JSON_UNESCAPED_UNICODE)));
+
+    flash(implode('<br>', $messages), 'ok');
+    redirect(SITE_URL . '/admin/notifications.php');
+}
+
 /* ── ذخیرهٔ تنظیمات یادآوری‌های اجتماعی رویدادها ── */
 if ($act === 'save_events') {
     if (!$canSettings) { flash('شما مجوز ویرایش تنظیمات را ندارید.', 'err'); redirect(SITE_URL . '/admin/notifications.php'); }
@@ -185,13 +211,29 @@ echo flash();
       ارسال نوبت‌ها در زمان‌های مشخص به صورت خودکار و دوگانه (کرون هاست + اعزام در درخواست‌ها) انجام می‌شود.
     </p>
   </div>
-  <form method="post" style="margin:0" onsubmit="return confirm('تمامی نوبت‌های روزانه، یادآورهای پلنر و کمپین‌های موعددار همین الان بررسی و ارسال شوند؟')">
-    <?= csrf_field() ?>
-    <input type="hidden" name="act" value="dispatch_now">
-    <button class="fr-btn" style="background:#059669;color:#fff">
-      🚀 بررسی و ارسال آنی نوبت‌ها (Dispatch Now)
-    </button>
-  </form>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <form method="post" style="margin:0" onsubmit="return confirm('تمامی نوبت‌های روزانه، یادآورهای پلنر و کمپین‌های موعددار همین الان بررسی و ارسال شوند؟')">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="dispatch_now">
+      <button class="fr-btn" style="background:#059669;color:#fff">
+        🚀 ارسال آنی نوبت‌ها (Dispatch Now)
+      </button>
+    </form>
+    <form method="post" style="margin:0">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="poll_updates">
+      <button class="fr-btn ghost" style="color:#0284c7;border-color:#0284c7" title="بررسی پیام‌های جدید تلگرام و بله جهت اتصال خودکار">
+        🔄 دریافت و اتصال پیام‌ها (Polling)
+      </button>
+    </form>
+    <form method="post" style="margin:0" onsubmit="return confirm('آیا وب‌هوک تلگرام و بله برای دامنه سایت ثبت شوند؟')">
+      <?= csrf_field() ?>
+      <input type="hidden" name="act" value="set_webhooks">
+      <button class="fr-btn ghost" style="color:#7c3aed;border-color:#7c3aed" title="تنظیم خودکار نشانی Webhook روی سرور تلگرام و بله">
+        🔗 ثبت خودکار Webhook پیام‌رسان‌ها
+      </button>
+    </form>
+  </div>
 </div>
 
 <?php if ($canSettings): ?>
