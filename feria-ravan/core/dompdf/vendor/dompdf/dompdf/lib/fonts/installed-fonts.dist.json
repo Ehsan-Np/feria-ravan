@@ -61,20 +61,20 @@
     },
     "dejavu sans": {
         "bold": "DejaVuSans-Bold",
-        "bold_italic": "DejaVuSans-BoldOblique",
+        "bold_italic": "DejaVuSans-Bold",
         "italic": "DejaVuSans-Oblique",
         "normal": "DejaVuSans"
     },
     "dejavu sans mono": {
-        "bold": "DejaVuSansMono-Bold",
-        "bold_italic": "DejaVuSansMono-BoldOblique",
-        "italic": "DejaVuSansMono-Oblique",
-        "normal": "DejaVuSansMono"
+        "bold": "DejaVuSans-Bold",
+        "bold_italic": "DejaVuSans-Bold",
+        "italic": "DejaVuSans-Oblique",
+        "normal": "DejaVuSans"
     },
     "dejavu serif": {
-        "bold": "DejaVuSerif-Bold",
-        "bold_italic": "DejaVuSerif-BoldItalic",
-        "italic": "DejaVuSerif-Italic",
-        "normal": "DejaVuSerif"
+        "bold": "DejaVuSans-Bold",
+        "bold_italic": "DejaVuSans-Bold",
+        "italic": "DejaVuSans-Oblique",
+        "normal": "DejaVuSans"
     }
 }

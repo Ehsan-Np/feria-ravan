@@ -1293,6 +1293,14 @@ function fr_update_pipeline(bool $force = false): void
             }
         } catch (Throwable $e) { error_log('feria: 4.9.7 migration: ' . $e->getMessage()); }
 
+        // ---------------------------------------------------------------------
+        // ۱۹. نگارش ۴٫۹٫۸: پاکسازی ساختار، بهینه‌سازی فونت‌ها و حذف فایل‌های اضافه Dompdf
+        // ---------------------------------------------------------------------
+        try {
+            DB::setSetting('system_version', '4.9.8');
+            DB::setSetting('fr_version', '4.9.8');
+        } catch (Throwable $e) { error_log('feria: 4.9.8 migration: ' . $e->getMessage()); }
+
         /* نگارش جدید ثبت شود */
         DB::setSetting('fr_version', $codeVer);
         if (function_exists('log_activity')) log_activity('auto_update', 'system', 0, ['from' => $cur, 'to' => $codeVer]);
